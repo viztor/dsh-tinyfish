@@ -37,11 +37,14 @@ jobs:
       # `vp check` is format, lint and type-check in one pass — Oxlint and
       # Oxfmt under the Vite+ entry point, reading the same oxlint.config.ts the
       # fleet's rule tiers are written in.
+      # `pnpm exec`, not a bare `vp`: a raw `run:` step does not put
+      # node_modules/.bin on PATH the way a package script does, and CI failed
+      # on exactly that before this was written.
       - name: Check (format, lint, types)
-        run: vp check
+        run: pnpm exec vp check
 
       - name: Test
-        run: vp test
+        run: pnpm exec vp test
 
       # Proves lib/ — the artifact DSH loads and npm ships — matches src/.
       - name: Build freshness
