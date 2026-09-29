@@ -71,8 +71,7 @@ const USER_AGENT =
 export { WebError };
 
 export const WEB_PROVIDER_ERROR = "WEB_PROVIDER_ERROR";
-export const WEB_PROVIDER_CREDENTIAL_MISSING =
-  "WEB_PROVIDER_CREDENTIAL_MISSING";
+export const WEB_PROVIDER_CREDENTIAL_MISSING = "WEB_PROVIDER_CREDENTIAL_MISSING";
 export const WEB_ABORTED = "WEB_ABORTED";
 
 /** One hit from TinyFish's `/search`. Only the fields this adapter reads. */
@@ -219,10 +218,7 @@ const throwIfAborted = (signal?: AbortSignal): void => {
  * from the abandoned operation cannot become an unhandled rejection — the
  * usual failure mode of naively wrapping a promise in a race.
  */
-export async function abortable<T>(
-  operation: Promise<T>,
-  signal?: AbortSignal
-): Promise<T> {
+export async function abortable<T>(operation: Promise<T>, signal?: AbortSignal): Promise<T> {
   if (!signal) return operation;
   throwIfAborted(signal);
 
@@ -254,7 +250,7 @@ function sleep(ms: number, signal?: AbortSignal): Promise<void> {
         clearTimeout(timer);
         reject(aborted(signal));
       },
-      { once: true }
+      { once: true },
     );
   });
 }
@@ -340,7 +336,7 @@ function readTinyfishConfig(path: string): string {
  */
 export function resolveApiKey(
   channel: TinyfishChannel,
-  options: ResolveApiKeyOptions = {}
+  options: ResolveApiKeyOptions = {},
 ): string {
   const explicit = options.apiKey?.trim();
   if (explicit) return explicit;
@@ -353,9 +349,7 @@ export function resolveApiKey(
   }
   const direct = env.TINYFISH_API_KEY;
   if (direct?.trim()) return direct.trim();
-  return readTinyfishConfig(
-    options.tinyfishConfigPath ?? DEFAULT_TINYFISH_CONFIG
-  );
+  return readTinyfishConfig(options.tinyfishConfigPath ?? DEFAULT_TINYFISH_CONFIG);
 }
 
 /**
@@ -367,7 +361,7 @@ export function resolveApiKey(
  */
 export async function resolveApiKeyAsync(
   channel: TinyfishChannel,
-  options: ResolveApiKeyOptions = {}
+  options: ResolveApiKeyOptions = {},
 ): Promise<string> {
   const explicit = options.apiKey?.trim();
   if (explicit) return explicit;
@@ -380,10 +374,7 @@ export async function resolveApiKeyAsync(
   throwIfAborted(options.signal);
   if (apiKeyEnv && resolveCredential) {
     try {
-      const stored = await abortable(
-        Promise.resolve(resolveCredential(apiKeyEnv)),
-        options.signal
-      );
+      const stored = await abortable(Promise.resolve(resolveCredential(apiKeyEnv)), options.signal);
       const trimmed = stored?.trim();
       if (trimmed) return trimmed;
     } catch (error) {
@@ -415,7 +406,7 @@ function requireKey(channel: TinyfishChannel, key: string): void {
       "The tinyfish provider has no Monid API key. Set one in the harness " +
         "under Settings > Plugins > web-tinyfish, or export MONID_API_KEY, or " +
         "run `monid keys add` to store one in the local credential file.",
-      WEB_PROVIDER_CREDENTIAL_MISSING
+      WEB_PROVIDER_CREDENTIAL_MISSING,
     );
   }
   throw new WebError(
@@ -423,7 +414,7 @@ function requireKey(channel: TinyfishChannel, key: string): void {
       "login` to save one, or export TINYFISH_API_KEY, or set it under " +
       "Settings > Plugins > web-tinyfish — or switch the provider's channel " +
       "to 'monid' to use a Monid key instead.",
-    WEB_PROVIDER_CREDENTIAL_MISSING
+    WEB_PROVIDER_CREDENTIAL_MISSING,
   );
 }
 
@@ -435,7 +426,7 @@ async function call(
     key: string;
     init: RequestInit;
     signal?: AbortSignal;
-  }
+  },
 ): Promise<unknown> {
   const { channel, key, init, signal } = options;
   const headers: Record<string, string> = {
@@ -461,40 +452,30 @@ async function call(
   } catch (error) {
     if (signal?.aborted) throw aborted(signal);
     if (isAbortError(error)) throw aborted(signal, error);
-    throw new WebError(
-      `TinyFish request to ${url} failed: ${String(error)}`,
-      WEB_PROVIDER_ERROR,
-      { cause: error }
-    );
+    throw new WebError(`TinyFish request to ${url} failed: ${String(error)}`, WEB_PROVIDER_ERROR, {
+      cause: error,
+    });
   }
 
   if (response.status === 401 || response.status === 403) {
     throw new WebError(
       `TinyFish rejected the ${channel} API key (HTTP ${response.status}). ` +
         "Refresh it, or switch the provider's channel.",
-      WEB_PROVIDER_ERROR
+      WEB_PROVIDER_ERROR,
     );
   }
   if (response.status === 429) {
-    throw new TransientWebError(
-      "TinyFish rate limit reached (HTTP 429).",
-      WEB_PROVIDER_ERROR
-    );
+    throw new TransientWebError("TinyFish rate limit reached (HTTP 429).", WEB_PROVIDER_ERROR);
   }
   if (!response.ok) {
-    throw new WebError(
-      `TinyFish returned HTTP ${response.status} for ${url}`,
-      WEB_PROVIDER_ERROR
-    );
+    throw new WebError(`TinyFish returned HTTP ${response.status} for ${url}`, WEB_PROVIDER_ERROR);
   }
   try {
     return await response.json();
   } catch (error) {
-    throw new WebError(
-      `TinyFish returned a non-JSON body for ${url}`,
-      WEB_PROVIDER_ERROR,
-      { cause: error }
-    );
+    throw new WebError(`TinyFish returned a non-JSON body for ${url}`, WEB_PROVIDER_ERROR, {
+      cause: error,
+    });
   }
 }
 
@@ -549,7 +530,7 @@ async function searchMonid(options: {
   if (envelope.status === "RUNNING") {
     throw new WebError(
       `TinyFish run ${envelope.runId ?? "?"} did not settle within ${polls} polls`,
-      WEB_PROVIDER_ERROR
+      WEB_PROVIDER_ERROR,
     );
   }
   assertUsableRun(envelope);
@@ -567,26 +548,23 @@ function assertUsableRun(envelope: MonidEnvelope): void {
     throw new WebError(
       `The Monid workspace blocked this run${detail ? `: ${detail}` : "."} ` +
         "Top up at https://app.monid.ai/wallet.",
-      WEB_PROVIDER_ERROR
+      WEB_PROVIDER_ERROR,
     );
   }
   if (envelope.status === "FAILED" || envelope.status === "TIMED_OUT") {
     throw new WebError(
       `TinyFish run ${envelope.runId ?? "?"} ended ${envelope.status}`,
-      WEB_PROVIDER_ERROR
+      WEB_PROVIDER_ERROR,
     );
   }
   // `output: null` with a provider error is Monid reporting an upstream
   // failure (rate limiting, 5xx) as a COMPLETED run. Retryable.
   const provider = envelope.providerResponse;
-  if (
-    !envelope.output &&
-    (provider?.error || (provider?.httpStatus ?? 0) >= 500)
-  ) {
+  if (!envelope.output && (provider?.error || (provider?.httpStatus ?? 0) >= 500)) {
     const message = extractProviderMessage(provider?.error);
     throw new TransientWebError(
       `TinyFish is temporarily unavailable${message ? `: ${message}` : "."}`,
-      WEB_PROVIDER_ERROR
+      WEB_PROVIDER_ERROR,
     );
   }
 }
@@ -646,17 +624,8 @@ interface RetryPolicy {
  * The endpoints are $0, so an empty result is worth a couple more attempts
  * before it is believed. A BLOCKED run never retries.
  */
-async function withRetry<T>(
-  operation: () => Promise<T>,
-  policy: RetryPolicy
-): Promise<T> {
-  const {
-    attempts,
-    signal,
-    delayMs = DEFAULT_RETRY_DELAY_MS,
-    retryWhen,
-    onRetry,
-  } = policy;
+async function withRetry<T>(operation: () => Promise<T>, policy: RetryPolicy): Promise<T> {
+  const { attempts, signal, delayMs = DEFAULT_RETRY_DELAY_MS, retryWhen, onRetry } = policy;
   let lastError: TransientWebError | undefined;
 
   for (let attempt = 1; attempt <= attempts; attempt += 1) {
@@ -718,7 +687,7 @@ export interface TinyfishFetchOptions extends ResolveApiKeyOptions {
  * `{ query, results[], total_results, page }`.
  */
 export async function tinyfishSearch(
-  options: TinyfishSearchOptions
+  options: TinyfishSearchOptions,
 ): Promise<TinyfishSearchPayload> {
   const {
     channel,
@@ -772,7 +741,7 @@ export async function tinyfishSearch(
         return !Array.isArray(value?.results) || value.results.length === 0;
       },
       onRetry: (attempt, total) => onRetry?.(attempt, total),
-    }
+    },
   );
 }
 
@@ -780,9 +749,7 @@ export async function tinyfishSearch(
  * Fetch up to 10 URLs as clean Markdown. Returns the upstream payload for both
  * channels: `{ results[], errors[] }`.
  */
-export async function tinyfishFetch(
-  options: TinyfishFetchOptions
-): Promise<TinyfishFetchPayload> {
+export async function tinyfishFetch(options: TinyfishFetchOptions): Promise<TinyfishFetchPayload> {
   const {
     channel,
     urls,
@@ -822,6 +789,6 @@ export async function tinyfishFetch(
       signal,
       delayMs,
       onRetry: (attempt, total) => onRetry?.(attempt, total),
-    }
+    },
   );
 }

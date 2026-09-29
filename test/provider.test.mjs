@@ -10,19 +10,13 @@
  */
 
 import assert from "node:assert/strict";
-import test from "node:test";
 
-import {
-  TinyfishFetchProvider,
-  TinyfishSearchProvider,
-  toIsoDate,
-} from "../src/provider.ts";
-import {
-  fetchEnvelope,
-  hit,
-  searchEnvelope,
-  withStubbedFetch,
-} from "./helpers.mjs";
+// Assertions stay on `node:assert` so that a failure here can only be the runner
+// swap, never an assertion-library rewrite.
+import { test } from "vitest";
+
+import { TinyfishFetchProvider, TinyfishSearchProvider, toIsoDate } from "../src/provider.ts";
+import { fetchEnvelope, hit, searchEnvelope, withStubbedFetch } from "./helpers.mjs";
 
 const OPTIONS = {
   channel: "monid",
@@ -51,10 +45,7 @@ test("toIsoDate: an unzoned human date reads as UTC, not local midnight", () => 
 
 test("toIsoDate: an explicit offset or clock time is respected", () => {
   assert.equal(toIsoDate("2026-04-30T12:00:00Z"), "2026-04-30T12:00:00.000Z");
-  assert.equal(
-    toIsoDate("2026-04-30T12:00:00+02:00"),
-    "2026-04-30T10:00:00.000Z"
-  );
+  assert.equal(toIsoDate("2026-04-30T12:00:00+02:00"), "2026-04-30T10:00:00.000Z");
 });
 
 test("toIsoDate: relative and unparseable values are dropped, not guessed", () => {
@@ -71,7 +62,7 @@ test("toIsoDate: relative and unparseable values are dropped, not guessed", () =
 test("search maps results into citeable sources", async () => {
   const { result } = await withStubbedFetch(
     [{ respond: () => ({ body: searchEnvelope([hit()]) }) }],
-    () => search().search({ query: "q" })
+    () => search().search({ query: "q" }),
   );
   assert.equal(result.sources.length, 1);
   assert.deepEqual(result.sources[0], {
@@ -80,16 +71,8 @@ test("search maps results into citeable sources", async () => {
     snippet: "A snippet",
     publishedAt: "2026-04-30T00:00:00.000Z",
   });
-  assert.equal(
-    result.truncated,
-    false,
-    "the seam owns truncation, not the provider"
-  );
-  assert.equal(
-    result.content,
-    undefined,
-    "tinyfish ranks, it does not generate an answer"
-  );
+  assert.equal(result.truncated, false, "the seam owns truncation, not the provider");
+  assert.equal(result.content, undefined, "tinyfish ranks, it does not generate an answer");
 });
 
 test("search omits fields the payload did not supply", async () => {
@@ -97,13 +80,11 @@ test("search omits fields the payload did not supply", async () => {
     [
       {
         respond: () => ({
-          body: searchEnvelope([
-            { url: "https://x", title: "T", date: "1 year ago" },
-          ]),
+          body: searchEnvelope([{ url: "https://x", title: "T", date: "1 year ago" }]),
         }),
       },
     ],
-    () => search().search({ query: "q" })
+    () => search().search({ query: "q" }),
   );
   assert.deepEqual(result.sources[0], { url: "https://x", title: "T" });
 });
@@ -113,19 +94,15 @@ test("search drops hits with no url rather than emitting an uncitable source", a
     [
       {
         respond: () => ({
-          body: searchEnvelope([
-            hit(),
-            { title: "orphan" },
-            hit({ url: "https://b" }),
-          ]),
+          body: searchEnvelope([hit(), { title: "orphan" }, hit({ url: "https://b" })]),
         }),
       },
     ],
-    () => search().search({ query: "q" })
+    () => search().search({ query: "q" }),
   );
   assert.deepEqual(
     result.sources.map((s) => s.url),
-    ["https://example.com/page", "https://b"]
+    ["https://example.com/page", "https://b"],
   );
 });
 
@@ -134,13 +111,11 @@ test("search accepts `description` as an alias for `snippet`", async () => {
     [
       {
         respond: () => ({
-          body: searchEnvelope([
-            { url: "https://x", title: "T", description: "D" },
-          ]),
+          body: searchEnvelope([{ url: "https://x", title: "T", description: "D" }]),
         }),
       },
     ],
-    () => search().search({ query: "q" })
+    () => search().search({ query: "q" }),
   );
   assert.equal(result.sources[0].snippet, "D");
 });
@@ -148,7 +123,7 @@ test("search accepts `description` as an alias for `snippet`", async () => {
 test("search returns no sources when the upstream genuinely has none", async () => {
   const { result } = await withStubbedFetch(
     [{ respond: () => ({ body: searchEnvelope([]) }) }],
-    () => search().search({ query: "q" })
+    () => search().search({ query: "q" }),
   );
   assert.deepEqual(result.sources, []);
   assert.equal(result.truncated, false);
@@ -180,7 +155,7 @@ test("fetch returns markdown as kind:text, skipping the tool's turndown", async 
         }),
       },
     ],
-    () => fetchp().fetch({ url: "https://x" })
+    () => fetchp().fetch({ url: "https://x" }),
   );
   assert.equal(result.statusCode, 200);
   assert.equal(result.body.kind, "text");
@@ -193,13 +168,11 @@ test("fetch reports the final URL after redirects", async () => {
     [
       {
         respond: () => ({
-          body: fetchEnvelope([
-            { url: "https://x", final_url: "https://y", text: "t" },
-          ]),
+          body: fetchEnvelope([{ url: "https://x", final_url: "https://y", text: "t" }]),
         }),
       },
     ],
-    () => fetchp().fetch({ url: "https://x" })
+    () => fetchp().fetch({ url: "https://x" }),
   );
   assert.equal(result.url, "https://y");
 });
@@ -211,14 +184,11 @@ test("a 404 is a result carrying its status, not a thrown error", async () => {
     [
       {
         respond: () => ({
-          body: fetchEnvelope(
-            [],
-            [{ url: "https://x", error: "page_not_found", status: 404 }]
-          ),
+          body: fetchEnvelope([], [{ url: "https://x", error: "page_not_found", status: 404 }]),
         }),
       },
     ],
-    () => fetchp().fetch({ url: "https://x" })
+    () => fetchp().fetch({ url: "https://x" }),
   );
   assert.equal(result.statusCode, 404);
   assert.equal(result.url, "https://x");
@@ -233,12 +203,12 @@ test("a fetch error for a different URL does not poison this one", async () => {
         respond: () => ({
           body: fetchEnvelope(
             [{ url: "https://wanted", text: "ok" }],
-            [{ url: "https://other", error: "boom", status: 500 }]
+            [{ url: "https://other", error: "boom", status: 500 }],
           ),
         }),
       },
     ],
-    () => fetchp().fetch({ url: "https://wanted" })
+    () => fetchp().fetch({ url: "https://wanted" }),
   );
   assert.equal(result.statusCode, 200);
   assert.equal(result.body.content, "ok");
@@ -249,25 +219,21 @@ test("a trailing slash does not stop a fetch error from matching its request", a
     [
       {
         respond: () => ({
-          body: fetchEnvelope(
-            [],
-            [{ url: "https://x/", error: "gone", status: 410 }]
-          ),
+          body: fetchEnvelope([], [{ url: "https://x/", error: "gone", status: 410 }]),
         }),
       },
     ],
-    () => fetchp().fetch({ url: "https://x" })
+    () => fetchp().fetch({ url: "https://x" }),
   );
   assert.equal(result.statusCode, 410);
 });
 
 test("neither a result nor an error is a provider fault, and throws", async () => {
   await assert.rejects(
-    withStubbedFetch(
-      [{ respond: () => ({ body: fetchEnvelope([], []) }) }],
-      () => fetchp().fetch({ url: "https://x" })
+    withStubbedFetch([{ respond: () => ({ body: fetchEnvelope([], []) }) }], () =>
+      fetchp().fetch({ url: "https://x" }),
     ).then((r) => r.result),
-    (error) => /returned no content/.test(error.message)
+    (error) => /returned no content/.test(error.message),
   );
 });
 
@@ -280,19 +246,15 @@ test("an error with no numeric status still returns a result", async () => {
         }),
       },
     ],
-    () => fetchp().fetch({ url: "https://x" })
+    () => fetchp().fetch({ url: "https://x" }),
   );
-  assert.equal(
-    result.statusCode,
-    502,
-    "an unstatusable failure is a bad gateway"
-  );
+  assert.equal(result.statusCode, 502, "an unstatusable failure is a bad gateway");
 });
 
 test("empty page text is still a result, not a failure", async () => {
   const { result } = await withStubbedFetch(
     [{ respond: () => ({ body: fetchEnvelope([{ url: "https://x" }]) }) }],
-    () => fetchp().fetch({ url: "https://x" })
+    () => fetchp().fetch({ url: "https://x" }),
   );
   assert.equal(result.statusCode, 200);
   assert.equal(result.body.content, "");

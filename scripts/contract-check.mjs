@@ -56,10 +56,7 @@ pass(`cordis ${cordis}`);
 
 /* ------------------------------------------------- surfaces the code uses */
 
-const webTypes = join(
-  ROOT,
-  "node_modules/@deepseek-ai/dsh-web/lib/types/types.d.ts"
-);
+const webTypes = join(ROOT, "node_modules/@deepseek-ai/dsh-web/lib/types/types.d.ts");
 if (!existsSync(webTypes)) {
   fail("dsh-web no longer ships lib/types/types.d.ts — the contract moved");
 } else {
@@ -68,26 +65,11 @@ if (!existsSync(webTypes)) {
   // Each entry is a surface src/ imports or implements. The failure message
   // says what breaks, because "contract check failed" on its own is useless.
   const REQUIRED = [
-    [
-      /export declare class WebError/,
-      "WebError — the package raises this for every failure",
-    ],
-    [
-      /interface WebSearchProvider\b/,
-      "WebSearchProvider — the search provider implements this",
-    ],
-    [
-      /interface WebFetchProvider\b/,
-      "WebFetchProvider — the fetch provider implements this",
-    ],
-    [
-      /interface WebSearchRequest\b/,
-      "WebSearchRequest — search() reads .query/.maxResults",
-    ],
-    [
-      /interface WebSearchResult\b/,
-      "WebSearchResult — search() returns sources/truncated",
-    ],
+    [/export declare class WebError/, "WebError — the package raises this for every failure"],
+    [/interface WebSearchProvider\b/, "WebSearchProvider — the search provider implements this"],
+    [/interface WebFetchProvider\b/, "WebFetchProvider — the fetch provider implements this"],
+    [/interface WebSearchRequest\b/, "WebSearchRequest — search() reads .query/.maxResults"],
+    [/interface WebSearchResult\b/, "WebSearchResult — search() returns sources/truncated"],
     [
       /interface WebSearchSource\b/,
       "WebSearchSource — sources carry url/title/snippet/publishedAt",
@@ -99,23 +81,16 @@ if (!existsSync(webTypes)) {
     ],
     // The `text` arm is the whole reason this provider exists: TinyFish returns
     // Markdown, so it skips dsh-tool-web's turndown conversion.
-    [
-      /kind:\s*'text'/,
-      "WebFetchBody's 'text' arm — without it the provider must switch to 'html'",
-    ],
+    [/kind:\s*'text'/, "WebFetchBody's 'text' arm — without it the provider must switch to 'html'"],
   ];
 
   for (const [pattern, what] of REQUIRED) {
     if (!pattern.test(dts)) fail(`dsh-web no longer exports ${what}`);
   }
-  if (failures.length === 0)
-    pass(`dsh-web exposes all ${REQUIRED.length} required surfaces`);
+  if (failures.length === 0) pass(`dsh-web exposes all ${REQUIRED.length} required surfaces`);
 }
 
-const credTypes = join(
-  ROOT,
-  "node_modules/@deepseek-ai/dsh-credentials/lib/types/index.d.ts"
-);
+const credTypes = join(ROOT, "node_modules/@deepseek-ai/dsh-credentials/lib/types/index.d.ts");
 if (!existsSync(credTypes)) {
   fail("dsh-credentials no longer ships its type declarations");
 } else {
@@ -127,13 +102,12 @@ if (!existsSync(credTypes)) {
   ]) {
     if (!pattern.test(dts)) fail(`dsh-credentials no longer exports ${what}`);
   }
-  if (!failures.length)
-    pass("dsh-credentials exposes credentialRef and resolve()");
+  if (!failures.length) pass("dsh-credentials exposes credentialRef and resolve()");
 }
 
 const launchTypes = join(
   ROOT,
-  "node_modules/@deepseek-ai/dsh-launch-environment/lib/types/index.d.ts"
+  "node_modules/@deepseek-ai/dsh-launch-environment/lib/types/index.d.ts",
 );
 if (!existsSync(launchTypes)) {
   fail("dsh-launch-environment no longer ships its type declarations");
@@ -165,8 +139,7 @@ const pkg = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8"));
 for (const [name, range] of Object.entries(pkg.peerDependencies ?? {})) {
   // Only @deepseek-ai/dsh and @deepseek-ai/dsh-* are checked at boot; cordis
   // is not, so an exact range there costs nothing and documents the real pin.
-  const checked =
-    name === "@deepseek-ai/dsh" || name.startsWith("@deepseek-ai/dsh-");
+  const checked = name === "@deepseek-ai/dsh" || name.startsWith("@deepseek-ai/dsh-");
   if (!checked) continue;
 
   // A range npm cannot parse is worse than one DSH rejects. `workspace:^`
@@ -175,7 +148,7 @@ for (const [name, range] of Object.entries(pkg.peerDependencies ?? {})) {
   if (/^(workspace|link|file|catalog):/.test(range)) {
     fail(
       `peer ${name} uses the "${range.split(":")[0]}:" protocol, which npm ` +
-        "cannot parse — the package would be uninstallable"
+        "cannot parse — the package would be uninstallable",
     );
     continue;
   }
@@ -185,7 +158,7 @@ for (const [name, range] of Object.entries(pkg.peerDependencies ?? {})) {
   if (!/^[\^~><=|*]/.test(range.trim())) {
     fail(
       `peer ${name} is pinned to the exact version "${range}"; use a range ` +
-        "so a DSH patch release does not orphan the plugin"
+        "so a DSH patch release does not orphan the plugin",
     );
   }
 }
@@ -202,7 +175,7 @@ if (failures.length) {
   console.error(
     `\ncontract:check failed — ${failures.length} problem(s).\n` +
       "Either adapt src/ to the new runtime, or pin the peers to the exact\n" +
-      "version you built against if the change was not actually breaking."
+      "version you built against if the change was not actually breaking.",
   );
   process.exit(1);
 }

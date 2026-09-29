@@ -8,17 +8,14 @@
 
 ## Stack
 
-| concern | tool | why this one |
-| --- | --- | --- |
-| language | TypeScript 7, `strict` + `noUncheckedIndexedAccess` | the seam's types are the contract; JS gave them up |
-| config | `@deepseek-ai/schemastery` | the harness's own fork, the only one with `.role()`/`.volatile()`/`.get()` |
-| services | `@deepseek-ai/dsh-credentials`, `-launch-environment` (peers) | the host's instances — a private copy would have its own store |
-| errors | `WebError` from `@deepseek-ai/dsh-web` | the codes the seam and tool layer already route on |
-| build | `tsc` → `lib/` (js + `.d.ts` + maps) | DSH resolves `main`, so the artifact is what runs |
-| lint | oxlint, **type-aware**, via Ultracite presets | the `typescript/*` gates are real defect classes |
-| format | oxfmt | same preset family as the linter |
-| tests | `node:test`, no test framework | one less dependency in a zero-dep package |
-| CI | GitHub Actions, OIDC npm publish | provenance on the tarball |
+| concern   | tool                                                | why this one                                                          |
+| --------- | --------------------------------------------------- | --------------------------------------------------------------------- |
+| toolchain | **Vite+** (`vp`)                                    | one entry point over Vite, Rolldown, Vitest, tsdown, Oxlint and Oxfmt |
+| language  | TypeScript 7, `strict` + `noUncheckedIndexedAccess` | the seam's types are the contract; JS gave them up                    |
+| build     | `vp pack` (tsdown) → `lib/`                         | a **library** build, not an app build; the harness resolves `main`    |
+| tests     | `vp test` (Vitest 5)                                | the same 70 tests, with watch and V8 coverage built in                |
+| lint      | `vp lint` — Oxlint, **type-aware**, Ultracite       | the `typescript/*` gates are real defect classes                      |
+| format    | `vp fmt` — Oxfmt                                    | same preset family as the linter, same tiered rules                   |
 
 Lint and format both follow the three tiers in `~/.grok/rules/lint-format-oxc-ultracite.md`. `oxlint.config.ts` keeps **gates at `error`**, accepted debt at `warn`, and style at `off` — no gate has been demoted to greenwash a build. Every `warn` there is a candidate to promote, not a permanent exemption.
 
@@ -26,14 +23,16 @@ Lint and format both follow the three tiers in `~/.grok/rules/lint-format-oxc-ul
 
 Source imports carry the real `.ts` extension and `tsconfig` sets `allowImportingTsExtensions` + `rewriteRelativeImportExtensions`. That combination is what lets the tests import `src/` directly and run under Node's type stripping — **the tests exercise the source, with no build in the loop.** Importing `lib/` instead would test a build the gate has to remember to produce first.
 
+The tests still import `src/` directly rather than `lib/`, so the build is out of the edit-test loop. `vp pack` is a bundler, which adds a property worth knowing: a source change that is **not reachable from the entry** is tree-shaken out and therefore does not make `lib/` stale. That is correct — such a change genuinely does not alter the artifact DSH loads — but it means `build:check` is less sensitive than it was under `tsc`, and it is proved against a change that reaches the bundle, not a comment.
+
 ## What this is
 
 TinyFish backs the harness's native `web_search` and `web_fetch`. Both endpoints are **$0**, which is the point: the default web path on this host costs nothing.
 
-| channel | search | fetch | auth | credential store |
-| --- | --- | --- | --- | --- |
-| `monid` (default) | `POST api.monid.ai/v1/run` | same | `Authorization: Bearer` | `~/.config/monid/credentials.yaml` |
-| `direct` | `GET api.search.tinyfish.ai` | `POST api.fetch.tinyfish.ai` | `X-API-Key` | `~/.tinyfish/config.json` |
+| channel           | search                       | fetch                        | auth                    | credential store                   |
+| ----------------- | ---------------------------- | ---------------------------- | ----------------------- | ---------------------------------- |
+| `monid` (default) | `POST api.monid.ai/v1/run`   | same                         | `Authorization: Bearer` | `~/.config/monid/credentials.yaml` |
+| `direct`          | `GET api.search.tinyfish.ai` | `POST api.fetch.tinyfish.ai` | `X-API-Key`             | `~/.tinyfish/config.json`          |
 
 **The two channels return the same payload.** Monid is a thin envelope whose `output` is TinyFish's response verbatim, and it forwards parameter names unchanged. That is why one transport serves both and nothing above it branches — a test asserts the top hit matches across channels. If that stops being true, `test/integration/live.test.mjs` fails first.
 
@@ -41,12 +40,12 @@ TinyFish backs the harness's native `web_search` and `web_fetch`. Both endpoints
 
 The reference implementation for this seam is the shipped `@deepseek-ai/dsh-web-search-deepseek`. It is worth reading before changing anything here, and four of its decisions were initially wrong on this side:
 
-| adopted | why |
-| --- | --- |
-| `WebError`, not a private error class | a package that invents its own codes is invisible to `dsh-tool-web`, which puts the code in structured error metadata |
-| `@deepseek-ai/schemastery`, not the public one | the public 3.18.x line has no `.role()`/`.volatile()`/`.get()`; the fork is what makes the settings row a real section |
-| `role("credential-ref")` + the credentials service | a key is then rotatable from Settings, not only from a patch file |
-| `redirect: "error"` on every request | a provider configured for one endpoint should not silently follow it elsewhere |
+| adopted                                            | why                                                                                                                    |
+| -------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| `WebError`, not a private error class              | a package that invents its own codes is invisible to `dsh-tool-web`, which puts the code in structured error metadata  |
+| `@deepseek-ai/schemastery`, not the public one     | the public 3.18.x line has no `.role()`/`.volatile()`/`.get()`; the fork is what makes the settings row a real section |
+| `role("credential-ref")` + the credentials service | a key is then rotatable from Settings, not only from a patch file                                                      |
+| `redirect: "error"` on every request               | a provider configured for one endpoint should not silently follow it elsewhere                                         |
 
 Two conventions from the same package that are now house style here: exports carry `"./src/*"`, and JSDoc uses `@param x -` with a hyphen.
 
@@ -57,19 +56,30 @@ Two conventions from the same package that are now house style here: exports car
 Publishing is a tag, not a local command. The publish job only runs on a `v*` tag, and it re-checks that the tag matches `package.json` first — a tag and a manifest that disagree means a consumer cannot tell which version they installed.
 
 ```sh
-pnpm run release:gate            # build, then the whole gate
-git tag v<version> && git push origin v<version>
-gh run watch                    # watch the ci and publish jobs
+pnpm install            # prepare runs vp pack, so lib/ exists for the harness
+pnpm run build          # vp pack -> lib/ (one .mjs + one .d.mts)
+pnpm run check          # vp check: format + lint + types in one pass
+pnpm test               # vp test — hermetic, no network, no credential
+pnpm run test:live      # real TinyFish + Monid, $0, needs credentials
+pnpm run lint           # vp lint  — Oxlint, type-aware
+pnpm run format         # vp fmt --check
+pnpm run build:check    # lib/ matches a fresh vp pack of src/
+pnpm run contract:check # harness surfaces still present
+pnpm run pack:check     # bundle contract, credential scan, tarball budget
+pnpm run compat:check   # DSH's own rule, against the linked profile
+pnpm run install:check  # packs and installs the tarball with plain npm
+pnpm run ci             # check + test + the four build/runtime checks
+pnpm run release:gate   # build, then ci
 ```
 
 ### Getting the publish to authenticate
 
 A plain `npm publish` from a web-login session stops at **EOTP** — a one-time-password prompt, with the URL only ever printed to stdout. That is why publishing is done from CI instead. Two routes, both already supported by the workflow:
 
-| route | setup | note |
-| --- | --- | --- |
-| **Automation token** | npmjs.com → Access Tokens → Generate → type **Automation**, then `gh secret set NPM_TOKEN` | one command, works immediately. An automation token does not trigger EOTP — that prompt is specific to web-login sessions |
-| **Trusted publishing** | npmjs.com → package → Trusted Publisher → GitHub Actions → allow this workflow and the `npm publish` action | no secret at all; npm detects the OIDC environment and uses it in preference to a token |
+| route                  | setup                                                                                                       | note                                                                                                                      |
+| ---------------------- | ----------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| **Automation token**   | npmjs.com → Access Tokens → Generate → type **Automation**, then `gh secret set NPM_TOKEN`                  | one command, works immediately. An automation token does not trigger EOTP — that prompt is specific to web-login sessions |
+| **Trusted publishing** | npmjs.com → package → Trusted Publisher → GitHub Actions → allow this workflow and the `npm publish` action | no secret at all; npm detects the OIDC environment and uses it in preference to a token                                   |
 
 Trusted publishing is the better end state — nothing to store, nothing to rotate, nothing to leak. The token route is the one that works today without any npmjs.com configuration. The workflow supports both, because the CLI prefers OIDC and only falls back to `NODE_AUTH_TOKEN` when it is set.
 
@@ -110,10 +120,10 @@ When DSH moves, the work is: `pnpm add -D` the new `@deepseek-ai/dsh-*` versions
 ## TDD
 
 - `pnpm test` is hermetic and free: 57 unit tests, no network, ~300ms. `fetch` is stubbed per test through `test/helpers.mjs`; add a case there rather than reaching the real API.
-- `pnpm test:live` talks to both real APIs and is **skipped unless `DSH_TINYFISH_LIVE=1`**. It still costs $0, so run it before a release, but never make it a gate that blocks an offline machine.
+- `pnpm run test:live` talks to both real APIs and is a **separate Vitest config** (`vite.live.config.ts`), not a flag on the default run. An inline `projects` entry looked like the tidier answer and was not: it inherited the parent's `include` and re-ran all 70 unit tests under a second name. It is still skipped without `DSH_TINYFISH_LIVE=1`, and it still costs $0, so run it before a release — but never make a gate of it that blocks an offline machine.
 - Unit tests pin behaviour a stub cannot prove: retry boundaries, `BLOCKED` being terminal, blank-credential fallthrough, `publishedAt` coercion.
 - Prefer a failing test that names the defect over editing an assertion to match new behaviour. The suite has already caught `requireKey` swallowing the credential, `active_key` never being honoured, and unzoned dates parsing as local midnight.
-- The tests are `.mjs` on purpose. `src/` is type-checked by `tsc` and lint-gated type-aware; making the tests TypeScript would add a second surface to keep in sync for no extra safety, and the fleet's script override already accounts for untyped test code.
+- The tests are `.mjs` on purpose. `src/` is type-checked and lint-gated type-aware; making the tests TypeScript would add a second surface to keep in sync for no extra safety, and the fleet's script override already accounts for untyped test code. Assertions stayed on `node:assert` through the Vitest migration on purpose: changing the runner and the assertion library in one commit means a red suite could be either, and neither would be knowable.
 
 ## Invariants worth defending
 
@@ -130,19 +140,19 @@ Load-bearing and cheap to break. Each has a test.
 ## Commands
 
 ```sh
-pnpm install            # prepare builds lib/ for the harness
-pnpm run build          # tsc -> lib/
-pnpm run build:check    # lib/ matches a fresh build of src/
-pnpm run typecheck      # tsc --noEmit
-pnpm run lint           # oxlint, type-aware; gates fail, debt warns
-pnpm run format         # oxfmt --check
-pnpm test               # hermetic unit suite (no network)
+pnpm install            # prepare runs vp pack, so lib/ exists for the harness
+pnpm run build          # vp pack -> lib/ (one .mjs + one .d.mts)
+pnpm run check          # vp check: format + lint + types in one pass
+pnpm test               # vp test — hermetic, no network, no credential
 pnpm run test:live      # real TinyFish + Monid, $0, needs credentials
-pnpm run pack:check     # bundle contract, credential scan, tarball budget
+pnpm run lint           # vp lint  — Oxlint, type-aware
+pnpm run format         # vp fmt --check
+pnpm run build:check    # lib/ matches a fresh vp pack of src/
 pnpm run contract:check # harness surfaces still present
+pnpm run pack:check     # bundle contract, credential scan, tarball budget
 pnpm run compat:check   # DSH's own rule, against the linked profile
-pnpm run install:check # packs and installs the tarball with plain npm
-pnpm run ci             # typecheck + lint + format + test + build:check + pack:check
+pnpm run install:check  # packs and installs the tarball with plain npm
+pnpm run ci             # check + test + the four build/runtime checks
 pnpm run release:gate   # build, then ci
 ```
 

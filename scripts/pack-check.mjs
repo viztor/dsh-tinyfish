@@ -30,14 +30,10 @@ if (pkg.name === "dsh-tinyfish") {
   pass(`name: ${pkg.name}@${pkg.version}`);
 } else {
   fail(`name is "${pkg.name}"; the bundle row and docs assume "dsh-tinyfish"`);
-  fail(
-    "the package must stay unscoped: the DSH loader resolves bundles by bare name"
-  );
+  fail("the package must stay unscoped: the DSH loader resolves bundles by bare name");
 }
 if (pkg.private === true) {
-  fail(
-    "`private: true` blocks publishing; a bundle only earns its keep from a registry"
-  );
+  fail("`private: true` blocks publishing; a bundle only earns its keep from a registry");
 } else {
   pass("not private, so it can be published");
 }
@@ -49,9 +45,7 @@ for (const field of ["version", "license", "description", "engines"]) {
 
 const patch = pkg.dsh?.bundle?.patch;
 if (!patch) {
-  fail(
-    "manifest must declare dsh.bundle.patch — without it the package is just a library"
-  );
+  fail("manifest must declare dsh.bundle.patch — without it the package is just a library");
 } else if (!existsSync(join(ROOT, patch))) {
   fail(`dsh.bundle.patch points at "${patch}", which does not exist`);
 } else {
@@ -68,8 +62,7 @@ if (!existsSync(entry)) {
   // ships, and a source-level check would miss an emit that broke it.
   const mod = await import(`file://${entry}`);
   for (const name of ["apply", "inject", "name"]) {
-    if (mod[name] === undefined)
-      fail(`entry does not export ${name} (cordis requires it)`);
+    if (mod[name] === undefined) fail(`entry does not export ${name} (cordis requires it)`);
   }
   if (!Array.isArray(mod.inject) || mod.inject.length === 0) {
     fail("inject must be a non-empty array of service names");
@@ -77,21 +70,15 @@ if (!existsSync(entry)) {
   // A plugin without a Config still loads, but its row renders as free-form
   // YAML instead of a settings section — worth knowing before shipping.
   if (!mod.Config) {
-    fail(
-      "entry exports no Config; the settings row will not render as a section"
-    );
+    fail("entry exports no Config; the settings row will not render as a section");
   } else {
     pass("entry exports a schemastery Config");
   }
   if (pkg.exports?.["./src/*"] !== "./src/*") {
-    fail(
-      "exports should expose ./src/* — that is the convention across @deepseek-ai packages"
-    );
+    fail("exports should expose ./src/* — that is the convention across @deepseek-ai packages");
   }
   if (mod.name !== pkg.name) {
-    fail(
-      `entry's name export is "${mod.name}" but the manifest says "${pkg.name}"`
-    );
+    fail(`entry's name export is "${mod.name}" but the manifest says "${pkg.name}"`);
   } else {
     pass(`built entry exports apply/inject/name, self-named ${mod.name}`);
   }
@@ -120,20 +107,17 @@ if (!existsSync(entry)) {
 
 for (const listed of pkg.files ?? []) {
   if (listed.includes("*")) continue;
-  if (!existsSync(join(ROOT, listed)))
-    fail(`files lists "${listed}", which is missing`);
+  if (!existsSync(join(ROOT, listed))) fail(`files lists "${listed}", which is missing`);
 }
 // `lib` is matched as a pattern here: the published set is the emitted js and
 // d.ts, deliberately without sourcemaps, so a literal "lib" entry would be
 // wrong and a missing pattern would ship no code at all.
 for (const required of ["lib", "cordis.patch.yml", "README.md", "LICENSE"]) {
   const covered = (pkg.files ?? []).some(
-    (pattern) => pattern === required || pattern.startsWith(`${required}/`)
+    (pattern) => pattern === required || pattern.startsWith(`${required}/`),
   );
   if (!covered) {
-    fail(
-      `files must include "${required}", or the published bundle cannot load`
-    );
+    fail(`files must include "${required}", or the published bundle cannot load`);
   }
 }
 if (pkg.files?.includes("src")) {
@@ -157,7 +141,9 @@ const SIZE_BUDGET_BYTES = 60 * 1024;
 
 let packed;
 try {
-  const json = execFileSync("npm", ["pack", "--dry-run", "--json"], {
+  // `--ignore-scripts`: `prepare` runs `vp pack`, whose progress output would
+  // land in stdout and turn this JSON into a parse error.
+  const json = execFileSync("npm", ["pack", "--dry-run", "--json", "--ignore-scripts"], {
     cwd: ROOT,
     encoding: "utf8",
     stdio: ["ignore", "pipe", "ignore"],
@@ -173,24 +159,20 @@ if (packed) {
   if (bytes > SIZE_BUDGET_BYTES) {
     fail(
       `tarball is ${kib} kB, over the ${(SIZE_BUDGET_BYTES / 1024).toFixed(0)} kB budget ` +
-        "— check for a re-enabled sourcemap or a stray asset in files[]"
+        "— check for a re-enabled sourcemap or a stray asset in files[]",
     );
   } else {
     pass(
       `tarball is ${kib} kB across ${packed.entryCount} entries, under the ` +
-        `${(SIZE_BUDGET_BYTES / 1024).toFixed(0)} kB budget`
+        `${(SIZE_BUDGET_BYTES / 1024).toFixed(0)} kB budget`,
     );
   }
 
   // A sourcemap embeds build paths and triples the artifact. It was a
   // deliberate exclusion, so re-enabling it should be a conscious act.
-  const maps = packed.files
-    .map((f) => f.path)
-    .filter((f) => f.endsWith(".map"));
+  const maps = packed.files.map((f) => f.path).filter((f) => f.endsWith(".map"));
   if (maps.length) {
-    fail(
-      `tarball ships sourcemaps (${maps.join(", ")}); this bundle excludes them on purpose`
-    );
+    fail(`tarball ships sourcemaps (${maps.join(", ")}); this bundle excludes them on purpose`);
   }
 }
 
@@ -234,13 +216,10 @@ const CANARIES = [
 for (const [sample, shouldMatch] of CANARIES) {
   const matched = SECRET_PATTERNS.some(([pattern]) => pattern.test(sample));
   if (matched !== shouldMatch) {
-    fail(
-      `secret scanner is ${shouldMatch ? "not firing" : "firing"} on a safe sample: ${sample}`
-    );
+    fail(`secret scanner is ${shouldMatch ? "not firing" : "firing"} on a safe sample: ${sample}`);
   }
 }
-if (!failures.length)
-  pass(`secret patterns self-tested against ${CANARIES.length} samples`);
+if (!failures.length) pass(`secret patterns self-tested against ${CANARIES.length} samples`);
 
 const SKIP_DIRS = new Set(["node_modules", ".git", "lib"]);
 let scanned = 0;

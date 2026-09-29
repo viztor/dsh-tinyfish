@@ -23,6 +23,9 @@ import { fileURLToPath } from "node:url";
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const LIB = join(ROOT, "lib");
 
+/** Where `vp pack` writes, per vite.config.ts. Kept in step by the build. */
+const OUT_DIR = "lib";
+
 /**
  * The scratch output directory has to sit inside the project at exactly the
  * same depth as `lib/` — one level below the root — rather than in the system
@@ -57,9 +60,14 @@ const scratch = SCRATCH;
 let failed = false;
 
 try {
-  execFileSync("pnpm", ["exec", "tsc", "--outDir", scratch], {
+  // The same builder that produced `lib/`, pointed at a scratch directory.
+  // Comparing a tsc build against a tsdown build would be meaningless, which is
+  // exactly what happened when the first `vp pack` experiment ran against the
+  // old check: it failed on a builder mismatch, not on staleness.
+  execFileSync("pnpm", ["exec", "vp", "pack", "--outDir", scratch], {
     cwd: ROOT,
     stdio: "pipe",
+    env: { ...process.env, VP_LOG_LEVEL: "silent" },
   });
 
   const built = tree(scratch);
@@ -88,9 +96,7 @@ try {
         const a = await readFile(join(scratch, file), "utf8");
         const b = await readFile(join(LIB, file), "utf8");
         if (a !== b) {
-          console.error(
-            `  FAIL lib/${file} is stale — run \`pnpm run build\` to refresh it`
-          );
+          console.error(`  FAIL lib/${file} is stale — run \`pnpm run build\` to refresh it`);
           failed = true;
         }
       }
@@ -98,9 +104,7 @@ try {
   }
 
   if (!failed) {
-    console.log(
-      `  ok   lib/ matches a fresh build of src/ (${current.length} files)`
-    );
+    console.log(`  ok   lib/ matches a fresh build of src/ (${current.length} files)`);
   }
 } finally {
   // No process.exit() above: it terminates without unwinding, so the scratch

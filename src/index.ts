@@ -4,11 +4,7 @@ import { launchEnvironmentOf } from "@deepseek-ai/dsh-launch-environment";
 import z from "@deepseek-ai/schemastery";
 
 import type { CredentialResolver } from "./client.ts";
-import {
-  DEFAULT_FETCH_BASE,
-  DEFAULT_MONID_BASE,
-  DEFAULT_SEARCH_BASE,
-} from "./client.ts";
+import { DEFAULT_FETCH_BASE, DEFAULT_MONID_BASE, DEFAULT_SEARCH_BASE } from "./client.ts";
 import {
   TinyfishFetchProvider,
   TinyfishSearchProvider,
@@ -62,26 +58,19 @@ export const Config = z.object({
   channel: z
     .union([z.const("monid"), z.const("direct")])
     .default("monid")
-    .description(
-      "Which upstream route to use. `monid` reuses the MCP credential."
-    ),
+    .description("Which upstream route to use. `monid` reuses the MCP credential."),
   apiKey: z
     .string()
     .role("secret")
     .volatile()
-    .description(
-      "Literal credential. Prefer a credential ref or the environment."
-    ),
+    .description("Literal credential. Prefer a credential ref or the environment."),
   apiKeyEnv: z
     .string()
     .role("credential-ref")
     .default("TINYFISH_API_KEY")
     .volatile()
     .description("Stored credential or environment variable to read."),
-  purpose: z
-    .string()
-    .volatile()
-    .description("Goal statement; TinyFish ranks on it."),
+  purpose: z.string().volatile().description("Goal statement; TinyFish ranks on it."),
   attempts: z
     .number()
     .step(1)
@@ -95,33 +84,16 @@ export const Config = z.object({
       domainType: z
         .union([z.const("web"), z.const("news"), z.const("research_paper")])
         .description("Restrict the result corpus."),
-      language: z
-        .string()
-        .description("Language code for geo-targeted results."),
-      location: z
-        .string()
-        .description("Location code for geo-targeted results."),
-      includeDomains: z
-        .string()
-        .description("Comma-separated domains to allow."),
-      excludeDomains: z
-        .string()
-        .description("Comma-separated domains to drop."),
+      language: z.string().description("Language code for geo-targeted results."),
+      location: z.string().description("Location code for geo-targeted results."),
+      includeDomains: z.string().description("Comma-separated domains to allow."),
+      excludeDomains: z.string().description("Comma-separated domains to drop."),
     })
     .description("Search filters applied to every query.")
     .volatile(),
-  monidBase: z
-    .string()
-    .default(DEFAULT_MONID_BASE)
-    .description("Monid REST base."),
-  searchBase: z
-    .string()
-    .default(DEFAULT_SEARCH_BASE)
-    .description("TinyFish search base."),
-  fetchBase: z
-    .string()
-    .default(DEFAULT_FETCH_BASE)
-    .description("TinyFish fetch base."),
+  monidBase: z.string().default(DEFAULT_MONID_BASE).description("Monid REST base."),
+  searchBase: z.string().default(DEFAULT_SEARCH_BASE).description("TinyFish search base."),
+  fetchBase: z.string().default(DEFAULT_FETCH_BASE).description("TinyFish fetch base."),
 });
 
 /** Cordis service dependencies. */
@@ -213,10 +185,7 @@ function credentialLookup(ctx: Context): CredentialResolver | undefined {
 }
 
 /** Project one resolved section into the options the next operation serves. */
-export function resolveOptions(
-  config: unknown,
-  ctx?: Context
-): TinyfishProviderOptions {
+export function resolveOptions(config: unknown, ctx?: Context): TinyfishProviderOptions {
   const section = (config ?? {}) as Record<string, unknown>;
   const rawFilters = (section.filters ?? {}) as Record<string, unknown>;
 
@@ -291,12 +260,5 @@ export {
   TinyfishSearchProvider,
   toIsoDate,
 } from "./provider.ts";
-export type {
-  TinyfishChannel,
-  TinyfishFetchPayload,
-  TinyfishSearchPayload,
-} from "./client.ts";
-export type {
-  TinyfishOptionsSource,
-  TinyfishProviderOptions,
-} from "./provider.ts";
+export type { TinyfishChannel, TinyfishFetchPayload, TinyfishSearchPayload } from "./client.ts";
+export type { TinyfishOptionsSource, TinyfishProviderOptions } from "./provider.ts";

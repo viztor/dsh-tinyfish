@@ -12,7 +12,7 @@ concurrency:
 
 jobs:
   ci:
-    name: typecheck, lint, format, test, build
+    name: check, test, build
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -21,6 +21,9 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
+          # The migration's REVIEW item: the test runtime needs a newer Node than
+          # the library's public engine contract promises. The library still
+          # supports `>=22.6`; only the tooling here needs more.
           node-version: 24
           cache: pnpm
 
@@ -28,40 +31,33 @@ jobs:
       # right, and `--frozen-lockfile` is the only way to see it in CI.
       - run: pnpm install --frozen-lockfile
 
-      - name: Build
+      - name: Pack the library
         run: pnpm run build
 
-      - name: Typecheck
-        run: pnpm run typecheck
-
-      # Lint is not allowed to pass on warnings it has been told to ignore:
-      # the config separates real gates from accepted debt, and only the gates
-      # fail. `--max-warnings 0` is deliberately absent until the remaining
-      # `warn` tier is empty.
-      - name: Lint
-        run: pnpm run lint
-
-      - name: Format
-        run: pnpm run format
+      # `vp check` is format, lint and type-check in one pass — Oxlint and
+      # Oxfmt under the Vite+ entry point, reading the same oxlint.config.ts the
+      # fleet's rule tiers are written in.
+      - name: Check (format, lint, types)
+        run: vp check
 
       - name: Test
-        run: pnpm test
+        run: vp test
 
       # Proves lib/ — the artifact DSH loads and npm ships — matches src/.
       - name: Build freshness
         run: pnpm run build:check
 
-      # The dsh-* peers are workspace:^, so DSH will not catch a real contract
-      # break at boot. This does, and it is why that is safe.
+      # The dsh-* peers are ranges npm can parse, so DSH will not catch a real
+      # contract break at boot. This does, and it is why that is safe.
       - name: Runtime contract
         run: pnpm run contract:check
 
       - name: Bundle contract
         run: pnpm run pack:check
 
-      # Packs the tarball and installs it with plain npm into a scratch
-      # project, then loads it. Everything else here runs against the working
-      # tree; this is the only check that exercises what a consumer receives.
+      # Packs the tarball and installs it with plain npm into a scratch project,
+      # then loads it. Everything else here runs against the working tree; this
+      # is the only check that exercises what a consumer receives.
       - name: Install from the packed tarball
         run: pnpm run install:check
 
@@ -115,7 +111,11 @@ jobs:
       #      type "Automation" and run `gh secret set NPM_TOKEN`. An automation
       #      token is what avoids the one-time-password prompt that blocks a
       #      plain `npm publish` from a web-login session.
+      #
+      # `--ignore-scripts` so `prepare` does not run a second build: the
+      # artifact is already built, and its progress output would interleave with
+      # npm's.
       - name: Publish
-        run: pnpm publish --provenance --access public
+        run: pnpm publish --provenance --access public --ignore-scripts
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

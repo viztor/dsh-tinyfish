@@ -23,16 +23,11 @@ const PROFILE = join(process.env.HOME ?? "", ".dsh/profiles/web");
 
 /** The linked plugin's manifest, exactly as DSH would read it. */
 const pluginDir = join(PROFILE, "node_modules", "dsh-tinyfish");
-const manifest = JSON.parse(
-  readFileSync(join(pluginDir, "package.json"), "utf8")
-);
+const manifest = JSON.parse(readFileSync(join(pluginDir, "package.json"), "utf8"));
 
 /** The runtime version the loader compares against. */
 const runtime = JSON.parse(
-  readFileSync(
-    join(pluginDir, "node_modules/@deepseek-ai/dsh-web/package.json"),
-    "utf8"
-  )
+  readFileSync(join(pluginDir, "node_modules/@deepseek-ai/dsh-web/package.json"), "utf8"),
 ).version;
 
 const require = createRequire(join(PROFILE, "package.json"));
@@ -61,13 +56,11 @@ if (!semver) {
         runtime,
         "0.0.0",
       ],
-      { cwd: PROFILE, encoding: "utf8" }
+      { cwd: PROFILE, encoding: "utf8" },
     );
     semver = { satisfies: () => out.trim() === "1" };
   } catch {
-    console.log(
-      "  skip  could not resolve semver; the peer ranges are workspace:^"
-    );
+    console.log("  skip  could not resolve semver; the peer ranges are workspace:^");
     process.exit(0);
   }
 }
@@ -75,11 +68,8 @@ if (!semver) {
 /** DSH's rule, restated from dsh-app-boot. */
 const peers = {};
 for (const [name, range] of Object.entries(manifest.peerDependencies ?? {})) {
-  if (name !== "@deepseek-ai/dsh" && !name.startsWith("@deepseek-ai/dsh-"))
-    continue;
-  const requirement = ["workspace:^", "workspace:~", "workspace:*"].includes(
-    range
-  )
+  if (name !== "@deepseek-ai/dsh" && !name.startsWith("@deepseek-ai/dsh-")) continue;
+  const requirement = ["workspace:^", "workspace:~", "workspace:*"].includes(range)
     ? runtime
     : range;
   if (
@@ -94,13 +84,11 @@ const key = `${manifest.name}@${manifest.version}`;
 console.log(`  plugin  ${key}`);
 console.log(`  runtime dsh-web ${runtime}`);
 if (Object.keys(peers).length === 0) {
-  console.log(
-    `  ok      ${key} is compatible with dsh ${runtime} — no exemption needed`
-  );
+  console.log(`  ok      ${key} is compatible with dsh ${runtime} — no exemption needed`);
   process.exit(0);
 }
 console.error(`  FAIL    incompatible peers: ${JSON.stringify(peers)}`);
 console.error(
-  `         DSH would skip this plugin unless you run \`dsh plugin allow-version ${key} ${runtime}\`.`
+  `         DSH would skip this plugin unless you run \`dsh plugin allow-version ${key} ${runtime}\`.`,
 );
 process.exit(1);

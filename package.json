@@ -21,43 +21,43 @@
     "url": "git+https://github.com/viztor/dsh-tinyfish.git"
   },
   "files": [
-    "lib/*.js",
-    "lib/*.d.ts",
+    "lib",
     "cordis.patch.yml",
     "README.md",
     "LICENSE"
   ],
   "type": "module",
-  "main": "lib/index.js",
-  "types": "lib/index.d.ts",
+  "main": "lib/index.mjs",
+  "types": "lib/index.d.mts",
   "exports": {
     ".": {
-      "types": "./lib/index.d.ts",
-      "import": "./lib/index.js",
-      "default": "./lib/index.js"
+      "types": "./lib/index.d.mts",
+      "import": "./lib/index.mjs",
+      "default": "./lib/index.mjs"
     },
     "./src/*": "./src/*",
     "./package.json": "./package.json"
   },
   "scripts": {
-    "build": "tsc",
+    "build": "vp pack",
     "build:check": "node scripts/build-check.mjs",
-    "ci": "pnpm run typecheck && pnpm run lint && pnpm run format && pnpm test && pnpm run build:check && pnpm run contract:check && pnpm run pack:check && pnpm run install:check",
+    "check": "vp check",
+    "ci": "vp check && pnpm run test && pnpm run build:check && pnpm run contract:check && pnpm run pack:check && pnpm run install:check",
     "clean": "rm -rf lib",
     "compat:check": "node scripts/compat-check.mjs",
     "contract:check": "node scripts/contract-check.mjs",
-    "format": "oxfmt --check",
-    "format:fix": "oxfmt --write",
-    "lint": "oxlint",
-    "lint:fix": "oxlint --fix",
+    "format": "vp fmt --check",
+    "format:fix": "vp fmt --write",
+    "install:check": "node scripts/install-check.mjs",
+    "lint": "vp lint",
+    "lint:fix": "vp lint --fix",
     "pack:check": "node scripts/pack-check.mjs",
-    "prepare": "pnpm run build",
+    "prepare": "vp pack",
     "prepublishOnly": "pnpm run release:gate",
     "release:gate": "pnpm run build && pnpm run ci",
-    "test": "node --test test/*.test.mjs",
-    "test:live": "DSH_TINYFISH_LIVE=1 node --test test/integration/live.test.mjs",
-    "typecheck": "tsc --noEmit",
-    "install:check": "node scripts/install-check.mjs"
+    "test": "vp test",
+    "test:live": "DSH_TINYFISH_LIVE=1 vp test --config vite.live.config.ts --run",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@deepseek-ai/schemastery": "3.18.4"
@@ -68,11 +68,9 @@
     "@deepseek-ai/dsh-launch-environment": "0.2.0-rc.1",
     "@deepseek-ai/dsh-web": "0.2.0-rc.1",
     "@types/node": "^26.6.3",
-    "oxfmt": "^0.71.0",
-    "oxlint": "^1.86.0",
-    "oxlint-tsgolint": "^7.0.2003",
     "typescript": "^7.0.2",
-    "ultracite": "^7.12.1"
+    "ultracite": "^7.12.1",
+    "vite-plus": "catalog:"
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "~4.0.4",

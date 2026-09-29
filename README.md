@@ -8,11 +8,11 @@ Registers TinyFish as the implementation of the harness's own `web_search` and `
 
 ## Requirements
 
-|  |  |
-| --- | --- |
-| DSH | **0.2.0 or later** — the loader refuses a plugin whose peers do not match the runtime |
-| Node | 22.14+ (the harness supplies the `@deepseek-ai/*` peer packages; you do not install them) |
-| A credential | one of two free accounts — see [Credentials](#credentials) |
+|              |                                                                                           |
+| ------------ | ----------------------------------------------------------------------------------------- |
+| DSH          | **0.2.0 or later** — the loader refuses a plugin whose peers do not match the runtime     |
+| Node         | 22.14+ (the harness supplies the `@deepseek-ai/*` peer packages; you do not install them) |
+| A credential | one of two free accounts — see [Credentials](#credentials)                                |
 
 ## Install
 
@@ -28,11 +28,7 @@ Then add the bundle to that profile's `package.json`:
   "dependencies": { "dsh-tinyfish": "^0.2.0" },
   "dsh": {
     "profile": {
-      "bundles": [
-        "@deepseek-ai/dsh-base",
-        "@deepseek-ai/dsh-web-app",
-        "dsh-tinyfish",
-      ],
+      "bundles": ["@deepseek-ai/dsh-base", "@deepseek-ai/dsh-web-app", "dsh-tinyfish"],
     },
   },
 }
@@ -82,10 +78,10 @@ If the provider is unavailable, it means no credential resolved — the next sec
 
 ### By hand
 
-| channel | get a key | then |
-| --- | --- | --- |
-| `monid` _(default)_ | sign up at [app.monid.ai](https://app.monid.ai) | `monid keys add`, or `export MONID_API_KEY` |
-| `direct` | [tinyfish.ai](https://tinyfish.ai) → API keys | `tinyfish auth login` (saves it), or `echo $KEY | tinyfish auth set` for CI |
+| channel             | get a key                                       | then                                            |
+| ------------------- | ----------------------------------------------- | ----------------------------------------------- |
+| `monid` _(default)_ | sign up at [app.monid.ai](https://app.monid.ai) | `monid keys add`, or `export MONID_API_KEY`     |
+| `direct`            | [tinyfish.ai](https://tinyfish.ai) → API keys   | `tinyfish auth login` (saves it), or `echo $KEY | tinyfish auth set` for CI |
 
 With no credential the provider reports `WEB_PROVIDER_CREDENTIAL_MISSING` and names the command to run — a distinct code from a provider failure, so the two are never confused.
 
@@ -117,13 +113,13 @@ A failing credentials service falls through to the next source rather than faili
 
 TinyFish is reachable two ways, and the payload is the same either way: Monid is a thin envelope whose `output` _is_ the direct response, and it forwards parameter names unchanged. One transport serves both; nothing above it branches.
 
-|  | `monid` (default) | `direct` |
-| --- | --- | --- |
-| search | `POST api.monid.ai/v1/run` | `GET api.search.tinyfish.ai` |
-| fetch | `POST api.monid.ai/v1/run` | `POST api.fetch.tinyfish.ai` |
-| auth | `Authorization: Bearer` | `X-API-Key` |
-| credential | `~/.config/monid/credentials.yaml` | `~/.tinyfish/config.json` |
-| cost | $0, on the Monid wallet | $0, direct |
+|            | `monid` (default)                  | `direct`                     |
+| ---------- | ---------------------------------- | ---------------------------- |
+| search     | `POST api.monid.ai/v1/run`         | `GET api.search.tinyfish.ai` |
+| fetch      | `POST api.monid.ai/v1/run`         | `POST api.fetch.tinyfish.ai` |
+| auth       | `Authorization: Bearer`            | `X-API-Key`                  |
+| credential | `~/.config/monid/credentials.yaml` | `~/.tinyfish/config.json`    |
+| cost       | $0, on the Monid wallet            | $0, direct                   |
 
 Both stores are the ones the CLIs already write, so the package holds no secret of its own. Stores are re-read per call — caching would pin a rotated key inside a long-lived host process.
 
@@ -137,17 +133,17 @@ Set on the `web-tinyfish` row in your patch:
 
 The row is validated by a `@deepseek-ai/schemastery` schema, so an out-of-range value is **rejected with a message** rather than silently clamped, and the row renders as a real settings section in the harness instead of free-form YAML.
 
-| key | default | meaning |
-| --- | --- | --- |
-| `channel` | `monid` | `monid` or `direct` |
-| `apiKey` | _(unset)_ | literal credential. Prefer `apiKeyEnv` — a patch file is read on every boot |
-| `apiKeyEnv` | `TINYFISH_API_KEY` | stored credential or env var to resolve |
-| `purpose` | _(unset)_ | goal statement; TinyFish ranks on it |
-| `attempts` | `3` | retries for a transient failure or an empty search (1–5) |
-| `filters.domainType` | _(unset)_ | `web` \| `news` \| `research_paper` |
-| `filters.language` / `filters.location` | _(unset)_ | geo targeting |
-| `filters.includeDomains` / `excludeDomains` | _(unset)_ | comma-separated |
-| `monidBase` / `searchBase` / `fetchBase` | upstream defaults | override for staging |
+| key                                         | default            | meaning                                                                     |
+| ------------------------------------------- | ------------------ | --------------------------------------------------------------------------- |
+| `channel`                                   | `monid`            | `monid` or `direct`                                                         |
+| `apiKey`                                    | _(unset)_          | literal credential. Prefer `apiKeyEnv` — a patch file is read on every boot |
+| `apiKeyEnv`                                 | `TINYFISH_API_KEY` | stored credential or env var to resolve                                     |
+| `purpose`                                   | _(unset)_          | goal statement; TinyFish ranks on it                                        |
+| `attempts`                                  | `3`                | retries for a transient failure or an empty search (1–5)                    |
+| `filters.domainType`                        | _(unset)_          | `web` \| `news` \| `research_paper`                                         |
+| `filters.language` / `filters.location`     | _(unset)_          | geo targeting                                                               |
+| `filters.includeDomains` / `excludeDomains` | _(unset)_          | comma-separated                                                             |
+| `monidBase` / `searchBase` / `fetchBase`    | upstream defaults  | override for staging                                                        |
 
 ## Behaviour worth knowing
 
@@ -171,33 +167,35 @@ TinyFish's `agent` and `browser` surfaces are **not** exposed. They cost $0.016/
 
 ## Development
 
-TypeScript 7, strict, built with `tsc`. The tests run against `src/` directly under Node's type stripping, so the normal edit-test loop needs no build step.
+TypeScript 7, strict. The toolchain is [Vite+](https://viteplus.dev) (`vp`): `vp pack` builds the library with tsdown, `vp test` runs Vitest, and `vp lint`/`vp fmt` are Oxlint and Oxfmt reading the tiered rules in `oxlint.config.ts`. The tests still run against `src/` directly, so the normal edit-test loop needs no build step.
 
 ```sh
 pnpm install            # prepare builds lib/ for the harness
 pnpm test               # hermetic unit suite — no network, ~300ms
 pnpm run test:live      # real TinyFish + Monid ($0, needs credentials)
-pnpm run build          # tsc -> lib/
+pnpm run build          # vp pack -> lib/ (one .mjs + one .d.mts)
 pnpm run build:check    # lib/ matches a fresh build of src/
 pnpm run typecheck      # tsc --noEmit
-pnpm run lint           # oxlint, type-aware (Ultracite presets)
-pnpm run format         # oxfmt --check
-pnpm run pack:check     # bundle contract + credential scan
+pnpm run lint           # vp lint — Oxlint, type-aware (Ultracite presets)
+pnpm run format         # vp fmt --check
+pnpm run pack:check     # bundle contract, credential scan, tarball budget
 pnpm run ci             # everything CI runs
 pnpm run release:gate   # build, then ci
 ```
 
-| path | role |
-| --- | --- |
-| `src/client.ts` | two-channel transport, retry policy, credential resolution |
-| `src/provider.ts` | the `WebSearchProvider` / `WebFetchProvider` pair |
-| `src/index.ts` | cordis `apply` / `inject` / `name`, and config normalisation |
-| `cordis.patch.yml` | the bundle patch that offers the provider and selects it |
-| `test/` | `node:test` suites; `integration/live.test.mjs` is the gated one |
-| `scripts/pack-check.mjs` | publish validator |
-| `scripts/build-check.mjs` | proves `lib/` is not stale |
-| `oxlint.config.ts` | lint tiers: gates fail, accepted debt warns, style off |
-| `AGENTS.md` | invariants and process — read before changing `src/` |
+| path                      | role                                                            |
+| ------------------------- | --------------------------------------------------------------- |
+| `src/client.ts`           | two-channel transport, retry policy, credential resolution      |
+| `src/provider.ts`         | the `WebSearchProvider` / `WebFetchProvider` pair               |
+| `src/index.ts`            | cordis `apply` / `inject` / `name`, and config normalisation    |
+| `cordis.patch.yml`        | the bundle patch that offers the provider and selects it        |
+| `test/`                   | `vp test` suites; `integration/` is the gated, credentialed one |
+| `scripts/pack-check.mjs`  | publish validator                                               |
+| `scripts/build-check.mjs` | proves `lib/` is not stale                                      |
+| `vite.config.ts`          | the `pack` (library build) and `test` blocks                    |
+| `vite.live.config.ts`     | the credentialed live suite, run separately                     |
+| `oxlint.config.ts`        | lint tiers read by `vp lint`: gates fail, debt warns, style off |
+| `AGENTS.md`               | invariants and process — read before changing `src/`            |
 
 `lib/` is gitignored and generated, so it can never be a committed stale copy — but that means it can silently lag `src/`, which the tests would not notice. `build:check` rebuilds into a scratch directory and diffs it, so the artifact DSH loads is provably the one this source produces.
 

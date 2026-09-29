@@ -8,13 +8,15 @@
  */
 
 import assert from "node:assert/strict";
-import test from "node:test";
+
+// Assertions stay on `node:assert` so that a failure here can only be the runner
+// swap, never an assertion-library rewrite.
+import { test } from "vitest";
 
 import * as plugin from "../src/index.ts";
 
 /** Read a validated schema node, or pass a plain value through. */
-const readNode = (node) =>
-  typeof node?.get === "function" ? node.get() : node;
+const readNode = (node) => (typeof node?.get === "function" ? node.get() : node);
 
 /** Minimal `ctx.web` stub that records what gets registered. */
 function stubContext() {
@@ -32,11 +34,7 @@ function stubContext() {
 
 test("the bundle exports what a cordis plugin must", () => {
   assert.equal(typeof plugin.apply, "function");
-  assert.deepEqual(
-    plugin.inject,
-    ["web"],
-    "it needs the web service and nothing else"
-  );
+  assert.deepEqual(plugin.inject, ["web"], "it needs the web service and nothing else");
   assert.equal(plugin.name, "dsh-tinyfish");
   assert.equal(plugin.TINYFISH_PROVIDER_ID, "tinyfish");
 });
@@ -56,11 +54,7 @@ test("it exports a schemastery Config, so the row renders as a settings section"
   // property yields the node itself, which is why every read goes through the
   // same accessor.
   const validated = plugin.Config({});
-  assert.equal(
-    readNode(validated.channel),
-    "monid",
-    "defaults applied by the schema"
-  );
+  assert.equal(readNode(validated.channel), "monid", "defaults applied by the schema");
   assert.equal(readNode(validated.attempts), 3);
   assert.equal(readNode(validated.apiKeyEnv), "TINYFISH_API_KEY");
   assert.equal(readNode(validated.monidBase), "https://api.monid.ai");
@@ -68,15 +62,8 @@ test("it exports a schemastery Config, so the row renders as a settings section"
 
 test("the Config schema accepts both channels and rejects a third", () => {
   assert.equal(plugin.Config({ channel: "direct" }).channel, "direct");
-  assert.equal(
-    plugin.Config({}).channel,
-    "monid",
-    "unset falls back, never undefined"
-  );
-  assert.throws(
-    () => plugin.Config({ channel: "carrier-pigeon" }),
-    "rejects an unknown channel"
-  );
+  assert.equal(plugin.Config({}).channel, "monid", "unset falls back, never undefined");
+  assert.throws(() => plugin.Config({ channel: "carrier-pigeon" }), "rejects an unknown channel");
 });
 
 test("the Config schema rejects attempts outside the retry loop's range", () => {
@@ -142,11 +129,7 @@ test("config: base URLs have defaults and accept overrides", () => {
   assert.equal(d.fetchBase, "https://api.fetch.tinyfish.ai");
   const o = plugin.resolveOptions({ monidBase: "https://monid.internal" });
   assert.equal(o.monidBase, "https://monid.internal");
-  assert.equal(
-    o.searchBase,
-    "https://api.search.tinyfish.ai",
-    "one override leaves the rest"
-  );
+  assert.equal(o.searchBase, "https://api.search.tinyfish.ai", "one override leaves the rest");
 });
 
 test("config: harness camelCase filters become upstream snake_case", () => {
@@ -172,10 +155,9 @@ test("config: empty and absent filters contribute nothing", () => {
   assert.deepEqual(plugin.resolveOptions().filters, {});
   assert.deepEqual(plugin.resolveOptions({ filters: {} }).filters, {});
   assert.deepEqual(
-    plugin.resolveOptions({ filters: { language: "", location: undefined } })
-      .filters,
+    plugin.resolveOptions({ filters: { language: "", location: undefined } }).filters,
     {},
-    "blank values are not sent upstream"
+    "blank values are not sent upstream",
   );
 });
 

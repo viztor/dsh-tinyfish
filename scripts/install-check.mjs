@@ -38,14 +38,16 @@ try {
 
   // `npm pack`, not a hand-built file list: this is the tarball npm will serve.
   const packed = JSON.parse(
-    execFileSync("npm", ["pack", "--json", "--pack-destination", scratch], {
+    // `--ignore-scripts` for the same reason as pack-check: `prepare` would build
+    // and print into stdout, corrupting the JSON this parses.
+    execFileSync("npm", ["pack", "--json", "--ignore-scripts", "--pack-destination", scratch], {
       cwd: ROOT,
       encoding: "utf8",
-    })
+    }),
   )[0];
   const tarball = join(scratch, packed.filename);
   pass(
-    `packed ${packed.filename} (${packed.entryCount} entries, ${(packed.size / 1024).toFixed(1)} kB)`
+    `packed ${packed.filename} (${packed.entryCount} entries, ${(packed.size / 1024).toFixed(1)} kB)`,
   );
 
   const manifest = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8"));
@@ -61,14 +63,14 @@ try {
     if (/^(workspace|link|file|catalog):/.test(range)) {
       fail(
         `peer ${name} uses the "${range.split(":")[0]}:" protocol, which npm ` +
-          "cannot parse — `npm install` of this package would fail outright"
+          "cannot parse — `npm install` of this package would fail outright",
       );
     }
   }
   if (!failures.length) {
     pass(
       `all ${Object.keys(manifest.peerDependencies ?? {}).length} peer ranges are ` +
-        "plain semver npm can resolve"
+        "plain semver npm can resolve",
     );
   }
 
@@ -85,23 +87,14 @@ try {
   // to resolve the whole @deepseek-ai dependency graph on its own, which would
   // make the check slow and would fail for reasons unrelated to this package.
   const peers = Object.entries(manifest.peerDependencies ?? {}).map(
-    ([name, range]) => `${name}@${range}`
+    ([name, range]) => `${name}@${range}`,
   );
   execFileSync(
     "npm",
-    [
-      "install",
-      tarball,
-      ...peers,
-      "--no-audit",
-      "--no-fund",
-      "--ignore-scripts",
-    ],
-    { cwd: project, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }
+    ["install", tarball, ...peers, "--no-audit", "--no-fund", "--ignore-scripts"],
+    { cwd: project, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] },
   );
-  pass(
-    `npm installed the package alongside ${peers.length} host-supplied peers`
-  );
+  pass(`npm installed the package alongside ${peers.length} host-supplied peers`);
 
   const installed = join(project, "node_modules/dsh-tinyfish");
   if (!existsSync(installed)) {
@@ -127,17 +120,11 @@ try {
 
     // A consumer profile resolves the bundle by this field; if it is absent the
     // package installs and is then silently ignored at boot.
-    const installedManifest = JSON.parse(
-      readFileSync(join(installed, "package.json"), "utf8")
-    );
+    const installedManifest = JSON.parse(readFileSync(join(installed, "package.json"), "utf8"));
     if (installedManifest.dsh?.bundle?.patch === undefined) {
-      fail(
-        "the published manifest has lost dsh.bundle.patch — DSH will ignore it"
-      );
+      fail("the published manifest has lost dsh.bundle.patch — DSH will ignore it");
     } else {
-      pass(
-        `dsh.bundle.patch survives publication: ${installedManifest.dsh.bundle.patch}`
-      );
+      pass(`dsh.bundle.patch survives publication: ${installedManifest.dsh.bundle.patch}`);
     }
 
     /* --------------------------------------------------- it loads and registers */
@@ -189,9 +176,7 @@ try {
         cause: error,
       });
     }
-    pass(
-      "the installed package loads, validates a config row, and registers both providers"
-    );
+    pass("the installed package loads, validates a config row, and registers both providers");
   }
 } catch (error) {
   fail(`install check failed: ${String(error).split("\n")[0]}`);
