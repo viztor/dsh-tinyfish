@@ -1,0 +1,31 @@
+# Bundle patch for `dsh-tinyfish`.
+#
+# The plugin only *offers* the `tinyfish` provider on both seam kinds. Whether
+# it is actually used is the profile's decision, in `dsh-web`'s config:
+#
+#   - id: web
+#     name: '@deepseek-ai/dsh-web'
+#     config:
+#       searchProvider: tinyfish
+#       fetchProvider: tinyfish
+#
+# Both rows are kept separate from the plugin row so the id is set in one place
+# and swapping back to `deepseek-official` / `http` is a two-word edit rather
+# than a plugin removal. Registering a provider nobody selects is free.
+#
+# `channel` picks the upstream route and defaults to `monid`, which reuses the
+# credential the Monid MCP mount already holds. Switch to `direct` to call
+# TinyFish's own API with the key the `tinyfish` CLI stored in
+# ~/.tinyfish/config.json. `apiKey` is deliberately not set here — a secret
+# belongs in the environment or the CLI's own store, not in a patch file.
+- insert:
+    - id: web-tinyfish
+      name: "dsh-tinyfish"
+      config:
+        channel: monid
+        attempts: 3
+- id: web
+  name: "@deepseek-ai/dsh-web"
+  config:
+    searchProvider: tinyfish
+    fetchProvider: tinyfish
