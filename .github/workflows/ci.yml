@@ -1,0 +1,121 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ci:
+    name: typecheck, lint, format, test, build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      # A lockfile that no longer matches the manifest is a gate in its own
+      # right, and `--frozen-lockfile` is the only way to see it in CI.
+      - run: pnpm install --frozen-lockfile
+
+      - name: Build
+        run: pnpm run build
+
+      - name: Typecheck
+        run: pnpm run typecheck
+
+      # Lint is not allowed to pass on warnings it has been told to ignore:
+      # the config separates real gates from accepted debt, and only the gates
+      # fail. `--max-warnings 0` is deliberately absent until the remaining
+      # `warn` tier is empty.
+      - name: Lint
+        run: pnpm run lint
+
+      - name: Format
+        run: pnpm run format
+
+      - name: Test
+        run: pnpm test
+
+      # Proves lib/ — the artifact DSH loads and npm ships — matches src/.
+      - name: Build freshness
+        run: pnpm run build:check
+
+      # The dsh-* peers are workspace:^, so DSH will not catch a real contract
+      # break at boot. This does, and it is why that is safe.
+      - name: Runtime contract
+        run: pnpm run contract:check
+
+      - name: Bundle contract
+        run: pnpm run pack:check
+
+      # Packs the tarball and installs it with plain npm into a scratch
+      # project, then loads it. Everything else here runs against the working
+      # tree; this is the only check that exercises what a consumer receives.
+      - name: Install from the packed tarball
+        run: pnpm run install:check
+
+  publish:
+    name: publish to npm
+    needs: ci
+    runs-on: ubuntu-latest
+    # A tag on the default branch, and never from a fork: a fork's workflow runs
+    # with a read-only token by design, and a tag there is not ours to ship.
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      contents: read
+      # Required for provenance, and for trusted publishing. This is what lets
+      # the publish succeed with no stored secret at all.
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+          registry-url: https://registry.npmjs.org
+
+      - run: pnpm install --frozen-lockfile
+
+      # The tag must match package.json, or the published version and the tag
+      # disagree and nobody can tell which one a consumer installed.
+      - name: Verify the tag matches the manifest
+        run: |
+          expected="v$(node -p "require('./package.json').version")"
+          if [ "${{ github.ref_name }}" != "$expected" ]; then
+            echo "::error::tag ${{ github.ref_name }} does not match package.json $expected"
+            exit 1
+          fi
+
+      # `--provenance` attests the tarball to this workflow, so an install can
+      # be traced to a commit without trusting the publisher account.
+      #
+      # Two authentication routes, and npm picks automatically. With
+      # `id-token: write` the CLI detects OIDC and uses trusted publishing
+      # first; it only falls back to NODE_AUTH_TOKEN if that is set. So this
+      # works with either configuration:
+      #
+      #   a) Trusted publishing (no secret): add viztor/dsh-tinyfish and the
+      #      workflow filename to the package's Trusted Publisher settings on
+      #      npmjs.com, and allow the "npm publish" action.
+      #   b) Automation token: create one at npmjs.com → Access Tokens with
+      #      type "Automation" and run `gh secret set NPM_TOKEN`. An automation
+      #      token is what avoids the one-time-password prompt that blocks a
+      #      plain `npm publish` from a web-login session.
+      - name: Publish
+        run: pnpm publish --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

@@ -1,0 +1,92 @@
+{
+  "name": "dsh-tinyfish",
+  "version": "0.2.0",
+  "description": "TinyFish-backed search and fetch providers for the DeepSeek Harness web capability seam (ctx.web) — $0 SERP and page extraction, direct or via Monid.",
+  "keywords": [
+    "cordis",
+    "deepseek-harness",
+    "dsh",
+    "dsh-bundle",
+    "dsh-plugin",
+    "monid",
+    "scraping",
+    "search",
+    "tinyfish",
+    "web-fetch",
+    "web-search"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/viztor/dsh-tinyfish.git"
+  },
+  "files": [
+    "lib/*.js",
+    "lib/*.d.ts",
+    "cordis.patch.yml",
+    "README.md",
+    "LICENSE"
+  ],
+  "type": "module",
+  "main": "lib/index.js",
+  "types": "lib/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./lib/index.d.ts",
+      "import": "./lib/index.js",
+      "default": "./lib/index.js"
+    },
+    "./src/*": "./src/*",
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "build": "tsc",
+    "build:check": "node scripts/build-check.mjs",
+    "ci": "pnpm run typecheck && pnpm run lint && pnpm run format && pnpm test && pnpm run build:check && pnpm run contract:check && pnpm run pack:check && pnpm run install:check",
+    "clean": "rm -rf lib",
+    "compat:check": "node scripts/compat-check.mjs",
+    "contract:check": "node scripts/contract-check.mjs",
+    "format": "oxfmt --check",
+    "format:fix": "oxfmt --write",
+    "lint": "oxlint",
+    "lint:fix": "oxlint --fix",
+    "pack:check": "node scripts/pack-check.mjs",
+    "prepare": "pnpm run build",
+    "prepublishOnly": "pnpm run release:gate",
+    "release:gate": "pnpm run build && pnpm run ci",
+    "test": "node --test test/*.test.mjs",
+    "test:live": "DSH_TINYFISH_LIVE=1 node --test test/integration/live.test.mjs",
+    "typecheck": "tsc --noEmit",
+    "install:check": "node scripts/install-check.mjs"
+  },
+  "dependencies": {
+    "@deepseek-ai/schemastery": "3.18.4"
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis": "~4.0.4",
+    "@deepseek-ai/dsh-credentials": "0.2.0-rc.1",
+    "@deepseek-ai/dsh-launch-environment": "0.2.0-rc.1",
+    "@deepseek-ai/dsh-web": "0.2.0-rc.1",
+    "@types/node": "^26.6.3",
+    "oxfmt": "^0.71.0",
+    "oxlint": "^1.86.0",
+    "oxlint-tsgolint": "^7.0.2003",
+    "typescript": "^7.0.2",
+    "ultracite": "^7.12.1"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "~4.0.4",
+    "@deepseek-ai/dsh-credentials": "^0.2.0-rc.1",
+    "@deepseek-ai/dsh-launch-environment": "^0.2.0-rc.1",
+    "@deepseek-ai/dsh-web": "^0.2.0-rc.1"
+  },
+  "engines": {
+    "node": ">=22.6"
+  },
+  "packageManager": "pnpm@12.6.0",
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  }
+}
