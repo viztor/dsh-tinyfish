@@ -102,8 +102,16 @@ export const inject = ["web"];
 /** The bundle name. Must equal the manifest `name`: the loader matches on it. */
 export const name = "dsh-tinyfish";
 
-/** Clamp `attempts` to a range the retry loop can honour. */
+/**
+ * Clamp `attempts` to a range the retry loop can honour.
+ *
+ * Blank means unset, not zero. The value arrives via `readField`, which turns
+ * an absent field into `""`, and `Number("")` is `0` — finite, and therefore
+ * clamped up to the minimum of 1 rather than falling back to the default. A
+ * field the user never set would have silently become "try once".
+ */
 function normalizeAttempts(value: unknown): number {
+  if (value === "" || value === null || value === undefined) return 3;
   const n = Number(value);
   if (!Number.isFinite(n)) return 3;
   return Math.min(5, Math.max(1, Math.floor(n)));
@@ -219,7 +227,12 @@ export function resolveOptions(config: unknown, ctx?: Context): TinyfishProvider
     resolveCredential: ctx ? credentialLookup(ctx) : undefined,
     purpose: purpose || undefined,
     filters,
-    attempts: normalizeAttempts(section.attempts),
+    // Through `readField` like every other field. `attempts` is the only
+    // numeric one, which is exactly why the omission went unnoticed: on a
+    // validated section the value is a boxed schema node, `Number(node)` is
+    // NaN, and `normalizeAttempts` silently returned the default — so
+    // `attempts: 5` in the settings row had no effect at all.
+    attempts: normalizeAttempts(readField(section, "attempts")),
     monidBase: readField(section, "monidBase") || DEFAULT_MONID_BASE,
     searchBase: readField(section, "searchBase") || DEFAULT_SEARCH_BASE,
     fetchBase: readField(section, "fetchBase") || DEFAULT_FETCH_BASE,
