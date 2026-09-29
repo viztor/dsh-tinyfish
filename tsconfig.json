@@ -1,0 +1,35 @@
+{
+  "compilerOptions": {
+    "target": "ES2023",
+    "lib": ["ES2023", "DOM"],
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+
+    "outDir": "lib",
+    "rootDir": "src",
+    "declaration": true,
+
+    // Source imports carry the real `.ts` extension so Node's type stripping
+    // resolves them when the tests import `src/` directly — no build, no
+    // loader, no separate compiled copy under test. `rewriteRelativeImportExtensions`
+    // turns those into `.js` on emit, so the published package still imports
+    // cleanly. This is the combination that makes "run the tests against the
+    // source" possible without giving up a working build.
+    "allowImportingTsExtensions": true,
+    "rewriteRelativeImportExtensions": true,
+
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true,
+    "noFallthroughCasesInSwitch": true,
+    "exactOptionalPropertyTypes": false,
+    "verbatimModuleSyntax": true,
+    "isolatedModules": true,
+    "erasableSyntaxOnly": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+
+    "types": ["node"]
+  },
+  "include": ["src/**/*.ts"]
+}

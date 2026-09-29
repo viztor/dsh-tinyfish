@@ -1,0 +1,45 @@
+# Dependency updates for a DSH bundle.
+#
+# The @deepseek-ai/* devDependencies are prereleases that move fast — 0.1.7-rc.2
+# became 0.2.0-rc.1 — and moving them is the single most likely thing to break
+# this package. Bumping one to a version whose contract moved is a real task
+# (run the gate, read `contract:check`), so these are opened as pull requests
+# rather than merged automatically. An unattended bump that silently breaks the
+# seam is worse than a bump that waits.
+version: 2
+
+updates:
+  - package-ecosystem: npm
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "09:00"
+      timezone: Etc/UTC
+    open-pull-requests-limit: 5
+    labels: [dependencies, dsh-runtime]
+    commit-message:
+      prefix: "deps"
+    groups:
+      # One PR for the whole harness set. They are released together, so
+      # bumping one without the others produces a lockfile that resolves a
+      # mixture of two runtimes.
+      dsh-runtime:
+        patterns:
+          - "@deepseek-ai/*"
+      tooling:
+        patterns:
+          - "ultracite"
+          - "oxlint*"
+          - "oxfmt"
+          - "typescript"
+          - "@types/node"
+
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: monthly
+    labels: [dependencies, ci]
+    groups:
+      actions:
+        patterns: ["*"]
