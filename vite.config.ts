@@ -197,7 +197,7 @@ export default defineConfig({
       clean: true,
     },
     {
-      // A named entry, so the artifact is `lib/client.cjs` rather than
+      // A named entry, so the artifact is `lib/client.*` rather than
       // `lib/settings-page.cjs`: `client` is what the harness calls the browser
       // half, and the manifest exports it under that name.
       entry: { client: "src/settings-page.tsx" },

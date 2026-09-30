@@ -1,7 +1,7 @@
 /**
  * The client bundle, exercised the way the web client loads it.
  *
- * `lib/client.cjs` is not a module the page imports — it is a factory the page
+ * `lib/client.js` is not a module the page imports — it is a factory the page
  * hands a `require` to, and everything it does happens inside that call. So the
  * thing worth testing is the contract at that boundary: that the built artifact
  * calls `window.__ModuleLoader__.load` with the right id, that its factory
@@ -14,7 +14,7 @@
  * show up. A bundle that fails this would fail silently in the browser, because
  * the harness degrades to "this plugin is not loaded".
  *
- * Reads `lib/client.cjs`, so `pnpm run build` must have run.
+ * Reads `lib/client.js`, so `pnpm run build` must have run.
  */
 
 import assert from "node:assert/strict";
@@ -26,11 +26,11 @@ import { runInNewContext } from "node:vm";
 import { test } from "vitest";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
-const BUNDLE = join(ROOT, "lib/client.cjs");
+const BUNDLE = join(ROOT, "lib/client.js");
 
 if (!existsSync(BUNDLE)) {
   throw new Error(
-    "lib/client.cjs is missing — run `pnpm run build` before the tests"
+    "lib/client.js is missing — run `pnpm run build` before the tests"
   );
 }
 
@@ -119,6 +119,38 @@ function loadBundle() {
   assert.ok(registration, "the bundle called window.__ModuleLoader__.load");
   return { registration, loaded, exports: registration.factory(require) };
 }
+
+test("the artifact is named the way the harness resolves it", () => {
+  // The plugin route requests `${package}/client.js`, and the shipped path comes
+  // from `exports["./client"]`. Both halves matter: a bundle that builds but is
+  // named `client.cjs` is a 404 the harness absorbs silently — the page simply
+  // does not appear, which reads as "the plugin has no settings". The shipped
+  // `dsh-client-ui-*` packages pair `exports["./client"]` with `lib/client.js`,
+  // and this asserts the same pairing. (The on-demand route's stricter
+  // `client.<hash>.js` pattern is a different path; the default is plain
+  // `client.js`.)
+  const pkg = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8"));
+  const served = pkg.exports["./client"].default;
+  assert.equal(
+    served,
+    "./lib/client.js",
+    "the manifest points at lib/client.js"
+  );
+  assert.ok(
+    pkg.files.includes("lib/client.js"),
+    "and the file ships in the tarball"
+  );
+  assert.equal(
+    existsSync(join(ROOT, "lib/client.js")),
+    true,
+    "and it exists after a build"
+  );
+  assert.equal(
+    pkg.dsh.client.platform,
+    "web",
+    "the manifest declares the client platform"
+  );
+});
 
 test("the built bundle registers itself with the loader", () => {
   const { registration } = loadBundle();

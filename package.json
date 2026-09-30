@@ -23,7 +23,7 @@
   "files": [
     "lib/index.mjs",
     "lib/index.d.mts",
-    "lib/client.cjs",
+    "lib/client.js",
     "cordis.patch.yml",
     "README.md",
     "LICENSE"
@@ -40,11 +40,11 @@
     "./src/*": "./src/*",
     "./package.json": "./package.json",
     "./client": {
-      "default": "./lib/client.cjs"
+      "default": "./lib/client.js"
     }
   },
   "scripts": {
-    "build": "vp pack",
+    "build": "vp pack && node scripts/name-client-bundle.mjs",
     "check": "vp check",
     "ci": "vp check && vp test && node scripts/check.mjs",
     "clean": "rm -rf lib",
@@ -52,7 +52,7 @@
     "format:fix": "vp fmt --write",
     "lint": "vp lint",
     "lint:fix": "vp lint --fix",
-    "prepare": "vp pack",
+    "prepare": "pnpm run build",
     "prepublishOnly": "pnpm run release:gate",
     "release:gate": "pnpm run build && pnpm run ci",
     "test": "vp test",
