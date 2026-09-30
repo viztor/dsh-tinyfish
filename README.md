@@ -96,7 +96,9 @@ Resolution order, first match wins: a literal `apiKey` in the settings row → t
 
 Everything lives in one row, `web-tinyfish`, edited in your profile's `cordis.patch.yml`. The row is validated, so an out-of-range value is rejected with a message rather than silently clamped.
 
-> **There is no Settings page for this plugin yet.** The harness renders a settings form only for packages that ship a client UI bundle and contribute a slot to the Plugins page. The shipped DeepSeek provider does; `dsh-tinyfish` does not. The row is edited in the patch file, and nothing about the row is wrong — it is simply not in the GUI.
+**Settings → Plugins → TinyFish** edits this row, if you prefer a form to a patch file. The plugin ships both halves: the provider the harness loads, and a client bundle that contributes the page. Changes are staged and written on save, and a key you type is stored by the harness rather than in your profile.
+
+The patch file is still the honest place for the first edit — it is where a selection that overrides someone else's layer belongs, and it needs no build. Use whichever suits the change.
 
 | key | default | meaning |
 | --- | --- | --- |

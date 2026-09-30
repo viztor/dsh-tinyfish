@@ -105,11 +105,11 @@ When DSH moves: `pnpm add -D` the new `@deepseek-ai/dsh-*` versions, run `releas
 
 ## The settings UI, and why there isn't one yet
 
-**A plugin's `Config` does not render anywhere by itself.** The Plugins page is a shell that renders tabs contributed by feature-owned client bundles; it never reads a schema. A package with no client bundle has no form, however well its schema is declared — and the harness degrades quietly rather than reporting it.
+**A plugin's `Config` does not render anywhere by itself.** The Plugins page is a shell that renders tabs contributed by feature-owned client bundles; it never reads a schema. A package with no client bundle has no form, however well its schema is declared — and the harness degrades quietly rather than reporting it. This package ships both halves, so the row is editable in the GUI; the two `vp pack` targets produce `lib/index.mjs` (the provider) and `lib/client.cjs` (the page), and the manifest declares `dsh.bundle` and `dsh.client` side by side.
 
-The README and the credential error messages used to tell users to configure this plugin under **Settings → Plugins**. That page did not exist. Both were corrected, and the rule is now: **do not name a UI path unless a client bundle exists to render it.**
+The rule that produced a false instruction in the README: **do not name a UI path unless a client bundle exists to render it.** Two user-facing places had it, and both were corrected before the page shipped.
 
-Shipping the form means a client bundle in this package (a package may declare both `dsh.bundle` and `dsh.client`; they are read by different subsystems), a `plugins.item` slot registration, a `SettingsFormModel` over `configForms.get("web-tinyfish")`, and en/zh locales. The verified shape — every signature read out of the shipped copy — is in [`docs/dsh-contracts.md`](docs/dsh-contracts.md#the-settings-ui-is-slot-contributed-not-schema-rendered).
+The page is `src/settings-page.tsx`, and its source of truth is the contract doc, not the shipped copy — every signature was read out of `dsh-client-ui-primitives`. `test/client-bundle.test.mjs` executes the built file under a `node:vm` stub of the loader, which is what catches a wrong wrapper or a wrong service name. The two deliberate limits are recorded in that file: the primitives have no boolean spec, so the switches use a hand-written one; and the credential control reports the _reference_ rather than asking asynchronously whether a key exists.
 
 ## Safety
 
