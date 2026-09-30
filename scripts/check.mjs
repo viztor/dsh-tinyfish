@@ -347,6 +347,26 @@ ok(`scanned ${scanned} files for credentials`);
  * for a bundle that is only ever loaded by DSH.
  */
 const scratch = mkdtempSync(join(tmpdir(), "dsh-tinyfish-"));
+
+/**
+ * The environment for the child `npm` calls.
+ *
+ * This check runs `npm pack` and `npm install` of its own, and those must do
+ * real work. Under `npm publish` the parent exports `npm_config_*` — including
+ * `npm_config_dry_run` — and a child that inherits it turns its own install
+ * into a no-op. The check then reads a package that was never written and
+ * fails with a message that names neither the cause nor the command, so the
+ * one check that proves a consumer can install the package could not run in the
+ * one situation it exists for: publishing.
+ *
+ * Stripping the whole `npm_config_` namespace is broader than dropping
+ * `dry_run`, and deliberately so — a future npm setting that quietly changes
+ * what an install writes is the same failure wearing a different name.
+ */
+const CHILD_ENV = Object.fromEntries(
+  Object.entries(process.env).filter(([name]) => !/^npm_config_/i.test(name))
+);
+
 try {
   const packed = JSON.parse(
     execFileSync(
@@ -354,7 +374,7 @@ try {
       // `--ignore-scripts`: `prepare` runs `vp pack`, whose progress output
       // would otherwise land in this JSON and break the parse.
       ["pack", "--json", "--ignore-scripts", "--pack-destination", scratch],
-      { cwd: ROOT, encoding: "utf8" }
+      { cwd: ROOT, encoding: "utf8", env: CHILD_ENV }
     )
   )[0];
 
@@ -373,7 +393,12 @@ try {
       "--no-fund",
       "--ignore-scripts",
     ],
-    { cwd: project, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }
+    {
+      cwd: project,
+      encoding: "utf8",
+      env: CHILD_ENV,
+      stdio: ["ignore", "pipe", "pipe"],
+    }
   );
 
   const installed = join(project, "node_modules/dsh-tinyfish");
@@ -404,6 +429,7 @@ try {
   execFileSync(process.execPath, ["--input-type=module", "-e", probe], {
     cwd: project,
     encoding: "utf8",
+    env: CHILD_ENV,
     stdio: ["ignore", "pipe", "pipe"],
   });
 
@@ -415,8 +441,11 @@ try {
     .filter(Boolean)
     .join("\n")
     .split("\n")
-    .filter((l) => /Error|Cannot find/.test(l))
-    .slice(0, 2)
+    // ENOENT and the npm `code` line are the two this check has actually
+    // produced. The old filter matched neither, so a failure reported an empty
+    // detail and named neither the cause nor the command that failed.
+    .filter((l) => /Error|Cannot find|ENOENT|EEXIST|npm error|code /.test(l))
+    .slice(0, 3)
     .join(" | ");
   fail(`a consumer install or load failed: ${detail}`);
 } finally {
