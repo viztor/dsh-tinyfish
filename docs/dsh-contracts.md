@@ -154,6 +154,66 @@ interface ConfigForm<T> {
 
 Every name above was confirmed present in the installed packages: `SettingsFormModel` (a class), `settingsTextField`, `settingsNumberField`, `SettingsForm`, `SettingsSecretField`, `SettingsValueField`, `whileServed`, and the `plugins.item` declaration itself.
 
+### The form API, in full
+
+Read out of `dsh-client-ui-primitives/lib/types/settings-form/form-model.d.ts`. `configForms.get(ns)` returns exactly a `SettingsFormScope`, so it is passed straight to the model — there is no separate scope object to construct:
+
+```ts
+interface SettingsFormScope<T> {
+  getSnapshot(): {
+    status: "loading" | "ready" | "unavailable";
+    value: T | undefined;
+    base: unknown;
+    user: unknown;
+    writable: boolean;
+    revision: number | undefined;
+  };
+  subscribe(listener: () => void): () => void;
+  mutate(
+    ops: readonly SettingsFormPathOp[],
+    expectedRevision?: number
+  ): Promise<boolean>;
+}
+
+class SettingsFormModel<T> {
+  constructor(
+    scope: SettingsFormScope<T>,
+    specs: SettingsFieldSpec[],
+    secrets?: SettingsSecretSpec[]
+  );
+  bind<S>(project: () => S): SnapshotStore<S>;
+  shell(): SettingsFormShell; // { available, writable, dirty, invalid, saving, failed }
+  field(field: string): SettingsFieldState; // { text, overridden, invalid }
+  actions(): SettingsFormActions; // { edit, resetField, save, discard }
+  save(): Promise<void>;
+  dispose(): void;
+}
+
+interface SettingsFieldSpec {
+  field: string;
+  format: (v: unknown) => string;
+  parse: (
+    t: string
+  ) => { kind: "set"; value: unknown } | { kind: "clear" } | undefined;
+}
+interface SettingsSecretSpec {
+  field: string;
+  write: (text: string) => Promise<boolean>;
+}
+```
+
+`settingsTextField(field)` and `settingsNumberField(field)` build the two shipped specs. **There is no boolean spec** — a boolean control needs a hand-written `SettingsFieldSpec`, and `parse` returning `undefined` is what blocks a save on a typo rather than silently dropping the edit.
+
+A field is marked overridden by **presence in the user layer**, not by comparing values: an override equal to the composition default is still an override. `base` is what a field reverts to when cleared.
+
+Credentials are written outside the section, because a literal never rides a response:
+
+```js
+ctx.remote.credentials.describe([ref])      // is one configured?
+ctx.remote.credentials.set(ref, value)      // write it
+ctx.remote.$on("credentials/reference-updated", …)   // and refresh on rotation
+```
+
 Components come from `@deepseek-ai/dsh-client-ui-primitives`: `SettingsForm` (`{labels, state, onSave, onDiscard, children}`), `SettingsSecretField`, `SettingsValueField` (`numeric`), and `SettingsFormModel(scope, [settingsTextField(…), settingsNumberField(…)], [credentialWriter])`.
 
 Client packages are bundled with **tsdown** (`scripts.bundle`), which is what `vp pack` already is, and emit a `window.__ModuleLoader__.load({ id, factory })` wrapper. Their manifest declares `dsh.client.inject`, `dsh.client.platform: "web"`, and a `./client` export.

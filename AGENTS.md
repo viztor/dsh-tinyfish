@@ -55,35 +55,7 @@ The reference implementation for this seam is the shipped `@deepseek-ai/dsh-web-
 
 Two conventions from the same package that are now house style here: exports carry `"./src/*"`, and JSDoc uses `@param x -` with a hyphen.
 
-**On Effect: deliberately absent, and there is nothing to remove.** Verified against the installed runtime: the `effect` package is **not installed**, and **0** packages declare it as a dependency — out of 289 `@deepseek-ai` packages and 540 packages in the harness tree overall. This plugin does not reference it either; the only match for the word in `src/` is an English sentence in a comment.
-
-The name collision is the part worth knowing, because it makes "does the harness use Effect?" look like a yes:
-
-```ts
-// @deepseek-ai/cordis
-export type Effect<T = any> = SyncEffect<T> | AsyncEffect<T>;
-type SyncEffect<T> = Disposable<T> | Iterable<Disposable<T>>;
-type AsyncEffect<T> = Promise<Disposable<T>> | AsyncIterable<Disposable<T>>;
-```
-
-That is the **plugin-lifecycle disposer contract** — a disposer, or things that yield disposers — not a functional-effects runtime. There is no `Effect<A, E, R>`, no fiber, no layer, no runtime.
-
-And it is already being used correctly, on our behalf. `ctx.web.registerSearchProvider` returns a disposer, but the registry builds the effect itself, on the _calling_ fiber:
-
-```js
-registerProvider(store, provider) {
-  if (store.has(provider.id)) throw new WebError(..., "WEB_DUPLICATE_PROVIDER");
-  const dispose = this.ctx.effect(function* () {
-    store.set(provider.id, provider);
-    yield () => store.delete(provider.id);
-  }, "web.registerProvider()");
-  return () => void dispose();
-}
-```
-
-`this.ctx` is our fiber, so both registrations are torn down when this plugin unloads, and discarding the returned handle in `apply` is correct rather than a leak. `test/compat.test.mjs` asserts that: unloading empties both registries, and the plugin can be **reloaded** — which a leaked registration would prevent, since the second `apply` would throw `WEB_DUPLICATE_PROVIDER`. Both tests fail if the stub registers without binding to the fiber.
-
-If a future change genuinely needs structured concurrency, the harness's own primitive is `ctx.effect()`.
+**On Effect: not used, and not installed.** The `effect` package is absent from the harness — 0 of 289 `@deepseek-ai` packages declare it — and from this package. Cordis's own `Effect` type is unrelated: it is the disposer contract, and the registry already applies it to these registrations on our behalf.
 
 ## Releasing
 
