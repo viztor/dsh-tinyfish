@@ -28,6 +28,8 @@ const OPTIONS = {
   monidBase: "https://api.monid.ai",
   searchBase: "https://api.search.tinyfish.ai",
   fetchBase: "https://api.fetch.tinyfish.ai",
+  search: true,
+  fetch: true,
 };
 
 const search = () => new TinyfishSearchProvider(() => OPTIONS);
@@ -142,6 +144,23 @@ test("available() is a local check and never touches the network", async () => {
   assert.equal(result.a, true);
   assert.equal(result.b, true);
   assert.equal(calls.length, 0, "available() must not make network calls");
+});
+
+test("a switched-off kind registers but reports itself unavailable", () => {
+  // Not registering would be worse: `dsh-web` would raise
+  // WEB_PROVIDER_CONFIGURED_MISSING for a profile that still names `tinyfish`,
+  // which reads as a broken install. Registering and declining reads as "off".
+  const off = { ...OPTIONS, search: false, fetch: false };
+  assert.equal(new TinyfishSearchProvider(() => off).available(), false);
+  assert.equal(new TinyfishFetchProvider(() => off).available(), false);
+
+  // The switches are independent: one off does not take the other with it.
+  const onlyFetch = { ...OPTIONS, search: false };
+  assert.equal(new TinyfishSearchProvider(() => onlyFetch).available(), false);
+  assert.equal(new TinyfishFetchProvider(() => onlyFetch).available(), true);
+  const onlySearch = { ...OPTIONS, fetch: false };
+  assert.equal(new TinyfishSearchProvider(() => onlySearch).available(), true);
+  assert.equal(new TinyfishFetchProvider(() => onlySearch).available(), false);
 });
 
 /* ------------------------------------------------------------------- fetch */

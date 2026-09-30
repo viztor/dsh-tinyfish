@@ -73,7 +73,7 @@ If search reports `WEB_PROVIDER_CREDENTIAL_MISSING` or `WEB_PROVIDER_UNAVAILABLE
 
 A fresh install has none, and never will — a key inside an npm tarball would be published forever. Both endpoints are free, but both need an account.
 
-**In the harness (easiest):** Settings → Plugins → `web-tinyfish`. The `apiKeyEnv` field is a _credential reference_, so the harness credentials service stores and rotates it and the provider picks up a change on the next search, no restart.
+**In the profile patch (no restart needed).** The `web-tinyfish` row in your profile's `cordis.patch.yml` sets `apiKeyEnv`, which the harness resolves through its credentials service and the launch environment, and re-reads on every call — so a change takes effect on the next search.
 
 **By hand:**
 
@@ -94,19 +94,31 @@ Resolution order, first match wins: a literal `apiKey` in the settings row → t
 
 ## Configuration
 
-The row is validated, so an out-of-range value is rejected with a message rather than silently clamped.
+Everything lives in one row, `web-tinyfish`, edited in your profile's `cordis.patch.yml`. The row is validated, so an out-of-range value is rejected with a message rather than silently clamped.
 
-| key                                          | default            | meaning                                                  |
-| -------------------------------------------- | ------------------ | -------------------------------------------------------- |
-| `channel`                                    | `direct`           | `monid` or `direct`; see [Credentials](#credentials)     |
-| `apiKey`                                     | _(unset)_          | literal credential; prefer `apiKeyEnv`                   |
-| `apiKeyEnv`                                  | `TINYFISH_API_KEY` | credential reference, or env var, to resolve             |
-| `purpose`                                    | _(unset)_          | goal statement; TinyFish ranks on it                     |
-| `attempts`                                   | `3`                | retries for a transient failure or an empty search (1–5) |
-| `filters.domainType`                         | _(unset)_          | `web` \| `news` \| `research_paper`                      |
-| `filters.language` / `.location`             | _(unset)_          | geo targeting                                            |
-| `filters.includeDomains` / `.excludeDomains` | _(unset)_          | comma-separated                                          |
-| `monidBase` / `searchBase` / `fetchBase`     | upstream           | endpoint override, for staging                           |
+> **There is no Settings page for this plugin yet.** The harness renders a settings form only for packages that ship a client UI bundle and contribute a slot to the Plugins page. The shipped DeepSeek provider does; `dsh-tinyfish` does not. The row is edited in the patch file, and nothing about the row is wrong — it is simply not in the GUI.
+
+| key                                          | default            | meaning                                                        |
+| -------------------------------------------- | ------------------ | -------------------------------------------------------------- |
+| `channel`                                    | `direct`           | `monid` or `direct`; see [Credentials](#credentials)           |
+| `apiKey`                                     | _(unset)_          | literal credential; prefer `apiKeyEnv`                         |
+| `apiKeyEnv`                                  | `TINYFISH_API_KEY` | credential reference, or env var, to resolve                   |
+| `purpose`                                    | _(unset)_          | goal statement; TinyFish ranks on it                           |
+| `attempts`                                   | `3`                | retries for a transient failure or an empty search (1–5)       |
+| `filters.domainType`                         | _(unset)_          | `web` \| `news` \| `research_paper`                            |
+| `filters.language` / `.location`             | _(unset)_          | geo targeting                                                  |
+| `filters.includeDomains` / `.excludeDomains` | _(unset)_          | comma-separated                                                |
+| `monidBase` / `searchBase` / `fetchBase`     | upstream           | endpoint override, for staging                                 |
+| `search` / `fetch`                           | `true`             | offer this kind at all; `false` declines without unregistering |
+
+Search and fetch are switched independently. Both always register, so turning one off makes it report _unavailable_ rather than _missing_ — the harness tells those apart, and only the second means "I turned this off" rather than "the install is broken".
+
+```yaml
+- id: web-tinyfish
+  config:
+    search: true
+    fetch: false # keep TinyFish for search, let dsh-web use another fetch
+```
 
 ### Where a value comes from
 
@@ -124,13 +136,13 @@ An endpoint that does not parse makes the provider report itself unavailable rat
 
 Resolved **per call**, so a key rotated anywhere below takes effect on the next search with no restart. First match wins:
 
-| #   | source                  | set it by                                |
-| --- | ----------------------- | ---------------------------------------- |
-| 1   | the `apiKey` literal    | the row — a secret in config; prefer 2–3 |
-| 2   | the credentials service | **Settings → Plugins → `web-tinyfish`**  |
-| 3   | the launch environment  | exported before DSH started              |
-| 4   | the live environment    | `MONID_API_KEY` / `TINYFISH_API_KEY`     |
-| 5   | the channel's CLI store | `monid keys add` / `tinyfish auth login` |
+| #   | source                  | set it by                                    |
+| --- | ----------------------- | -------------------------------------------- |
+| 1   | the `apiKey` literal    | the row — a secret in config; prefer 2–3     |
+| 2   | the credentials service | the profile's `web-tinyfish` `apiKeyEnv` row |
+| 3   | the launch environment  | exported before DSH started                  |
+| 4   | the live environment    | `MONID_API_KEY` / `TINYFISH_API_KEY`         |
+| 5   | the channel's CLI store | `monid keys add` / `tinyfish auth login`     |
 
 The harness services sit above the environment on purpose: a value someone typed into Settings is a more deliberate choice than one that merely happens to be exported. A failing service falls through to the next source rather than failing the search, and a host that mounts neither still works.
 

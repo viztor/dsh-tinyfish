@@ -62,6 +62,16 @@ export interface TinyfishProviderOptions {
   readonly monidBase: string;
   readonly searchBase: string;
   readonly fetchBase: string;
+
+  /**
+   * Whether to *offer* this kind. Both providers always register, so a disabled
+   * kind reports itself unavailable rather than missing — `dsh-web` distinguishes
+   * `WEB_PROVIDER_CONFIGURED_MISSING` (a named id that was never registered,
+   * usually a broken install) from `WEB_PROVIDER_UNAVAILABLE` (a registered
+   * provider that declined), and the second is what "I turned this off" means.
+   */
+  readonly search: boolean;
+  readonly fetch: boolean;
 }
 
 /** Resolves the options for the *next* operation. */
@@ -138,6 +148,7 @@ export class TinyfishSearchProvider implements WebSearchProvider {
   available(): boolean {
     const options = this.resolveOptions();
     return (
+      options.search &&
       hasCredential(options) &&
       URL.canParse(options.searchBase) &&
       (options.channel === "direct" || URL.canParse(options.monidBase))
@@ -213,9 +224,14 @@ export class TinyfishFetchProvider implements WebFetchProvider {
    */
   available(): boolean {
     const options = this.resolveOptions();
+    // Its own switch and its own endpoint. This checked `search` and
+    // `searchBase` until the switch tests forced the question: a typo'd
+    // `fetchBase` reported the provider available and then failed at request
+    // time, and a bad `searchBase` disabled a perfectly good fetch.
     return (
+      options.fetch &&
       hasCredential(options) &&
-      URL.canParse(options.searchBase) &&
+      URL.canParse(options.fetchBase) &&
       (options.channel === "direct" || URL.canParse(options.monidBase))
     );
   }

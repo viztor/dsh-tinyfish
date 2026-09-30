@@ -62,6 +62,8 @@ const FIELDS = [
   // to catch.
   { name: "purpose", default: undefined, set: "find pricing", junk: undefined },
   { name: "attempts", default: 3, set: 5, junk: 3 },
+  { name: "search", default: true, set: false, junk: true },
+  { name: "fetch", default: true, set: false, junk: true },
   {
     name: "monidBase",
     default: "https://api.monid.ai",
@@ -93,6 +95,16 @@ test("every schema field has a stated default and a stated junk behaviour", () =
     FIELDS.map((f) => f.name).toSorted(),
     "the table covers the schema exactly — a new field must be given a default here",
   );
+
+  // The switches are booleans, and their junk case is the interesting one: a
+  // schema that yields the string "false" for an unset switch must not read as
+  // false, or a malformed row would silently switch a provider off.
+  assert.equal(resolveOptions({ search: "false" }).search, false, "an explicit false switches off");
+  assert.equal(resolveOptions({ search: "" }).search, true, "blank is not false");
+  assert.equal(resolveOptions({ search: "no" }).search, true, "garbage is not false");
+  assert.equal(resolveOptions({}).search, true, "and unset is on");
+  assert.equal(resolveOptions({ fetch: "false" }).fetch, false);
+  assert.equal(resolveOptions({}).fetch, true);
 
   for (const field of FIELDS) {
     assert.equal(

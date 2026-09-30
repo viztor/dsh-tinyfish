@@ -99,6 +99,15 @@ export const Config = z.object({
   monidBase: z.string().default(DEFAULT_MONID_BASE).description("Monid REST base."),
   searchBase: z.string().default(DEFAULT_SEARCH_BASE).description("TinyFish search base."),
   fetchBase: z.string().default(DEFAULT_FETCH_BASE).description("TinyFish fetch base."),
+
+  // Per-kind switches. `ctx.web` already keeps two independent registries and
+  // `dsh-web` selects each separately, so search and fetch could always be
+  // pointed at different providers — but only by editing `dsh-web`'s own row.
+  // These make the choice settable in this row, where someone configuring
+  // TinyFish is already looking, and let a half-configured install register
+  // only the kind that works.
+  search: z.boolean().default(true).description("Offer TinyFish as the search provider."),
+  fetch: z.boolean().default(true).description("Offer TinyFish as the fetch provider."),
 });
 
 /** Cordis service dependencies. */
@@ -256,6 +265,11 @@ export function resolveOptions(
     searchBase:
       readField(section, "searchBase") || env.TINYFISH_SEARCH_BASE_URL || DEFAULT_SEARCH_BASE,
     fetchBase: readField(section, "fetchBase") || env.TINYFISH_FETCH_BASE_URL || DEFAULT_FETCH_BASE,
+    // A switch is off only when it says so. Anything absent or unusable means
+    // "on", so a malformed value cannot silently disable a provider — the same
+    // rule the channel default follows.
+    search: readField(section, "search") !== "false",
+    fetch: readField(section, "fetch") !== "false",
   };
 }
 
