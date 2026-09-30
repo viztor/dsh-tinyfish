@@ -112,13 +112,11 @@ export function apply(ctx) {
   ctx.effect(
     () =>
       ctx.configForms.whileServed([NS], () =>
-        ctx.slots.inject("plugins.item", () =>
+        ctx.slots.inject("plugins.bundle.config", () =>
           ctx.slots.register(
             {
-              name: "plugins.item",
-              id: "tinyfish",
-              order: 40,
-              label: () => t("title"),
+              name: "plugins.bundle.config",
+              key: "dsh-tinyfish",
               locale: NS,
               inject: () => card.inject(),
             },
@@ -131,13 +129,18 @@ export function apply(ctx) {
 }
 ```
 
-Two things that were hard to find and are easy to get wrong:
+Three things that were hard to find and are easy to get wrong:
 
 - **The scope is `ctx.configForms.get(namespace)`** — a `ConfigForm`, passed straight to `SettingsFormModel`. There is no separate scope object.
-- **The slot key is `"plugins.item"`**, not `settings.plugins.tab`. The latter is the tab list declared by `dsh-client-ui-settings`; `plugins.item` is the per-entry slot, declared by **`dsh-client-ui-plugin-manager`** as `{ kind: 'list', scope: 'root', owner: PluginConfigViewProps }`. Registration is gated on `configForms.whileServed([NS], …)` (`whileServed(namespaces: readonly string[], register: (served: ReadonlySet<string>) => …)`) so the page disappears when the Host plugin is not loaded — which is why the shipped copy can say _"This plugin is not loaded, so it cannot be configured right now."_
+- **The slot is `"plugins.bundle.config"`, not `"plugins.item"`.** The plugin manager declares three config slots with three jobs: `plugins.item` renders the _official_ plugins as cards beside the official bundles; `plugins.bundle.config` renders a form section on a bundle's _own_ detail page, filtered by `entryKey: pkg.name`; `plugins.row.config` renders a page for a single row. A third-party bundle's form belongs on its own page, so it registers into the keyed `plugins.bundle.config` slot with `key` set to its package name — which the detail page matches against `pkg.name`. (`plugins.item` is a list slot requiring `options.id`; `plugins.bundle.config` is a keyed slot requiring `options.key`. Registering into the wrong one renders nothing, silently.)
+- **The loader id is the package name, not the row id.** The client graph keys entries by package name (`table.set(packageName, …)`), serves `${package}/client.js`, and `arrive()` requires the executed script to register that same id. A bundle that registers its row id instead loads without registering and fails the row.
 - The credential invalidation event is **`credentials/reference-updated`**; `credentials/record-updated` is its sibling. A page that shows whether a key is configured has to refresh on both, or it goes stale after a rotation.
 
 Slot declarations are `declare module` augmentations of `SlotMap`, and declaring a slot is claiming it: registering into an undeclared slot throws at load.
+
+### Display names are not localizable by third-party packages
+
+`packageText` resolves a title from `pkg.meta?.title` through the locale service, falling back to the raw package name — which is why this plugin shows as `dsh-tinyfish` while built-in rows show Chinese names. But **no manifest in the entire harness store carries a `meta` field**, official packages included, and the host inventory builds `pkg` objects without one. The `meta` path exists in code and is unreachable in practice; the official Chinese titles come from built-in locale dictionaries, not from a per-package mechanism. There is no verified way for a third-party bundle to localize its list name. What _is_ localizable is everything inside the bundle's own surfaces — the settings card ships en and zh dictionaries — so the form reads natively even though the list row does not.
 
 ### The form API
 
