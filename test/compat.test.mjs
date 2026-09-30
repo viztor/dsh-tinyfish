@@ -42,26 +42,56 @@ function foreignProvider(id) {
 function registry() {
   const search = new Map();
   const fetch = new Map();
+  // Every `ctx.effect` the plugin's fiber accumulates. Unloading a Cordis plugin
+  // runs these in reverse, which is how a registration is torn down.
+  const effects = [];
+  const effect = (body) => {
+    const disposers = [];
+    // The real registry passes a generator that yields its unregister
+    // disposer: `ctx.effect(function* () { store.set(...); yield () => ... })`.
+    for (const yielded of body()) disposers.push(yielded);
+    effects.push(() => {
+      for (const dispose of disposers.toReversed()) dispose();
+    });
+    return () => {
+      for (const dispose of disposers.splice(0).toReversed()) dispose();
+    };
+  };
+  const register = (store, provider) => {
+    if (store.has(provider.id)) {
+      const error = new Error(`duplicate web provider ${provider.id}`);
+      error.code = "WEB_DUPLICATE_PROVIDER";
+      throw error;
+    }
+    // Faithful to `dsh-web`'s `registerProvider`, including that the effect is
+    // created on the CALLING fiber — ours — so disposal needs no action from us.
+    effect(function* () {
+      store.set(provider.id, provider);
+      yield () => store.delete(provider.id);
+    });
+  };
   return {
     search,
     fetch,
+    effects,
+    /**
+     * Simulate plugin unload: run every effect this fiber accumulated.
+     *
+     * An arrow property rather than a shorthand method, so it carries no `this`
+     * — the tests destructure it, and a `this`-bearing method cannot be
+     * destructured safely.
+     */
+    unload: () => {
+      for (const dispose of effects.splice(0).toReversed()) dispose();
+    },
     ctx: {
+      effect,
       web: {
         registerSearchProvider(provider) {
-          if (search.has(provider.id)) {
-            const error = new Error(`duplicate search provider ${provider.id}`);
-            error.code = "WEB_DUPLICATE_PROVIDER";
-            throw error;
-          }
-          search.set(provider.id, provider);
+          register(search, provider);
         },
         registerFetchProvider(provider) {
-          if (fetch.has(provider.id)) {
-            const error = new Error(`duplicate fetch provider ${provider.id}`);
-            error.code = "WEB_DUPLICATE_PROVIDER";
-            throw error;
-          }
-          fetch.set(provider.id, provider);
+          register(fetch, provider);
         },
       },
     },
@@ -115,6 +145,33 @@ test("registering the bundle twice is rejected by the registry, not silently", (
     },
     (error) => error.code === "WEB_DUPLICATE_PROVIDER"
   );
+});
+
+test("unloading the plugin removes both registrations", () => {
+  // The registry creates its effect on the CALLING fiber, which is ours, so
+  // `apply` does not have to keep the returned disposers. That is worth
+  // asserting rather than trusting: a plugin that discarded a disposer it was
+  // supposed to keep would leave its providers registered forever.
+  const { ctx, search, fetch, unload } = registry();
+  plugin.apply(ctx, plugin.Config({}));
+  assert.equal(search.size, 1);
+  assert.equal(fetch.size, 1);
+
+  unload();
+  assert.equal(search.size, 0, "the search provider is gone after unload");
+  assert.equal(fetch.size, 0, "the fetch provider is gone after unload");
+});
+
+test("the plugin can be reloaded, which a leaked registration would prevent", () => {
+  // The sharper version of the same question. If a registration outlived its
+  // fiber, a second `apply` would hit WEB_DUPLICATE_PROVIDER — so reloading is
+  // the observable consequence of a lifecycle bug, not just a tidy-up.
+  const { ctx, search, fetch, unload } = registry();
+  plugin.apply(ctx, plugin.Config({}));
+  unload();
+  plugin.apply(ctx, plugin.Config({}));
+  assert.equal(search.size, 1, "reload re-registers rather than throwing");
+  assert.equal(fetch.size, 1);
 });
 
 test("the profile's selection resolves to this provider, and back again", () => {
