@@ -181,6 +181,8 @@ pnpm run ci             # vp check + vp test + the package checks
 
 Run `release:gate` before every commit that touches `src/`, `cordis.patch.yml`, or `package.json`. `ci` is what CI runs and what a pre-push hook should run.
 
+Write commit messages with a heredoc — `git commit -F - <<'EOF' … EOF` — not through a scratch file in the tree. A temp file has to be excluded from `git add` and deleted afterwards, and safety that depends on remembering two steps is not safety; this repository ships one package and a stray file in it is exactly the kind of thing the Safety section rules out. The quoted delimiter keeps `"quotes"`, `` `backticks` `` and `$variables` intact.
+
 ## Credentials
 
 Resolution order, first match wins:
