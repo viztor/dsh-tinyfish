@@ -95,7 +95,8 @@ export function toIsoDate(value: string | undefined): string | undefined {
   const text = value.trim();
 
   // Already zoned, or carries a clock time: parse as given.
-  const zoned = /(?:Z|[+-]\d{2}:?\d{2})$/i.test(text) || /\d{1,2}:\d{2}/.test(text);
+  const zoned =
+    /(?:Z|[+-]\d{2}:?\d{2})$/i.test(text) || /\d{1,2}:\d{2}/.test(text);
 
   let candidate = text;
   if (!zoned) {
@@ -147,7 +148,17 @@ export class TinyfishSearchProvider implements WebSearchProvider {
    */
   available(): boolean {
     const options = this.resolveOptions();
-    return (
+    // `Boolean(...)`: `&&` yields the first falsy *operand*, not `false`, so an
+    // unset flag made this return `undefined` from a method the seam declares as
+    // `available(): boolean`. The live suite caught it — an untyped test fixture
+    // omitted the flag and got `undefined` instead of a clean `false`.
+    //
+    // `search` is typed as required, so the conversion below looks redundant to
+    // the type checker. What it defends is the seam contract, and the suite
+    // asserts a strict boolean for a malformed row. Silenced for this one line
+    // rather than obeyed by deleting the guard.
+    // oxlint-disable-next-line typescript/no-unnecessary-type-conversion
+    return Boolean(
       options.search &&
       hasCredential(options) &&
       URL.canParse(options.searchBase) &&
@@ -155,7 +166,10 @@ export class TinyfishSearchProvider implements WebSearchProvider {
     );
   }
 
-  async search(request: WebSearchRequest, signal?: AbortSignal): Promise<WebSearchResult> {
+  async search(
+    request: WebSearchRequest,
+    signal?: AbortSignal
+  ): Promise<WebSearchResult> {
     const options = this.resolveOptions();
     const payload: TinyfishSearchPayload = await tinyfishSearch({
       channel: options.channel,
@@ -228,7 +242,8 @@ export class TinyfishFetchProvider implements WebFetchProvider {
     // `searchBase` until the switch tests forced the question: a typo'd
     // `fetchBase` reported the provider available and then failed at request
     // time, and a bad `searchBase` disabled a perfectly good fetch.
-    return (
+    // oxlint-disable-next-line typescript/no-unnecessary-type-conversion
+    return Boolean(
       options.fetch &&
       hasCredential(options) &&
       URL.canParse(options.fetchBase) &&
@@ -236,7 +251,10 @@ export class TinyfishFetchProvider implements WebFetchProvider {
     );
   }
 
-  async fetch(request: WebFetchRequest, signal?: AbortSignal): Promise<WebFetchResult> {
+  async fetch(
+    request: WebFetchRequest,
+    signal?: AbortSignal
+  ): Promise<WebFetchResult> {
     const options = this.resolveOptions();
     const payload: TinyfishFetchPayload = await tinyfishFetch({
       channel: options.channel,
@@ -275,7 +293,10 @@ export class TinyfishFetchProvider implements WebFetchProvider {
     if (!page) {
       // Neither a result nor an error entry: the upstream answered, but with
       // nothing usable. That is a provider fault, not a resource state.
-      throw new WebError(`TinyFish returned no content for ${request.url}`, WEB_PROVIDER_ERROR);
+      throw new WebError(
+        `TinyFish returned no content for ${request.url}`,
+        WEB_PROVIDER_ERROR
+      );
     }
 
     return {
@@ -307,7 +328,7 @@ function hasCredential(options: TinyfishProviderOptions): boolean {
         MONID_API_KEY: process.env[options.apiKeyEnv],
         MONID_MCP_TOKEN: process.env[options.apiKeyEnv],
       },
-    }),
+    })
   );
 }
 

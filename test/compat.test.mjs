@@ -1,8 +1,12 @@
 import assert from "node:assert/strict";
+
 import { test } from "vitest";
 
 import * as plugin from "../src/index.ts";
-import { TinyfishFetchProvider, TinyfishSearchProvider } from "../src/provider.ts";
+import {
+  TinyfishFetchProvider,
+  TinyfishSearchProvider,
+} from "../src/provider.ts";
 
 /**
  * Coexistence with the providers DSH already ships.
@@ -77,14 +81,14 @@ function bootWithHarnessProviders() {
 test("it registers alongside the providers DSH ships", () => {
   const { search, fetch } = bootWithHarnessProviders();
   assert.deepEqual(
-    [...search.keys()].toSorted(),
+    [...search.keys()].toSorted((a, b) => a.localeCompare(b)),
     ["deepseek-official", "tinyfish"],
-    "both search providers coexist under distinct ids",
+    "both search providers coexist under distinct ids"
   );
   assert.deepEqual(
-    [...fetch.keys()].toSorted(),
+    [...fetch.keys()].toSorted((a, b) => a.localeCompare(b)),
     ["http", "tinyfish"],
-    "both fetch providers coexist under distinct ids",
+    "both fetch providers coexist under distinct ids"
   );
 });
 
@@ -106,8 +110,10 @@ test("registering the bundle twice is rejected by the registry, not silently", (
   const { ctx } = registry();
   plugin.apply(ctx, plugin.Config({}));
   assert.throws(
-    () => plugin.apply(ctx, plugin.Config({})),
-    (error) => error.code === "WEB_DUPLICATE_PROVIDER",
+    () => {
+      plugin.apply(ctx, plugin.Config({}));
+    },
+    (error) => error.code === "WEB_DUPLICATE_PROVIDER"
   );
 });
 
@@ -124,7 +130,7 @@ test("the profile's selection resolves to this provider, and back again", () => 
   // Both alternatives must still be registered and usable.
   assert.ok(
     search.get("deepseek-official"),
-    "the shipped provider stays registered, so reverting needs no reinstall",
+    "the shipped provider stays registered, so reverting needs no reinstall"
   );
   assert.ok(fetch.get("http"), "the shipped fetch provider likewise");
 });
@@ -156,17 +162,19 @@ test("a settings row from another patch layer still resolves", () => {
   const validated = plugin.Config({ channel: "direct", attempts: 5 });
   const raw = { channel: "direct", attempts: 5 };
 
-  for (const [label, section] of [
+  /** @type {Array<[string, unknown]>} */
+  const pairs = [
     ["validated", validated],
     ["raw", raw],
-  ]) {
+  ];
+  for (const [label, section] of pairs) {
     const options = plugin.resolveOptions(section);
     assert.equal(options.channel, "direct", `${label}: channel survives`);
     assert.equal(options.attempts, 5, `${label}: attempts survives`);
     assert.equal(
       options.apiKeyEnv,
       "TINYFISH_API_KEY",
-      `${label}: the credential-ref default applies`,
+      `${label}: the credential-ref default applies`
     );
     assert.equal(options.searchBase, "https://api.search.tinyfish.ai");
   }
@@ -174,15 +182,22 @@ test("a settings row from another patch layer still resolves", () => {
   assert.deepEqual(
     plugin.resolveOptions(raw).filters,
     plugin.resolveOptions(validated).filters,
-    "both shapes produce the same upstream filters",
+    "both shapes produce the same upstream filters"
   );
 });
 
 test("an unparseable value in a merged row degrades instead of poisoning it", () => {
   // A typo'd key, or a section object read as a scalar, must not become
   // "[object Object]" in a request URL.
-  const options = plugin.resolveOptions({ monidBase: { nested: true }, attempts: 2 });
-  assert.equal(options.monidBase, "https://api.monid.ai", "falls back to the default");
+  const options = plugin.resolveOptions({
+    monidBase: { nested: true },
+    attempts: 2,
+  });
+  assert.equal(
+    options.monidBase,
+    "https://api.monid.ai",
+    "falls back to the default"
+  );
   assert.equal(options.attempts, 2);
 });
 
@@ -194,5 +209,9 @@ test("the shipped providers are untouched by loading this bundle", async () => {
   const before = shipped.available();
   const mine = search.get("tinyfish");
   mine.available();
-  assert.equal(shipped.available(), before, "another provider's state is not disturbed");
+  assert.equal(
+    shipped.available(),
+    before,
+    "another provider's state is not disturbed"
+  );
 });

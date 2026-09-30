@@ -2,22 +2,27 @@
 
 ## Project identity
 
-- Local source: `~/dev/dsh-tinyfish` · npm package: **`dsh-tinyfish`** (unscoped) · GitHub: `viztor/dsh-tinyfish`
-  `scripts/check.mjs` enforces both against the _built_ entry.
+- Local source: `~/dev/dsh-tinyfish` · npm package: **`dsh-tinyfish`** (unscoped) · GitHub: `viztor/dsh-tinyfish` `scripts/check.mjs` enforces both against the _built_ entry.
 - **Registering a provider is not selecting it.** This plugin only _offers_ `tinyfish`; `dsh-web`'s `searchProvider` / `fetchProvider` decide. Reverting is two words in the profile — change them back to `deepseek-official` / `http` and the plugin stays mounted and idle. Do not "fix" selection by editing the plugin.
 
 ## Stack
 
-| concern   | tool                                                | why this one                                                          |
-| --------- | --------------------------------------------------- | --------------------------------------------------------------------- |
-| toolchain | **Vite+** (`vp`)                                    | one entry point over Vite, Rolldown, Vitest, tsdown, Oxlint and Oxfmt |
-| language  | TypeScript 7, `strict` + `noUncheckedIndexedAccess` | the seam's types are the contract; JS gave them up                    |
-| build     | `vp pack` (tsdown) → `lib/`                         | a **library** build, not an app build; the harness resolves `main`    |
-| tests     | `vp test` (Vitest 5)                                | the same 70 tests, with watch and V8 coverage built in                |
-| lint      | `vp lint` — Oxlint, **type-aware**, Ultracite       | the `typescript/*` gates are real defect classes                      |
-| format    | `vp fmt` — Oxfmt                                    | same preset family as the linter, same tiered rules                   |
+| concern | tool | why this one |
+| --- | --- | --- |
+| toolchain | **Vite+** (`vp`) | one entry point over Vite, Rolldown, Vitest, tsdown, Oxlint and Oxfmt |
+| language | TypeScript 7, `strict` + `noUncheckedIndexedAccess` | the seam's types are the contract; JS gave them up |
+| build | `vp pack` (tsdown) → `lib/` | a **library** build, not an app build; the harness resolves `main` |
+| tests | `vp test` (Vitest 5) | the same suite, with watch and V8 coverage built in |
+| lint | `vp lint` — Oxlint, **type-aware**, Ultracite | the `typescript/*` gates are real defect classes |
+| format | `vp fmt` — Oxfmt | same preset family as the linter, same tiered rules |
 
-Lint and format both follow the three tiers in `~/.grok/rules/lint-format-oxc-ultracite.md`. `oxlint.config.ts` keeps **gates at `error`**, accepted debt at `warn`, and style at `off` — no gate has been demoted to greenwash a build. Every `warn` there is a candidate to promote, not a permanent exemption.
+Lint and format both follow the three tiers in `~/.grok/rules/lint-format-oxc-ultracite.md`. The `lint` block in **`vite.config.ts`** keeps **gates at `error`**, accepted debt at `warn`, and style at `off` — no gate has been demoted to greenwash a build. Every `warn` is a candidate to promote, not a permanent exemption.
+
+**The rules live in `vite.config.ts`, not in `oxlint.config.ts`.** Vite+ disables nested Oxlint and Oxfmt configs, and its own guide says so: _"Put lint configuration directly in the `lint` block in the root `vite.config.ts`… We do not recommend using `oxlint.config.ts` or `.oxlintrc.json` with Vite+."_
+
+This mattered. Standalone `oxlint.config.ts` and `oxfmt.config.ts` sat beside the Vite+ config for the whole migration and were **inert** — `vp lint --print-config` reported Oxlint's defaults (111 rules, `options: null`, `typescript/no-floating-promises` at `warn`) instead of the tiers, and `vp fmt` ran on defaults too. Lint was green because it was running nothing, which is indistinguishable from passing. Moving both blocks into `vite.config.ts` took the effective config to 536 rules with `typeAware` and `typeCheck` on, surfaced **12 real gate errors** the defaults had never checked, and reformatted 16 files the preset had never seen.
+
+`vp lint --print-config` is how to check this is still true. If the rule count collapses to ~111 and `options` is `null`, the config has gone inert again.
 
 ### The `.ts` import extension is deliberate
 
@@ -29,11 +34,11 @@ The tests still import `src/` directly rather than `lib/`, so the build is out o
 
 TinyFish backs the harness's native `web_search` and `web_fetch`. Both endpoints are **$0**, which is the point: the default web path on this host costs nothing.
 
-| channel            | search                       | fetch                        | auth                    | credential store                   |
-| ------------------ | ---------------------------- | ---------------------------- | ----------------------- | ---------------------------------- |
-| `direct` (default) | `GET api.search.tinyfish.ai` | `POST api.fetch.tinyfish.ai` | `X-API-Key`             | `~/.tinyfish/config.json`          |
-| `monid`            | `POST api.monid.ai/v1/run`   | same                         | `Authorization: Bearer` | `~/.config/monid/credentials.yaml` |
-| `direct`           | `GET api.search.tinyfish.ai` | `POST api.fetch.tinyfish.ai` | `X-API-Key`             | `~/.tinyfish/config.json`          |
+| channel | search | fetch | auth | credential store |
+| --- | --- | --- | --- | --- |
+| `direct` (default) | `GET api.search.tinyfish.ai` | `POST api.fetch.tinyfish.ai` | `X-API-Key` | `~/.tinyfish/config.json` |
+| `monid` | `POST api.monid.ai/v1/run` | same | `Authorization: Bearer` | `~/.config/monid/credentials.yaml` |
+| `direct` | `GET api.search.tinyfish.ai` | `POST api.fetch.tinyfish.ai` | `X-API-Key` | `~/.tinyfish/config.json` |
 
 **The two channels return the same payload.** Monid is a thin envelope whose `output` is TinyFish's response verbatim, and it forwards parameter names unchanged. That is why one transport serves both and nothing above it branches — a test asserts the top hit matches across channels. If that stops being true, `test/integration/live.test.mjs` fails first.
 
@@ -41,12 +46,12 @@ TinyFish backs the harness's native `web_search` and `web_fetch`. Both endpoints
 
 The reference implementation for this seam is the shipped `@deepseek-ai/dsh-web-search-deepseek`. It is worth reading before changing anything here, and four of its decisions were initially wrong on this side:
 
-| adopted                                            | why                                                                                                                    |
-| -------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
-| `WebError`, not a private error class              | a package that invents its own codes is invisible to `dsh-tool-web`, which puts the code in structured error metadata  |
-| `@deepseek-ai/schemastery`, not the public one     | the public 3.18.x line has no `.role()`/`.volatile()`/`.get()`; the fork is what makes the settings row a real section |
-| `role("credential-ref")` + the credentials service | a key is then rotatable from Settings, not only from a patch file                                                      |
-| `redirect: "error"` on every request               | a provider configured for one endpoint should not silently follow it elsewhere                                         |
+| adopted | why |
+| --- | --- |
+| `WebError`, not a private error class | a package that invents its own codes is invisible to `dsh-tool-web`, which puts the code in structured error metadata |
+| `@deepseek-ai/schemastery`, not the public one | the public 3.18.x line has no `.role()`/`.volatile()`/`.get()`; the fork is what makes the settings row a real section |
+| `role("credential-ref")` + the credentials service | a key is then rotatable from Settings, not only from a patch file |
+| `redirect: "error"` on every request | a provider configured for one endpoint should not silently follow it elsewhere |
 
 Two conventions from the same package that are now house style here: exports carry `"./src/*"`, and JSDoc uses `@param x -` with a hyphen.
 
@@ -73,10 +78,10 @@ pnpm run release:gate   # build, then ci
 
 A plain `npm publish` from a web-login session stops at **EOTP** — a one-time-password prompt, with the URL only ever printed to stdout. That is why publishing is done from CI instead. Two routes, both already supported by the workflow:
 
-| route                  | setup                                                                                                       | note                                                                                                                      |
-| ---------------------- | ----------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| **Automation token**   | npmjs.com → Access Tokens → Generate → type **Automation**, then `gh secret set NPM_TOKEN`                  | one command, works immediately. An automation token does not trigger EOTP — that prompt is specific to web-login sessions |
-| **Trusted publishing** | npmjs.com → package → Trusted Publisher → GitHub Actions → allow this workflow and the `npm publish` action | no secret at all; npm detects the OIDC environment and uses it in preference to a token                                   |
+| route | setup | note |
+| --- | --- | --- |
+| **Automation token** | npmjs.com → Access Tokens → Generate → type **Automation**, then `gh secret set NPM_TOKEN` | one command, works immediately. An automation token does not trigger EOTP — that prompt is specific to web-login sessions |
+| **Trusted publishing** | npmjs.com → package → Trusted Publisher → GitHub Actions → allow this workflow and the `npm publish` action | no secret at all; npm detects the OIDC environment and uses it in preference to a token |
 
 Trusted publishing is the better end state — nothing to store, nothing to rotate, nothing to leak. The token route is the one that works today without any npmjs.com configuration. The workflow supports both, because the CLI prefers OIDC and only falls back to `NODE_AUTH_TOKEN` when it is set.
 
@@ -92,19 +97,19 @@ Every version bump goes with the gate passing, because the harness-surface check
 
 ## Runtime compatibility
 
-DSH ships prereleases often — 0.1.7-rc.2 became 0.2.0-rc.1 — and the loader refuses to load a plugin whose `@deepseek-ai/dsh` or `@deepseek-ai/dsh-*` peers do not satisfy the running version. It checks those prefixes and nothing else, so `@deepseek-ai/cordis` can stay exactly pinned.
+The loader checks `@deepseek-ai/dsh` and `@deepseek-ai/dsh-*` peers against the running version and nothing else, so a peer must be a **range npm can parse** — `^0.2.0-rc.1`, never an exact version and never a workspace protocol. Both wrong answers have shipped here: an exact pin orphaned the plugin the moment DSH shipped 0.2.0, and `workspace:^` satisfies the loader while making `npm install` answer EUNSUPPORTEDPROTOCOL. The mechanics are in [`docs/dsh-contracts.md`](docs/dsh-contracts.md#runtime-compatibility).
 
-A checked peer must be a **range npm can parse**: `^0.2.0-rc.1`, not an exact version and not a workspace protocol. Both wrong answers have shipped here, and both are now guarded. An **exact pin** orphaned the plugin the moment DSH shipped 0.2.0; the only remedy was a per-machine `dsh plugin allow-version` exemption, which is not something a consumer should have to run. `workspace:^` fixes the loader and is the obvious next guess — it means "the current runtime" — but it is a pnpm/yarn protocol, so `npm install` answered `EUNSUPPORTEDPROTOCOL` and the package was, briefly, **uninstallable**. That is worse than needing a range bump on a DSH minor release.
+That choice gives up _automatic_ detection of a genuine break, so detection is bought back explicitly by `scripts/check.mjs`: the harness-surface check asserts every surface `src/` uses still exists, the peer-range check rejects both wrong shapes, and the install check packs the tarball and loads it under plain npm. Each is proved by planting the regression it guards.
 
-That choice gives up _automatic_ detection of a genuine break, so detection is bought back explicitly:
+When DSH moves: `pnpm add -D` the new `@deepseek-ai/dsh-*` versions, run `release:gate`, and read what the surface check says. If it passes, nothing in `src/` needs to change.
 
-- The **harness-surface check** asserts, against the installed runtime, that every surface `src/` imports or implements still exists: both provider interfaces, the result shapes, `WebError`, the `text` arm of `WebFetchBody`, `credentialRef`, `credentials.resolve`, and `launchEnvironmentOf`. Each failure names what moved rather than reporting a bare mismatch.
-- The **peer-range check** rejects both wrong shapes — a range npm cannot parse, and an exact pin. DSH reports a version mismatch loudly at boot on its own, so re-deriving its verdict here bought nothing; npm's inability to parse a `workspace:` protocol is the part DSH cannot tell you about.
-- The **install check** packs the tarball and installs it with **plain npm** into a scratch project, then loads it and drives the plugin surface. Every other check runs against the working tree; this is the only one that exercises what a consumer actually receives, and it is the check that found `workspace:^`.
+## The settings UI, and why there isn't one yet
 
-The checks are proved, not assumed. Every one of the six is fired by planting what it guards: renaming `WebFetchBody`'s `text` arm fails the surface check, re-pinning a peer fails the range check, `workspace:^` fails both that and the install check, a planted key fails the scanner, and deleting `dsh.bundle.patch` fails the bundle check. A check that cannot fail is not a check.
+**A plugin's `Config` does not render anywhere by itself.** The Plugins page is a shell that renders tabs contributed by feature-owned client bundles; it never reads a schema. A package with no client bundle has no form, however well its schema is declared — and the harness degrades quietly rather than reporting it.
 
-When DSH moves, the work is: `pnpm add -D` the new `@deepseek-ai/dsh-*` versions, run `release:gate`, and read what the contract check says. If it passes, nothing in `src/` needs to change.
+The README and the credential error messages used to tell users to configure this plugin under **Settings → Plugins**. That page did not exist. Both were corrected, and the rule is now: **do not name a UI path unless a client bundle exists to render it.**
+
+Shipping the form means a client bundle in this package (a package may declare both `dsh.bundle` and `dsh.client`; they are read by different subsystems), a `plugins.item` slot registration, a `SettingsFormModel` over `configForms.get("web-tinyfish")`, and en/zh locales. The verified shape — every signature read out of the shipped copy — is in [`docs/dsh-contracts.md`](docs/dsh-contracts.md#the-settings-ui-is-slot-contributed-not-schema-rendered).
 
 ## Safety
 
@@ -116,7 +121,7 @@ When DSH moves, the work is: `pnpm add -D` the new `@deepseek-ai/dsh-*` versions
 
 ## TDD
 
-- `pnpm test` is hermetic and free: 57 unit tests, no network, ~300ms. `fetch` is stubbed per test through `test/helpers.mjs`; add a case there rather than reaching the real API.
+- `pnpm test` is hermetic and free: no network, no credential, well under a second. The count is deliberately not written down here — it drifts, and `pnpm test` reports it. `fetch` is stubbed per test through `test/helpers.mjs`; add a case there rather than reaching the real API.
 - `pnpm run test:live` talks to both real APIs and is a **separate Vitest config** (`vite.live.config.ts`), not a flag on the default run. An inline `projects` entry looked like the tidier answer and was not: it inherited the parent's `include` and re-ran all 70 unit tests under a second name. It is still skipped without `DSH_TINYFISH_LIVE=1`, and it still costs $0, so run it before a release — but never make a gate of it that blocks an offline machine.
 - Unit tests pin behaviour a stub cannot prove: retry boundaries, `BLOCKED` being terminal, blank-credential fallthrough, `publishedAt` coercion.
 - Prefer a failing test that names the defect over editing an assertion to match new behaviour. The suite has already caught `requireKey` swallowing the credential, `active_key` never being honoured, and unzoned dates parsing as local midnight.
@@ -129,7 +134,6 @@ Load-bearing and cheap to break. Each has a test.
 1. **The seam owns truncation and error codes.** Providers return `truncated: false` and never pre-truncate to `maxResults`.
 2. **A per-URL fetch failure is a result, not a throw.** A 404 is resource state the model needs; only a genuine transport failure is a `TinyfishError`.
 3. **Fetch returns `kind: "text"`.** TinyFish already extracts Markdown, so `dsh-tool-web` passes it through. Returning `html` would reintroduce a turndown conversion for nothing.
-   The package check asserts a Config is exported.
 4. **Credential stores are re-read per call, never cached at module load.** Caching pins a rotated key inside a long-lived host process.
 5. **Blank means unconfigured.** A whitespace `apiKey` must fall through to the environment, not travel as a credential-shaped nothing.
 6. **`erasableSyntaxOnly` stays on.** It is what keeps the source runnable under Node's type stripping, which is what removes the build from the test loop. A parameter property or an enum in `src/` breaks the tests immediately — that is the guard, not an accident.
@@ -173,7 +177,11 @@ The scratch directory has to sit inside the project at the same depth as `lib/`.
 
 ## Changing the config surface
 
-`src/index.ts` holds the only normalisation: `channel` and `attempts` are clamped, filters are translated from the harness's camelCase to the upstream's snake_case, and `apiKey` / `purpose` are trimmed. Adding a filter means touching `resolveOptions` **and** `test/plugin.test.mjs` in the same change — the translation is the contract, not an implementation detail.
+`src/index.ts` holds the only normalisation: `channel` and `attempts` are clamped, filters are translated from the harness's camelCase to the upstream's snake_case, and `apiKey` / `purpose` are trimmed, and `search` / `fetch` become booleans. Adding a filter means touching `resolveOptions` **and** `test/plugin.test.mjs` in the same change — the translation is the contract, not an implementation detail.
+
+`search` and `fetch` are switches, not registrations: both providers always register and a disabled kind declines through `available()`. Not registering would make `dsh-web` raise `WEB_PROVIDER_CONFIGURED_MISSING`, which reads as a broken install rather than a choice. A switch is off only on an exact `"false"`, so a malformed row cannot silently disable a provider.
+
+`test/config.test.mjs` guards this whole area against going inert: it checks the schema's key list against a table of stated defaults, and each field against an explicit value that must round-trip. A field declared but never threaded through `resolveOptions` passes every other test in the suite — which is exactly the bug `attempts` had.
 
 Validated sections hand back **boxed schema nodes**, not plain values, and not uniformly: a `union` of consts resolves to a bare value while a `default(...).volatile()` field stays a node. `readField` in `src/index.ts` handles both and refuses to stringify an object — a typo'd key must not become `"[object Object]"` in a request.
 
@@ -181,4 +189,12 @@ The schema **rejects** out-of-range values rather than clamping, which is better
 
 ## Docs
 
-`README.md` is the public API reference and the npm landing page. Types are generated from `src/` — there is no hand-written `.d.ts` to fall out of sync, which was the whole point of the conversion.
+Three documents, each with one job:
+
+| file | job |
+| --- | --- |
+| [`README.md`](README.md) | the public API reference and the npm landing page |
+| [`docs/dsh-contracts.md`](docs/dsh-contracts.md) | every DSH contract this package depends on, with the evidence for it |
+| `AGENTS.md` | invariants, process, and the reasoning behind both |
+
+Types are generated from `src/` — there is no hand-written `.d.ts` to fall out of sync, which was the whole point of the TypeScript conversion. `docs/dsh-contracts.md` exists because those contracts are the ones a version bump can break, and each was read out of the installed harness rather than assumed from convention.

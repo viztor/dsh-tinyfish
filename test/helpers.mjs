@@ -52,7 +52,9 @@ export async function withStubbedFetch(routes, fn) {
       status,
       json: async () => {
         if (out.invalidJson) throw new SyntaxError("Unexpected token");
-        return typeof out.body === "string" ? JSON.parse(out.body) : (out.body ?? {});
+        return typeof out.body === "string"
+          ? JSON.parse(out.body)
+          : (out.body ?? {});
       },
       text: async () => body,
     };

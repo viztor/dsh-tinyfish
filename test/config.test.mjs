@@ -26,7 +26,7 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { test } from "vitest";
+import { afterAll, test } from "vitest";
 
 import { resolveApiKey, resolveApiKeyAsync } from "../src/client.ts";
 import { Config, apply, resolveOptions } from "../src/index.ts";
@@ -41,8 +41,14 @@ const store = (name, body) => {
 };
 
 const missing = join(scratch, "absent.yaml");
-const monidStore = store("monid.yaml", "keys:\n  main:\n    key: from_monid_store\n");
-const tinyfishStore = store("tinyfish.json", JSON.stringify({ api_key: "from_tinyfish_store" }));
+const monidStore = store(
+  "monid.yaml",
+  "keys:\n  main:\n    key: from_monid_store\n"
+);
+const tinyfishStore = store(
+  "tinyfish.json",
+  JSON.stringify({ api_key: "from_tinyfish_store" })
+);
 
 /* --------------------------------------------------- 1. the field contract */
 
@@ -54,7 +60,12 @@ const tinyfishStore = store("tinyfish.json", JSON.stringify({ api_key: "from_tin
  */
 const FIELDS = [
   { name: "channel", default: "direct", set: "monid", junk: "direct" },
-  { name: "apiKeyEnv", default: "TINYFISH_API_KEY", set: "OTHER_KEY", junk: "TINYFISH_API_KEY" },
+  {
+    name: "apiKeyEnv",
+    default: "TINYFISH_API_KEY",
+    set: "OTHER_KEY",
+    junk: "TINYFISH_API_KEY",
+  },
   // `purpose` is the field that needed the `set` column. Its default and its
   // junk behaviour are both `undefined`, so a `purpose` dropped from the
   // resolver satisfies every other assertion in this test — and a field that is
@@ -93,15 +104,27 @@ test("every schema field has a stated default and a stated junk behaviour", () =
   assert.deepEqual(
     declared.filter((k) => k !== "apiKey" && k !== "filters"),
     FIELDS.map((f) => f.name).toSorted(),
-    "the table covers the schema exactly — a new field must be given a default here",
+    "the table covers the schema exactly — a new field must be given a default here"
   );
 
   // The switches are booleans, and their junk case is the interesting one: a
   // schema that yields the string "false" for an unset switch must not read as
   // false, or a malformed row would silently switch a provider off.
-  assert.equal(resolveOptions({ search: "false" }).search, false, "an explicit false switches off");
-  assert.equal(resolveOptions({ search: "" }).search, true, "blank is not false");
-  assert.equal(resolveOptions({ search: "no" }).search, true, "garbage is not false");
+  assert.equal(
+    resolveOptions({ search: "false" }).search,
+    false,
+    "an explicit false switches off"
+  );
+  assert.equal(
+    resolveOptions({ search: "" }).search,
+    true,
+    "blank is not false"
+  );
+  assert.equal(
+    resolveOptions({ search: "no" }).search,
+    true,
+    "garbage is not false"
+  );
   assert.equal(resolveOptions({}).search, true, "and unset is on");
   assert.equal(resolveOptions({ fetch: "false" }).fetch, false);
   assert.equal(resolveOptions({}).fetch, true);
@@ -110,17 +133,17 @@ test("every schema field has a stated default and a stated junk behaviour", () =
     assert.equal(
       resolveOptions(validated)[field.name],
       field.default,
-      `${field.name}: an unset row yields the stated default`,
+      `${field.name}: an unset row yields the stated default`
     );
     assert.equal(
       resolveOptions({ [field.name]: "" })[field.name],
       field.junk,
-      `${field.name}: an unusable value degrades to the same thing`,
+      `${field.name}: an unusable value degrades to the same thing`
     );
     assert.equal(
       resolveOptions({ [field.name]: field.set })[field.name],
       field.set,
-      `${field.name}: an explicit value is honoured, not silently dropped`,
+      `${field.name}: an explicit value is honoured, not silently dropped`
     );
   }
 });
@@ -135,7 +158,7 @@ test("a validated row and a raw row resolve identically", () => {
     assert.deepEqual(
       resolveOptions(Config(row)),
       resolveOptions(row),
-      `${label}: validated and raw agree`,
+      `${label}: validated and raw agree`
     );
   }
 });
@@ -171,7 +194,7 @@ test("1. a literal apiKey outranks every other source", async () => {
 test("the live environment outranks the CLI store", async () => {
   const key = await resolveApiKeyAsync("monid", {
     env: { MONID_API_KEY: "env" },
-    resolveCredential: async () => undefined,
+    resolveCredential: async () => {},
     credentialsPath: monidStore,
   });
   assert.equal(key, "env");
@@ -181,28 +204,32 @@ test("the CLI store is the last resort, and is per-channel", async () => {
   assert.equal(
     await resolveApiKeyAsync("monid", {
       env: {},
-      resolveCredential: async () => undefined,
+      resolveCredential: async () => {},
       credentialsPath: monidStore,
     }),
-    "from_monid_store",
+    "from_monid_store"
   );
   assert.equal(
     await resolveApiKeyAsync("direct", {
       env: {},
-      resolveCredential: async () => undefined,
+      resolveCredential: async () => {},
       credentialsPath: monidStore,
       tinyfishConfigPath: tinyfishStore,
     }),
-    "from_tinyfish_store",
+    "from_tinyfish_store"
   );
 });
 
 test("no source means no key, and no throw", () => {
   for (const channel of ["monid", "direct"]) {
     assert.equal(
-      resolveApiKey(channel, { env: {}, credentialsPath: missing, tinyfishConfigPath: missing }),
+      resolveApiKey(channel, {
+        env: {},
+        credentialsPath: missing,
+        tinyfishConfigPath: missing,
+      }),
       "",
-      `${channel}: an absent store is empty, not an exception`,
+      `${channel}: an absent store is empty, not an exception`
     );
   }
 });
@@ -212,12 +239,18 @@ test("the two channels never read each other's environment or store", () => {
   // only one of the two configured would appear to work and then fail at the
   // first request, which is the expensive kind of wrong.
   assert.equal(
-    resolveApiKey("direct", { env: { MONID_API_KEY: "m" }, tinyfishConfigPath: missing }),
-    "",
+    resolveApiKey("direct", {
+      env: { MONID_API_KEY: "m" },
+      tinyfishConfigPath: missing,
+    }),
+    ""
   );
   assert.equal(
-    resolveApiKey("monid", { env: { TINYFISH_API_KEY: "t" }, credentialsPath: missing }),
-    "",
+    resolveApiKey("monid", {
+      env: { TINYFISH_API_KEY: "t" },
+      credentialsPath: missing,
+    }),
+    ""
   );
 });
 
@@ -226,8 +259,11 @@ test("MONID_MCP_TOKEN is accepted, so a host's existing Monid mount suffices", (
   // Requiring a second copy of it would make this plugin's credential
   // configuration strictly harder than the MCP server's.
   assert.equal(
-    resolveApiKey("monid", { env: { MONID_MCP_TOKEN: "mcp" }, credentialsPath: missing }),
-    "mcp",
+    resolveApiKey("monid", {
+      env: { MONID_MCP_TOKEN: "mcp" },
+      credentialsPath: missing,
+    }),
+    "mcp"
   );
   assert.equal(
     resolveApiKey("monid", {
@@ -235,7 +271,7 @@ test("MONID_MCP_TOKEN is accepted, so a host's existing Monid mount suffices", (
       credentialsPath: missing,
     }),
     "primary",
-    "MONID_API_KEY is the more specific name and wins",
+    "MONID_API_KEY is the more specific name and wins"
   );
 });
 
@@ -251,7 +287,7 @@ test("an aborted caller never gets a key, even from a service that would answer"
       credentialsPath: monidStore,
     }),
     (error) => error.code === "WEB_ABORTED" || error.name === "AbortError",
-    "the guard runs before the resolver is invoked, so a cancelled lookup never starts",
+    "the guard runs before the resolver is invoked, so a cancelled lookup never starts"
   );
 });
 
@@ -265,13 +301,23 @@ test("an aborted caller never gets a key, even from a service that would answer"
  * the registered provider.
  */
 
-function ctxWith({ credential, ambient, withCredentials = true, withLaunch = true }) {
+function ctxWith({
+  credential,
+  ambient,
+  withCredentials = true,
+  withLaunch = true,
+}) {
   const services = {
     // `credentialRef(name)` returns the plain string, not a wrapper object — an
     // earlier version of this stub looked for `.name` and matched nothing, which
     // read as the launch environment winning when the service simply never fired.
-    credentials: { resolve: async (ref) => (ref === "MY_KEY" ? { value: credential } : undefined) },
-    launchEnvironment: { get: (ref) => (ref === "MY_KEY" ? { value: ambient } : undefined) },
+    credentials: {
+      resolve: async (ref) =>
+        ref === "MY_KEY" ? { value: credential } : undefined,
+    },
+    launchEnvironment: {
+      get: (ref) => (ref === "MY_KEY" ? { value: ambient } : undefined),
+    },
   };
   return {
     get: (name) => {
@@ -305,29 +351,40 @@ async function resolverFrom(base) {
 test("2. the credentials service outranks the launch environment", async () => {
   // The layer a user edits from Settings is more deliberate than one frozen at
   // boot, so it is consulted first.
-  const resolve = await resolverFrom(ctxWith({ credential: "settings", ambient: "boot" }));
+  const resolve = await resolverFrom(
+    ctxWith({ credential: "settings", ambient: "boot" })
+  );
   assert.equal(await resolve("MY_KEY"), "settings");
 });
 
 test("3. the launch environment is used when no credentials service answers", async () => {
-  const resolve = await resolverFrom(ctxWith({ credential: undefined, ambient: "boot" }));
+  const resolve = await resolverFrom(
+    ctxWith({ credential: undefined, ambient: "boot" })
+  );
   assert.equal(await resolve("MY_KEY"), "boot");
 });
 
 test("a host with neither service still loads, and falls through to the stores", async () => {
   // Registration must not fail because a service is absent — that would make
   // the plugin unloadable on a host that mounts neither.
-  const resolve = await resolverFrom(ctxWith({ withCredentials: false, withLaunch: false }));
+  const resolve = await resolverFrom(
+    ctxWith({ withCredentials: false, withLaunch: false })
+  );
   assert.equal(resolve, undefined, "no resolver is offered at all");
   assert.equal(
-    resolveApiKey("monid", { env: { MONID_API_KEY: "env" }, credentialsPath: monidStore }),
+    resolveApiKey("monid", {
+      env: { MONID_API_KEY: "env" },
+      credentialsPath: monidStore,
+    }),
     "env",
-    "so the environment and the CLI store still apply",
+    "so the environment and the CLI store still apply"
   );
 });
 
 test("an unknown credential ref yields nothing rather than the wrong key", async () => {
-  const resolve = await resolverFrom(ctxWith({ credential: "settings", ambient: "boot" }));
+  const resolve = await resolverFrom(
+    ctxWith({ credential: "settings", ambient: "boot" })
+  );
   assert.equal(await resolve("SOME_OTHER_KEY"), undefined);
 });
 
@@ -339,11 +396,15 @@ test("a host patch row overrides the bundle default", () => {
   // layer, and DSH's precedence makes the host win. That is the whole reason
   // the default is a default and not a pin.
   assert.equal(resolveOptions({}).channel, "direct", "the bundle default");
-  assert.equal(resolveOptions({ channel: "monid" }).channel, "monid", "the host override");
+  assert.equal(
+    resolveOptions({ channel: "monid" }).channel,
+    "monid",
+    "the host override"
+  );
   assert.equal(
     resolveOptions(Config({ channel: "monid" })).channel,
     "monid",
-    "and it survives schema validation, which is what a patch row goes through",
+    "and it survives schema validation, which is what a patch row goes through"
   );
 });
 
@@ -351,22 +412,23 @@ test("endpoints resolve config row, then environment, then built-in default", ()
   // The three-rung shape the shipped providers use for
   // `$DEEPSEEK_SEARCH_BASE_URL`. A deployment can retarget without a patch file.
   assert.equal(
-    resolveOptions({}, undefined, { TINYFISH_SEARCH_BASE_URL: "https://staging.example" })
-      .searchBase,
+    resolveOptions({}, undefined, {
+      TINYFISH_SEARCH_BASE_URL: "https://staging.example",
+    }).searchBase,
     "https://staging.example",
-    "environment applies when the row is silent",
+    "environment applies when the row is silent"
   );
   assert.equal(
     resolveOptions({ searchBase: "https://row.example" }, undefined, {
       TINYFISH_SEARCH_BASE_URL: "https://env.example",
     }).searchBase,
     "https://row.example",
-    "the row outranks the environment",
+    "the row outranks the environment"
   );
   assert.equal(
     resolveOptions({}, undefined, {}).searchBase,
     "https://api.search.tinyfish.ai",
-    "and the built-in default stands when both are silent",
+    "and the built-in default stands when both are silent"
   );
   for (const [field, variable] of [
     ["monidBase", "TINYFISH_MONID_BASE_URL"],
@@ -374,9 +436,19 @@ test("endpoints resolve config row, then environment, then built-in default", ()
     ["fetchBase", "TINYFISH_FETCH_BASE_URL"],
   ]) {
     assert.equal(
-      resolveOptions({}, undefined, { [variable]: "https://env.example" })[field],
+      resolveOptions({}, undefined, { [variable]: "https://env.example" })[
+        field
+      ],
       "https://env.example",
-      `${variable} retargets ${field}`,
+      `${variable} retargets ${field}`
     );
   }
+});
+
+// Cleanup has to be a hook, not top-level code: a bare call here runs at
+// *import*, before any test, so it deleted the stores the tests read. That is
+// what the unused-import warning was pointing at — the cleanup was missing — and
+// putting it back in the wrong place broke the suite instead of fixing it.
+afterAll(() => {
+  rmSync(scratch, { recursive: true, force: true });
 });

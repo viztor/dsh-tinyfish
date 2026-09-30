@@ -1,21 +1,17 @@
 # dsh-tinyfish
 
-[![npm](https://img.shields.io/npm/v/dsh-tinyfish.svg)](https://www.npmjs.com/package/dsh-tinyfish)
-[![downloads](https://img.shields.io/npm/dm/dsh-tinyfish.svg)](https://www.npmjs.com/package/dsh-tinyfish)
-[![ci](https://github.com/viztor/dsh-tinyfish/actions/workflows/ci.yml/badge.svg)](https://github.com/viztor/dsh-tinyfish/actions/workflows/ci.yml)
-[![license](https://img.shields.io/npm/l/dsh-tinyfish.svg)](https://github.com/viztor/dsh-tinyfish/blob/main/LICENSE)
-[![node](https://img.shields.io/badge/node-%3E%3D22.14-5FA04E.svg)](https://nodejs.org)
+[![npm](https://img.shields.io/npm/v/dsh-tinyfish.svg)](https://www.npmjs.com/package/dsh-tinyfish) [![downloads](https://img.shields.io/npm/dm/dsh-tinyfish.svg)](https://www.npmjs.com/package/dsh-tinyfish) [![ci](https://github.com/viztor/dsh-tinyfish/actions/workflows/ci.yml/badge.svg)](https://github.com/viztor/dsh-tinyfish/actions/workflows/ci.yml) [![license](https://img.shields.io/npm/l/dsh-tinyfish.svg)](https://github.com/viztor/dsh-tinyfish/blob/main/LICENSE) [![node](https://img.shields.io/badge/node-%3E%3D22.14-5FA04E.svg)](https://nodejs.org)
 
 **Search and fetch for the DeepSeek Harness, at $0.**
 
 A DSH bundle that makes [TinyFish](https://tinyfish.ai) the implementation of the harness's own `web_search` and `web_fetch` tools. Both endpoints are free, so the web path on your host stops costing money per call.
 
-|                     | `dsh-web`'s default | with `dsh-tinyfish`                               |
-| ------------------- | ------------------- | ------------------------------------------------- |
-| search              | `deepseek-official` | TinyFish `/search` via Monid, **$0**              |
-| fetch               | `http`              | TinyFish `/fetch`, **$0**, returns clean Markdown |
-| turndown conversion | yes, on every fetch | **no** — the content is already Markdown          |
-| reversibility       | —                   | two words, no reinstall                           |
+|  | `dsh-web`'s default | with `dsh-tinyfish` |
+| --- | --- | --- |
+| search | `deepseek-official` | TinyFish `/search` via Monid, **$0** |
+| fetch | `http` | TinyFish `/fetch`, **$0**, returns clean Markdown |
+| turndown conversion | yes, on every fetch | **no** — the content is already Markdown |
+| reversibility | — | two words, no reinstall |
 
 ## Install
 
@@ -31,7 +27,11 @@ Add the bundle to that profile's `package.json`, then restart DSH:
   "dependencies": { "dsh-tinyfish": "^0.2.0" },
   "dsh": {
     "profile": {
-      "bundles": ["@deepseek-ai/dsh-base", "@deepseek-ai/dsh-web-app", "dsh-tinyfish"],
+      "bundles": [
+        "@deepseek-ai/dsh-base",
+        "@deepseek-ai/dsh-web-app",
+        "dsh-tinyfish",
+      ],
     },
   },
 }
@@ -77,10 +77,10 @@ A fresh install has none, and never will — a key inside an npm tarball would b
 
 **By hand:**
 
-| channel          | get a key                                     | then                                                       |
-| ---------------- | --------------------------------------------- | ---------------------------------------------------------- |
+| channel | get a key | then |
+| --- | --- | --- |
 | `direct` default | [tinyfish.ai](https://tinyfish.ai) → API keys | `tinyfish auth login`, or `echo $KEY \| tinyfish auth set` |
-| `monid`          | [app.monid.ai](https://app.monid.ai)          | `monid keys add`, or `export MONID_API_KEY`                |
+| `monid` | [app.monid.ai](https://app.monid.ai) | `monid keys add`, or `export MONID_API_KEY` |
 
 The default is `direct` because the package is named for TinyFish: a fresh install asks for the credential its own name implies rather than for an account at a different service. If you would rather go through Monid — it reuses a platform key a Monid MCP mount already holds, and costs the same — pin it in your own profile patch, which is a host decision and does not need a new release of this plugin:
 
@@ -98,18 +98,18 @@ Everything lives in one row, `web-tinyfish`, edited in your profile's `cordis.pa
 
 > **There is no Settings page for this plugin yet.** The harness renders a settings form only for packages that ship a client UI bundle and contribute a slot to the Plugins page. The shipped DeepSeek provider does; `dsh-tinyfish` does not. The row is edited in the patch file, and nothing about the row is wrong — it is simply not in the GUI.
 
-| key                                          | default            | meaning                                                        |
-| -------------------------------------------- | ------------------ | -------------------------------------------------------------- |
-| `channel`                                    | `direct`           | `monid` or `direct`; see [Credentials](#credentials)           |
-| `apiKey`                                     | _(unset)_          | literal credential; prefer `apiKeyEnv`                         |
-| `apiKeyEnv`                                  | `TINYFISH_API_KEY` | credential reference, or env var, to resolve                   |
-| `purpose`                                    | _(unset)_          | goal statement; TinyFish ranks on it                           |
-| `attempts`                                   | `3`                | retries for a transient failure or an empty search (1–5)       |
-| `filters.domainType`                         | _(unset)_          | `web` \| `news` \| `research_paper`                            |
-| `filters.language` / `.location`             | _(unset)_          | geo targeting                                                  |
-| `filters.includeDomains` / `.excludeDomains` | _(unset)_          | comma-separated                                                |
-| `monidBase` / `searchBase` / `fetchBase`     | upstream           | endpoint override, for staging                                 |
-| `search` / `fetch`                           | `true`             | offer this kind at all; `false` declines without unregistering |
+| key | default | meaning |
+| --- | --- | --- |
+| `channel` | `direct` | `monid` or `direct`; see [Credentials](#credentials) |
+| `apiKey` | _(unset)_ | literal credential; prefer `apiKeyEnv` |
+| `apiKeyEnv` | `TINYFISH_API_KEY` | credential reference, or env var, to resolve |
+| `purpose` | _(unset)_ | goal statement; TinyFish ranks on it |
+| `attempts` | `3` | retries for a transient failure or an empty search (1–5) |
+| `filters.domainType` | _(unset)_ | `web` \| `news` \| `research_paper` |
+| `filters.language` / `.location` | _(unset)_ | geo targeting |
+| `filters.includeDomains` / `.excludeDomains` | _(unset)_ | comma-separated |
+| `monidBase` / `searchBase` / `fetchBase` | upstream | endpoint override, for staging |
+| `search` / `fetch` | `true` | offer this kind at all; `false` declines without unregistering |
 
 Search and fetch are switched independently. Both always register, so turning one off makes it report _unavailable_ rather than _missing_ — the harness tells those apart, and only the second means "I turned this off" rather than "the install is broken".
 
@@ -174,7 +174,7 @@ TinyFish's `agent` and `browser` surfaces are **not** exposed. They cost $0.016/
 
 ## Development
 
-The toolchain is [Vite+](https://viteplus.dev): `vp pack` builds the library with tsdown, `vp test` runs Vitest, and `vp lint` / `vp fmt` are Oxlint and Oxfmt.
+The toolchain is [Vite+](https://viteplus.dev): `vp pack` builds the library with tsdown, `vp test` runs Vitest, and `vp lint` / `vp fmt` are Oxlint and Oxfmt, type-aware. Lint and format settings live in the `lint` and `fmt` blocks of `vite.config.ts` — Vite+ disables nested Oxlint/Oxfmt configs, so a standalone `oxlint.config.ts` would be read by nobody.
 
 ```sh
 pnpm install

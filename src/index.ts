@@ -4,7 +4,11 @@ import { launchEnvironmentOf } from "@deepseek-ai/dsh-launch-environment";
 import z from "@deepseek-ai/schemastery";
 
 import type { CredentialResolver } from "./client.ts";
-import { DEFAULT_FETCH_BASE, DEFAULT_MONID_BASE, DEFAULT_SEARCH_BASE } from "./client.ts";
+import {
+  DEFAULT_FETCH_BASE,
+  DEFAULT_MONID_BASE,
+  DEFAULT_SEARCH_BASE,
+} from "./client.ts";
 import {
   TinyfishFetchProvider,
   TinyfishSearchProvider,
@@ -63,19 +67,26 @@ export const Config = z.object({
     // envelope pin `channel: monid` in their own patch layer, which is a
     // host decision and belongs there.
     .default("direct")
-    .description("Which upstream route to use. `monid` reuses the MCP credential."),
+    .description(
+      "Which upstream route to use. `monid` reuses the MCP credential."
+    ),
   apiKey: z
     .string()
     .role("secret")
     .volatile()
-    .description("Literal credential. Prefer a credential ref or the environment."),
+    .description(
+      "Literal credential. Prefer a credential ref or the environment."
+    ),
   apiKeyEnv: z
     .string()
     .role("credential-ref")
     .default("TINYFISH_API_KEY")
     .volatile()
     .description("Stored credential or environment variable to read."),
-  purpose: z.string().volatile().description("Goal statement; TinyFish ranks on it."),
+  purpose: z
+    .string()
+    .volatile()
+    .description("Goal statement; TinyFish ranks on it."),
   attempts: z
     .number()
     .step(1)
@@ -89,16 +100,33 @@ export const Config = z.object({
       domainType: z
         .union([z.const("web"), z.const("news"), z.const("research_paper")])
         .description("Restrict the result corpus."),
-      language: z.string().description("Language code for geo-targeted results."),
-      location: z.string().description("Location code for geo-targeted results."),
-      includeDomains: z.string().description("Comma-separated domains to allow."),
-      excludeDomains: z.string().description("Comma-separated domains to drop."),
+      language: z
+        .string()
+        .description("Language code for geo-targeted results."),
+      location: z
+        .string()
+        .description("Location code for geo-targeted results."),
+      includeDomains: z
+        .string()
+        .description("Comma-separated domains to allow."),
+      excludeDomains: z
+        .string()
+        .description("Comma-separated domains to drop."),
     })
     .description("Search filters applied to every query.")
     .volatile(),
-  monidBase: z.string().default(DEFAULT_MONID_BASE).description("Monid REST base."),
-  searchBase: z.string().default(DEFAULT_SEARCH_BASE).description("TinyFish search base."),
-  fetchBase: z.string().default(DEFAULT_FETCH_BASE).description("TinyFish fetch base."),
+  monidBase: z
+    .string()
+    .default(DEFAULT_MONID_BASE)
+    .description("Monid REST base."),
+  searchBase: z
+    .string()
+    .default(DEFAULT_SEARCH_BASE)
+    .description("TinyFish search base."),
+  fetchBase: z
+    .string()
+    .default(DEFAULT_FETCH_BASE)
+    .description("TinyFish fetch base."),
 
   // Per-kind switches. `ctx.web` already keeps two independent registries and
   // `dsh-web` selects each separately, so search and fetch could always be
@@ -106,8 +134,14 @@ export const Config = z.object({
   // These make the choice settable in this row, where someone configuring
   // TinyFish is already looking, and let a half-configured install register
   // only the kind that works.
-  search: z.boolean().default(true).description("Offer TinyFish as the search provider."),
-  fetch: z.boolean().default(true).description("Offer TinyFish as the fetch provider."),
+  search: z
+    .boolean()
+    .default(true)
+    .description("Offer TinyFish as the search provider."),
+  fetch: z
+    .boolean()
+    .default(true)
+    .description("Offer TinyFish as the fetch provider."),
 });
 
 /** Cordis service dependencies. */
@@ -210,7 +244,7 @@ function credentialLookup(ctx: Context): CredentialResolver | undefined {
 export function resolveOptions(
   config: unknown,
   ctx?: Context,
-  env: Record<string, string | undefined> = process.env,
+  env: Record<string, string | undefined> = process.env
 ): TinyfishProviderOptions {
   const section = (config ?? {}) as Record<string, unknown>;
   const rawFilters = (section.filters ?? {}) as Record<string, unknown>;
@@ -261,10 +295,18 @@ export function resolveOptions(
     // without writing a patch file. A value that does not parse is dropped by
     // `available()` rather than trusted, which is what makes accepting one from
     // the environment safe.
-    monidBase: readField(section, "monidBase") || env.TINYFISH_MONID_BASE_URL || DEFAULT_MONID_BASE,
+    monidBase:
+      readField(section, "monidBase") ||
+      env.TINYFISH_MONID_BASE_URL ||
+      DEFAULT_MONID_BASE,
     searchBase:
-      readField(section, "searchBase") || env.TINYFISH_SEARCH_BASE_URL || DEFAULT_SEARCH_BASE,
-    fetchBase: readField(section, "fetchBase") || env.TINYFISH_FETCH_BASE_URL || DEFAULT_FETCH_BASE,
+      readField(section, "searchBase") ||
+      env.TINYFISH_SEARCH_BASE_URL ||
+      DEFAULT_SEARCH_BASE,
+    fetchBase:
+      readField(section, "fetchBase") ||
+      env.TINYFISH_FETCH_BASE_URL ||
+      DEFAULT_FETCH_BASE,
     // A switch is off only when it says so. Anything absent or unusable means
     // "on", so a malformed value cannot silently disable a provider — the same
     // rule the channel default follows.
@@ -307,5 +349,12 @@ export {
   TinyfishSearchProvider,
   toIsoDate,
 } from "./provider.ts";
-export type { TinyfishChannel, TinyfishFetchPayload, TinyfishSearchPayload } from "./client.ts";
-export type { TinyfishOptionsSource, TinyfishProviderOptions } from "./provider.ts";
+export type {
+  TinyfishChannel,
+  TinyfishFetchPayload,
+  TinyfishSearchPayload,
+} from "./client.ts";
+export type {
+  TinyfishOptionsSource,
+  TinyfishProviderOptions,
+} from "./provider.ts";

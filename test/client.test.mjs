@@ -6,12 +6,12 @@
  */
 
 import assert from "node:assert/strict";
-
 // Assertions stay on `node:assert` so that a failure here can only be the runner
 // swap, never an assertion-library rewrite.
 import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+
 import { test } from "vitest";
 
 import {
@@ -25,7 +25,12 @@ import {
   tinyfishFetch,
   tinyfishSearch,
 } from "../src/client.ts";
-import { fetchEnvelope, hit, searchEnvelope, withStubbedFetch } from "./helpers.mjs";
+import {
+  fetchEnvelope,
+  hit,
+  searchEnvelope,
+  withStubbedFetch,
+} from "./helpers.mjs";
 
 const NO_ENV = {};
 
@@ -52,7 +57,7 @@ test("resolveApiKey: MONID_API_KEY wins over MONID_MCP_TOKEN", () => {
     resolveApiKey("monid", {
       env: { MONID_API_KEY: "a", MONID_MCP_TOKEN: "b" },
     }),
-    "a",
+    "a"
   );
 });
 
@@ -69,14 +74,14 @@ test("resolveApiKey: the two channels never read each other's variable", () => {
       env: { MONID_API_KEY: "m" },
       tinyfishConfigPath: "/nope/absent",
     }),
-    "",
+    ""
   );
   assert.equal(
     resolveApiKey("monid", {
       env: { TINYFISH_API_KEY: "t" },
       credentialsPath: "/nope/absent",
     }),
-    "",
+    ""
   );
 });
 
@@ -94,11 +99,11 @@ test("resolveApiKey: reads the monid CLI credential file", () => {
         "  spare:",
         "    key: monid_live_spare",
         "",
-      ].join("\n"),
+      ].join("\n")
     );
     assert.equal(
       resolveApiKey("monid", { env: NO_ENV, credentialsPath: file }),
-      "monid_live_primary",
+      "monid_live_primary"
     );
   } finally {
     rmSync(dir, { recursive: true, force: true });
@@ -119,11 +124,11 @@ test("resolveApiKey: prefers the entry named by active_key", () => {
         "  spare:",
         "    key: monid_live_spare",
         "",
-      ].join("\n"),
+      ].join("\n")
     );
     assert.equal(
       resolveApiKey("monid", { env: NO_ENV, credentialsPath: file }),
-      "monid_live_spare",
+      "monid_live_spare"
     );
   } finally {
     rmSync(dir, { recursive: true, force: true });
@@ -137,7 +142,7 @@ test("resolveApiKey: reads the tinyfish CLI config", () => {
     writeFileSync(file, JSON.stringify({ api_key: "sk-tinyfish-abc" }));
     assert.equal(
       resolveApiKey("direct", { env: NO_ENV, tinyfishConfigPath: file }),
-      "sk-tinyfish-abc",
+      "sk-tinyfish-abc"
     );
   } finally {
     rmSync(dir, { recursive: true, force: true });
@@ -145,12 +150,18 @@ test("resolveApiKey: reads the tinyfish CLI config", () => {
 });
 
 test("resolveApiKey: a missing or malformed store yields empty, not a throw", () => {
-  assert.equal(resolveApiKey("monid", { env: NO_ENV, credentialsPath: "/nope/absent" }), "");
+  assert.equal(
+    resolveApiKey("monid", { env: NO_ENV, credentialsPath: "/nope/absent" }),
+    ""
+  );
   const dir = mkdtempSync(join(tmpdir(), "tf-bad-"));
   try {
     const file = join(dir, "config.json");
     writeFileSync(file, "{not json");
-    assert.equal(resolveApiKey("direct", { env: NO_ENV, tinyfishConfigPath: file }), "");
+    assert.equal(
+      resolveApiKey("direct", { env: NO_ENV, tinyfishConfigPath: file }),
+      ""
+    );
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -163,7 +174,8 @@ test("a stored credential is preferred over the ambient environment", async () =
   // and it is where a user rotates a key from Settings.
   const key = await resolveApiKeyAsync("direct", {
     apiKeyEnv: "TINYFISH_API_KEY",
-    resolveCredential: async (name) => (name === "TINYFISH_API_KEY" ? "from-store" : undefined),
+    resolveCredential: async (name) =>
+      name === "TINYFISH_API_KEY" ? "from-store" : undefined,
     env: { TINYFISH_API_KEY: "from-env" },
     tinyfishConfigPath: "/nope/absent",
   });
@@ -173,7 +185,7 @@ test("a stored credential is preferred over the ambient environment", async () =
 test("a missing stored credential falls through to the environment", async () => {
   const key = await resolveApiKeyAsync("direct", {
     apiKeyEnv: "TINYFISH_API_KEY",
-    resolveCredential: async () => undefined,
+    resolveCredential: async () => {},
     env: { TINYFISH_API_KEY: "from-env" },
   });
   assert.equal(key, "from-env");
@@ -213,7 +225,7 @@ test("a cancelled signal still aborts, even when the service is failing", async 
       },
       env: { TINYFISH_API_KEY: "from-env" },
     }),
-    (error) => error instanceof WebError && error.code === "WEB_ABORTED",
+    (error) => error instanceof WebError && error.code === "WEB_ABORTED"
   );
 });
 
@@ -230,13 +242,13 @@ test("no service, no ref: identical to the synchronous resolution", async () => 
 test("monid search posts the provider, endpoint and queryParams", async () => {
   const { calls } = await withStubbedFetch(
     [{ respond: () => ({ body: searchEnvelope([hit()]) }) }],
-    () =>
+    async () =>
       tinyfishSearch({
         channel: "monid",
         apiKey: "k",
         query: "cloudflare d1",
         filters: { domain_type: "news", include_domains: "a.com" },
-      }),
+      })
   );
   const body = JSON.parse(calls[0].init.body);
   assert.equal(body.provider, "tinyfish");
@@ -253,7 +265,7 @@ test("monid search posts the provider, endpoint and queryParams", async () => {
 test("direct search GETs the upstream with only non-empty params", async () => {
   const { calls } = await withStubbedFetch(
     [{ respond: () => ({ body: { results: [hit()] } }) }],
-    () =>
+    async () =>
       tinyfishSearch({
         channel: "direct",
         apiKey: "k",
@@ -263,13 +275,17 @@ test("direct search GETs the upstream with only non-empty params", async () => {
           location: undefined,
           after_date: "2026-01-01",
         },
-      }),
+      })
   );
   const url = new URL(calls[0].url);
   assert.equal(url.origin, DEFAULT_SEARCH_BASE);
   assert.equal(url.searchParams.get("query"), "a b");
   assert.equal(url.searchParams.get("after_date"), "2026-01-01");
-  assert.equal(url.searchParams.has("language"), false, "empty string is dropped");
+  assert.equal(
+    url.searchParams.has("language"),
+    false,
+    "empty string is dropped"
+  );
   assert.equal(url.searchParams.has("location"), false, "undefined is dropped");
   assert.equal(calls[0].headers["X-API-Key"], "k");
   assert.equal(calls[0].headers.Authorization, undefined);
@@ -278,7 +294,7 @@ test("direct search GETs the upstream with only non-empty params", async () => {
 test("both channels send a browser user-agent, which Monid's Cloudflare requires", async () => {
   const { calls } = await withStubbedFetch(
     [{ respond: () => ({ body: searchEnvelope([hit()]) }) }],
-    () => tinyfishSearch({ channel: "monid", apiKey: "k", query: "q" }),
+    async () => tinyfishSearch({ channel: "monid", apiKey: "k", query: "q" })
   );
   assert.match(calls[0].headers["User-Agent"], /Mozilla\/5\.0/);
 });
@@ -292,13 +308,13 @@ test("monid fetch posts markdown format and the url list", async () => {
         }),
       },
     ],
-    () =>
+    async () =>
       tinyfishFetch({
         channel: "monid",
         apiKey: "k",
         urls: ["https://x"],
         purpose: "why we are here",
-      }),
+      })
   );
   const body = JSON.parse(calls[0].init.body);
   assert.equal(body.endpoint, "/fetch");
@@ -318,7 +334,8 @@ test("direct fetch hits the upstream base with an X-API-Key header", async () =>
         }),
       },
     ],
-    () => tinyfishFetch({ channel: "direct", apiKey: "k", urls: ["https://x"] }),
+    async () =>
+      tinyfishFetch({ channel: "direct", apiKey: "k", urls: ["https://x"] })
   );
   assert.equal(calls[0].url, DEFAULT_FETCH_BASE);
   assert.equal(calls[0].headers["X-API-Key"], "k");
@@ -333,14 +350,14 @@ test("a RUNNING envelope is polled until it settles", async () => {
       { respond: () => ({ body: { runId: "r1", status: "RUNNING" } }) },
       { respond: () => ({ body: searchEnvelope([hit()]) }) },
     ],
-    () =>
+    async () =>
       tinyfishSearch({
         channel: "monid",
         apiKey: "k",
         query: "q",
         pollMs: 1,
         delayMs: 1,
-      }),
+      })
   );
   assert.equal(calls.length, 3);
   assert.deepEqual(JSON.parse(calls[1].init.body), { runId: "r1" });
@@ -356,14 +373,14 @@ test("an empty search is retried, because a blank result set is usually the flak
       { respond: () => ({ body: searchEnvelope([]) }) },
       { respond: () => ({ body: searchEnvelope([hit()]) }) },
     ],
-    () =>
+    async () =>
       tinyfishSearch({
         channel: "monid",
         apiKey: "k",
         query: "q",
         attempts: 3,
         delayMs: 1,
-      }),
+      })
   );
   assert.equal(calls.length, 3, "two empties then a real answer");
   assert.equal(result.results.length, 1);
@@ -372,14 +389,14 @@ test("an empty search is retried, because a blank result set is usually the flak
 test("retries are bounded, and a genuinely empty result still resolves", async () => {
   const { calls, result } = await withStubbedFetch(
     [{ respond: () => ({ body: searchEnvelope([]) }) }],
-    () =>
+    async () =>
       tinyfishSearch({
         channel: "monid",
         apiKey: "k",
         query: "q",
         attempts: 3,
         delayMs: 1,
-      }),
+      })
   );
   assert.equal(calls.length, 3, "attempts is a ceiling, not a floor");
   assert.deepEqual(result.results, []);
@@ -399,14 +416,14 @@ test("a COMPLETED run with null output and a 5xx is treated as transient", async
       },
       { respond: () => ({ body: searchEnvelope([hit()]) }) },
     ],
-    () =>
+    async () =>
       tinyfishSearch({
         channel: "monid",
         apiKey: "k",
         query: "q",
         attempts: 3,
         delayMs: 1,
-      }),
+      })
   );
   assert.equal(calls.length, 2, "the SERVICE_BUSY shape is retried");
   assert.equal(result.results.length, 1);
@@ -426,16 +443,18 @@ test("exhausting retries on a persistent 5xx surfaces the last failure", async (
           }),
         },
       ],
-      () =>
+      async () =>
         tinyfishSearch({
           channel: "monid",
           apiKey: "k",
           query: "q",
           attempts: 2,
           delayMs: 1,
-        }),
+        })
     ).then((r) => r.result),
-    (error) => error instanceof WebError && /temporarily unavailable/i.test(error.message),
+    (error) =>
+      error instanceof WebError &&
+      /temporarily unavailable/i.test(error.message)
   );
 });
 
@@ -445,14 +464,14 @@ test("HTTP 429 from the direct API is retried", async () => {
       { respond: () => ({ status: 429, text: "slow down" }) },
       { respond: () => ({ body: { results: [hit()] } }) },
     ],
-    () =>
+    async () =>
       tinyfishSearch({
         channel: "direct",
         apiKey: "k",
         query: "q",
         attempts: 3,
         delayMs: 1,
-      }),
+      })
   );
   assert.equal(calls.length, 2);
   assert.equal(result.results.length, 1);
@@ -473,14 +492,14 @@ test("a BLOCKED run is terminal and names the top-up route", async () => {
           }),
         },
       ],
-      () =>
+      async () =>
         tinyfishSearch({
           channel: "monid",
           apiKey: "k",
           query: "q",
           attempts: 5,
           delayMs: 1,
-        }),
+        })
     ).then((r) => r.result),
     (error) => {
       assert.ok(error instanceof WebError);
@@ -488,7 +507,7 @@ test("a BLOCKED run is terminal and names the top-up route", async () => {
       assert.match(error.message, /raise the cap/);
       assert.match(error.message, /app\.monid\.ai\/wallet/);
       return true;
-    },
+    }
   );
 });
 
@@ -504,26 +523,33 @@ test("a BLOCKED run is not retried", async () => {
         delayMs: 1,
       }).catch(() => {});
       return { ok: true };
-    },
+    }
   );
-  assert.equal(calls.length, 1, "retrying a workspace block would just spend more");
+  assert.equal(
+    calls.length,
+    1,
+    "retrying a workspace block would just spend more"
+  );
 });
 
 test("a FAILED run is terminal", async () => {
   await assert.rejects(
-    withStubbedFetch([{ respond: () => ({ body: { runId: "r", status: "FAILED" } }) }], () =>
-      tinyfishSearch({ channel: "monid", apiKey: "k", query: "q" }),
+    withStubbedFetch(
+      [{ respond: () => ({ body: { runId: "r", status: "FAILED" } }) }],
+      async () => tinyfishSearch({ channel: "monid", apiKey: "k", query: "q" })
     ).then((r) => r.result),
-    /ended FAILED/,
+    /ended FAILED/
   );
 });
 
 test("a rejected credential is terminal and names both channels' fixes", async () => {
   await assert.rejects(
-    withStubbedFetch([{ respond: () => ({ status: 401, text: "nope" }) }], () =>
-      tinyfishSearch({ channel: "monid", apiKey: "bad", query: "q" }),
+    withStubbedFetch(
+      [{ respond: () => ({ status: 401, text: "nope" }) }],
+      async () =>
+        tinyfishSearch({ channel: "monid", apiKey: "bad", query: "q" })
     ).then((r) => r.result),
-    /rejected the monid API key/,
+    /rejected the monid API key/
   );
 });
 
@@ -531,9 +557,9 @@ test("a non-JSON body is reported rather than swallowed", async () => {
   await assert.rejects(
     withStubbedFetch(
       [{ respond: () => ({ status: 200, invalidJson: true, text: "<html>" }) }],
-      () => tinyfishSearch({ channel: "monid", apiKey: "k", query: "q" }),
+      async () => tinyfishSearch({ channel: "monid", apiKey: "k", query: "q" })
     ).then((r) => r.result),
-    /non-JSON/,
+    /non-JSON/
   );
 });
 
@@ -555,12 +581,12 @@ test("a missing credential fails with a routable code and a real fix", async () 
       assert.equal(
         error.code,
         WEB_PROVIDER_CREDENTIAL_MISSING,
-        "a missing key is routable, not an opaque provider error",
+        "a missing key is routable, not an opaque provider error"
       );
       assert.match(error.message, /tinyfish auth login/);
       assert.doesNotMatch(error.message, /--source/, "no invented flags");
       return true;
-    },
+    }
   );
   await assert.rejects(
     tinyfishSearch({
@@ -573,9 +599,13 @@ test("a missing credential fails with a routable code and a real fix", async () 
     (error) => {
       assert.equal(error.code, WEB_PROVIDER_CREDENTIAL_MISSING);
       assert.match(error.message, /monid keys add/);
-      assert.doesNotMatch(error.message, /monid login/, "not a real subcommand");
+      assert.doesNotMatch(
+        error.message,
+        /monid login/,
+        "not a real subcommand"
+      );
       return true;
-    },
+    }
   );
 });
 
@@ -587,6 +617,6 @@ test("an aborted signal surfaces as WEB_ABORTED", async () => {
       query: "q",
       signal: AbortSignal.abort("caller cancelled"),
     }),
-    (error) => error instanceof WebError && error.code === "WEB_ABORTED",
+    (error) => error instanceof WebError && error.code === "WEB_ABORTED"
   );
 });

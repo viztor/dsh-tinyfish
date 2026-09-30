@@ -30,7 +30,14 @@
  */
 
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync } from "node:fs";
+import {
+  existsSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  statSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -61,7 +68,8 @@ function newestMtime(dir) {
   for (const name of readdirSync(dir, { recursive: true })) {
     const full = join(dir, String(name));
     try {
-      if (statSync(full).isFile()) newest = Math.max(newest, statSync(full).mtimeMs);
+      if (statSync(full).isFile())
+        newest = Math.max(newest, statSync(full).mtimeMs);
     } catch {
       // Racing a build is not a failure; skip it.
     }
@@ -73,7 +81,9 @@ const lib = join(ROOT, "lib");
 if (!existsSync(lib)) {
   fail("lib/ is missing — run `pnpm run build`");
 } else if (newestMtime(join(ROOT, "src")) > newestMtime(lib)) {
-  fail("src/ is newer than lib/ — run `pnpm run build`, or DSH will load the old one");
+  fail(
+    "src/ is newer than lib/ — run `pnpm run build`, or DSH will load the old one"
+  );
 } else {
   ok("lib/ is newer than src/");
 }
@@ -94,25 +104,31 @@ for (const [name, range] of Object.entries(pkg.peerDependencies ?? {})) {
     continue;
   }
   if (/^(workspace|link|file|catalog):/.test(range)) {
-    fail(`peer ${name} uses "${range.split(":")[0]}:" — npm cannot parse it, so install fails`);
+    fail(
+      `peer ${name} uses "${range.split(":")[0]}:" — npm cannot parse it, so install fails`
+    );
     continue;
   }
   if (!/^[\^~><=|*]/.test(range.trim())) {
-    fail(`peer ${name} is pinned to "${range}" — a DSH patch release would orphan the plugin`);
+    fail(
+      `peer ${name} is pinned to "${range}" — a DSH patch release would orphan the plugin`
+    );
   }
 }
 if (!failures.length)
-  ok(`${Object.keys(pkg.peerDependencies ?? {}).length} peer ranges npm can resolve`);
+  ok(
+    `${Object.keys(pkg.peerDependencies ?? {}).length} peer ranges npm can resolve`
+  );
 
 /* ------------------------------------------- 3. it is a bundle, and it loads */
 
 const patch = pkg.dsh?.bundle?.patch;
 if (!patch) {
   fail("no dsh.bundle.patch — DSH would install this and then ignore it");
-} else if (!existsSync(join(ROOT, patch))) {
-  fail(`dsh.bundle.patch points at "${patch}", which does not exist`);
-} else {
+} else if (existsSync(join(ROOT, patch))) {
   ok(`dsh.bundle.patch -> ${patch}`);
+} else {
+  fail(`dsh.bundle.patch points at "${patch}", which does not exist`);
 }
 for (const field of ["main", "types"]) {
   if (!pkg[field]) fail(`no ${field} declared`);
@@ -135,19 +151,34 @@ const SURFACES = [
 
 const REQUIRED = {
   "@deepseek-ai/dsh-web": [
-    [/export declare class WebError/, "WebError — every failure this package raises"],
-    [/interface WebSearchProvider\b/, "WebSearchProvider — implemented by the search provider"],
-    [/interface WebFetchProvider\b/, "WebFetchProvider — implemented by the fetch provider"],
+    [
+      /export declare class WebError/,
+      "WebError — every failure this package raises",
+    ],
+    [
+      /interface WebSearchProvider\b/,
+      "WebSearchProvider — implemented by the search provider",
+    ],
+    [
+      /interface WebFetchProvider\b/,
+      "WebFetchProvider — implemented by the fetch provider",
+    ],
     [/interface WebSearchResult\b/, "WebSearchResult — returned by search()"],
     [/interface WebFetchResult\b/, "WebFetchResult — returned by fetch()"],
-    [/kind:\s*'text'/, "WebFetchBody's 'text' arm — without it the provider must return 'html'"],
+    [
+      /kind:\s*'text'/,
+      "WebFetchBody's 'text' arm — without it the provider must return 'html'",
+    ],
   ],
   "@deepseek-ai/dsh-credentials": [
     [/credentialRef\(/, "credentialRef() — the credential-ref config role"],
     [/resolve\(ref: CredentialRef\)/, "the credentials service's resolve()"],
   ],
   "@deepseek-ai/dsh-launch-environment": [
-    [/launchEnvironmentOf\(/, "launchEnvironmentOf() — the boot-frozen env lookup"],
+    [
+      /launchEnvironmentOf\(/,
+      "launchEnvironmentOf() — the boot-frozen env lookup",
+    ],
   ],
 };
 
@@ -157,13 +188,18 @@ for (const name of SURFACES) {
     dir = dirname(
       execFileSync(
         process.execPath,
-        ["-e", `process.stdout.write(require.resolve(${JSON.stringify(`${name}/package.json`)}))`],
-        { cwd: ROOT, encoding: "utf8" },
-      ),
+        [
+          "-e",
+          `process.stdout.write(require.resolve(${JSON.stringify(`${name}/package.json`)}))`,
+        ],
+        { cwd: ROOT, encoding: "utf8" }
+      )
     );
   } catch {
     // Not installed: a devDependency is missing, not a contract break.
-    notes.push(`skip  ${name} is not installed, so its surfaces were not checked`);
+    notes.push(
+      `skip  ${name} is not installed, so its surfaces were not checked`
+    );
     continue;
   }
 
@@ -171,7 +207,11 @@ for (const name of SURFACES) {
   // exists reads a re-export barrel for some packages — dsh-credentials keeps
   // its declarations in index.d.ts while types.d.ts just re-exports them — and
   // reports a contract break that is not there.
-  const files = ["lib/types/types.d.ts", "lib/types/index.d.ts", "lib/index.d.ts"]
+  const files = [
+    "lib/types/types.d.ts",
+    "lib/types/index.d.ts",
+    "lib/index.d.ts",
+  ]
     .map((p) => join(dir, p))
     .filter(existsSync);
   if (files.length === 0) {
@@ -188,7 +228,53 @@ if (!failures.some((f) => f.includes("no longer exposes"))) {
   ok("every harness surface this package depends on is present");
 }
 
-/* --------------------------------------------------- 5. no credentials in the tree */
+/* --------------------------------- 5. the lint and format configs are actually loaded */
+
+/**
+ * Vite+ **disables nested Oxlint and Oxfmt configs**. Standalone
+ * `oxlint.config.ts` / `oxfmt.config.ts` beside a `vite.config.ts` are read by
+ * nobody, so the rule tiers look enforced and are not — and lint stays green
+ * because it is running Oxlint's defaults. That happened here: the effective
+ * config was 111 rules with `options: null`, and moving both blocks into
+ * `vite.config.ts` took it to 536 with `typeAware` and `typeCheck` on and
+ * surfaced twelve real gate errors.
+ *
+ * A config that is present but inert is worse than a missing one, because
+ * nothing says so. This asserts the loaded config is ours.
+ */
+try {
+  const printed = execFileSync(
+    "pnpm",
+    ["exec", "vp", "lint", "--print-config"],
+    {
+      cwd: ROOT,
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"],
+    }
+  );
+  const effective = JSON.parse(printed.slice(printed.indexOf("{")));
+  const ruleCount = Object.keys(effective.rules ?? {}).length;
+
+  // A floor, not an exact count: the point is "our block was applied", and the
+  // default set is an order of magnitude smaller.
+  if (ruleCount < 300) {
+    fail(
+      `the effective lint config has ${ruleCount} rules — the \`lint\` block in vite.config.ts is not being loaded`
+    );
+  } else if (effective.options?.typeAware !== true) {
+    fail("typeAware is off, so every typescript/* gate is listed but inert");
+  } else if (effective.rules["typescript/no-floating-promises"] === undefined) {
+    fail("the effective config is missing this package's own gates");
+  } else {
+    ok(`lint config is live (${ruleCount} rules, typeAware on)`);
+  }
+} catch (error) {
+  fail(
+    `could not read the effective lint config: ${String(error.message).split("\n")[0]}`
+  );
+}
+
+/* --------------------------------------------------- 6. no credentials in the tree */
 
 /**
  * The tarball is what ships, so a key committed here would be published
@@ -205,10 +291,10 @@ const SECRETS = [
 
 const parts = { m: "monid_live_", t: "sk-tinyfish-", g: "ghp_", a: "sk-ant-" };
 const CANARIES = [
-  [parts.m + "AbCdEf1234567890", true],
-  [parts.t + "Pm-QkiaUloPEyNN", true],
-  [parts.g + "abcdefghijklmnopqrstuvwxyz0123456789", true],
-  [parts.a + "api03-AbCdEf1234567890", true],
+  [`${parts.m}AbCdEf1234567890`, true],
+  [`${parts.t}Pm-QkiaUloPEyNN`, true],
+  [`${parts.g}abcdefghijklmnopqrstuvwxyz0123456789`, true],
+  [`${parts.a}api03-AbCdEf1234567890`, true],
   [parts.m, false],
   [parts.t, false],
   ["$MONID_API_KEY", false],
@@ -216,7 +302,9 @@ const CANARIES = [
 ];
 for (const [sample, shouldMatch] of CANARIES) {
   if (SECRETS.some(([re]) => re.test(sample)) !== shouldMatch) {
-    fail(`the secret scanner is ${shouldMatch ? "missing" : "over-matching"} on a sample`);
+    fail(
+      `the secret scanner is ${shouldMatch ? "missing" : "over-matching"} on a sample`
+    );
   }
 }
 
@@ -224,7 +312,12 @@ const SKIP = new Set(["node_modules", ".git", "lib"]);
 let scanned = 0;
 const walk = (dir) => {
   for (const name of readdirSync(dir)) {
-    if (SKIP.has(name) || name.startsWith(".build-check") || name.endsWith(".tgz")) continue;
+    if (
+      SKIP.has(name) ||
+      name.startsWith(".build-check") ||
+      name.endsWith(".tgz")
+    )
+      continue;
     const full = join(dir, name);
     if (statSync(full).isDirectory()) {
       walk(full);
@@ -234,14 +327,15 @@ const walk = (dir) => {
     scanned += 1;
     const text = readFileSync(full, "utf8");
     for (const [re, what] of SECRETS) {
-      if (re.test(text)) fail(`${full.replace(`${ROOT}/`, "")} contains ${what}`);
+      if (re.test(text))
+        fail(`${full.replace(`${ROOT}/`, "")} contains ${what}`);
     }
   }
 };
 walk(ROOT);
 ok(`scanned ${scanned} files for credentials`);
 
-/* ------------------------------ 6. install it the way a consumer will, and load it */
+/* ------------------------------ 7. install it the way a consumer will, and load it */
 
 /**
  * The check that earns its keep. Everything above inspects this working tree;
@@ -260,13 +354,15 @@ try {
       // `--ignore-scripts`: `prepare` runs `vp pack`, whose progress output
       // would otherwise land in this JSON and break the parse.
       ["pack", "--json", "--ignore-scripts", "--pack-destination", scratch],
-      { cwd: ROOT, encoding: "utf8" },
-    ),
+      { cwd: ROOT, encoding: "utf8" }
+    )
   )[0];
 
   const project = join(scratch, "consumer");
   execFileSync("mkdir", ["-p", project]);
-  const peers = Object.entries(pkg.peerDependencies ?? {}).map(([n, r]) => `${n}@${r}`);
+  const peers = Object.entries(pkg.peerDependencies ?? {}).map(
+    ([n, r]) => `${n}@${r}`
+  );
   execFileSync(
     "npm",
     [
@@ -277,13 +373,17 @@ try {
       "--no-fund",
       "--ignore-scripts",
     ],
-    { cwd: project, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] },
+    { cwd: project, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }
   );
 
   const installed = join(project, "node_modules/dsh-tinyfish");
-  const installedManifest = JSON.parse(readFileSync(join(installed, "package.json"), "utf8"));
+  const installedManifest = JSON.parse(
+    readFileSync(join(installed, "package.json"), "utf8")
+  );
   if (installedManifest.dsh?.bundle?.patch === undefined) {
-    fail("the published manifest lost dsh.bundle.patch — DSH would ignore the package");
+    fail(
+      "the published manifest lost dsh.bundle.patch — DSH would ignore the package"
+    );
   }
 
   // Loaded from the installed copy, not this tree.
@@ -307,7 +407,9 @@ try {
     stdio: ["ignore", "pipe", "pipe"],
   });
 
-  ok(`installed the packed tarball with plain npm (${packed.entryCount} entries) and loaded it`);
+  ok(
+    `installed the packed tarball with plain npm (${packed.entryCount} entries) and loaded it`
+  );
 } catch (error) {
   const detail = [error.stderr, error.message]
     .filter(Boolean)
