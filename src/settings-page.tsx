@@ -65,6 +65,9 @@ const en = {
   apiKey: "API key",
   apiKeyHint:
     "Stored outside the settings file. Leave blank to keep the current key.",
+  monidApiKey: "Monid platform key",
+  monidApiKeyHint:
+    "Stored separately from the TinyFish key, so switching channels keeps both. `monid keys add` also works and takes precedence over this.",
   apiKeySet: "A key is configured.",
   apiKeyUnset: "No key is configured, so searches fail until one is set.",
   purpose: "Purpose",
@@ -100,6 +103,9 @@ const zh = {
   channelHint: "direct 使用 TinyFish 自己的密钥；monid 通过 Monid 密钥转发。",
   apiKey: "API Key",
   apiKeyHint: "不写入设置文件。留空表示保持当前密钥。",
+  monidApiKey: "Monid 平台密钥",
+  monidApiKeyHint:
+    "与 TinyFish 密钥分开保存，切换通道时两者都会保留。也可运行 `monid keys add`，其优先级高于此项。",
   apiKeySet: "已配置密钥。",
   apiKeyUnset: "未配置密钥，搜索会失败，直到设置为止。",
   purpose: "目标说明",
@@ -130,6 +136,8 @@ const FIELD = {
   channel: "channel",
   apiKey: "apiKey",
   apiKeyEnv: "apiKeyEnv",
+  monidApiKey: "monidApiKey",
+  monidKeyEnv: "monidKeyEnv",
   purpose: "purpose",
   attempts: "attempts",
   search: "search",
@@ -157,7 +165,12 @@ interface CardState {
     failed: boolean;
   };
   fields: Record<string, CardField>;
-  key: { text: string; named: boolean };
+  /**
+   * One entry per channel, so the card can show the key the selected channel
+   * will actually send. Both are published: switching channels must not lose
+   * the draft for the other one.
+   */
+  keys: Record<string, { text: string; named: boolean }>;
 }
 
 /** What the slot hands the card: the view asked for, copy, state, and actions. */
@@ -198,8 +211,9 @@ interface ClientContext {
   };
 }
 
-/** Credential reference the provider falls back to when the section names none. */
+/** Credential references the provider falls back to when the section names none. */
 const DEFAULT_API_KEY_REF = "TINYFISH_API_KEY";
+const DEFAULT_MONID_KEY_REF = "MONID_API_KEY";
 
 /**
  * A boolean field.
@@ -253,14 +267,21 @@ const SPECS = [
  * not yet saved would be stored where nothing looks for it.
  *
  * @param snapshot - the form scope's current snapshot.
- * @returns the reference name, or the provider's default.
+ * @param which - which channel's reference to read.
+ * @returns the reference name, or that channel's default.
  */
-function refOf(snapshot: { value?: unknown } | undefined) {
+function refOf(
+  snapshot: { value?: unknown } | undefined,
+  which: "direct" | "monid"
+) {
   const section = snapshot?.value as Record<string, unknown> | undefined;
-  const named = section?.[FIELD.apiKeyEnv];
+  const field = which === "monid" ? FIELD.monidKeyEnv : FIELD.apiKeyEnv;
+  const named = section?.[field];
+  const fallback =
+    which === "monid" ? DEFAULT_MONID_KEY_REF : DEFAULT_API_KEY_REF;
   return typeof named === "string" && named.trim() !== ""
     ? named.trim()
-    : DEFAULT_API_KEY_REF;
+    : fallback;
 }
 
 /** The labels the shared form frame renders. */
@@ -299,7 +320,6 @@ function TinyfishCard(props: CardProps) {
 
   const state = props.useTinyfishCard((snapshot) => snapshot);
   const disabled = !state.shell.writable;
-  const { named } = state.key;
   const field = (name: string) => ({
     id: `plugin-config-tinyfish-${name}`,
     disabled,
@@ -318,6 +338,14 @@ function TinyfishCard(props: CardProps) {
   // needs exactly one of its option values — never blank.
   const channelText = state.fields[FIELD.channel]?.text ?? "";
   const channel = channelText === "monid" ? "monid" : "direct";
+
+  // Only the selected channel's key is shown. Both are stored, so switching
+  // channels back and forth does not lose the other one — but showing both at
+  // once would invite a user to paste the Monid platform key into the field
+  // that TinyFish will authenticate with, which is exactly the mix-up the two
+  // separate references exist to prevent.
+  const key = state.keys[channel];
+  const keyChannel = channel === "monid" ? FIELD.monidApiKey : FIELD.apiKey;
 
   // Effective switch states, driving both the controls and what renders below.
   const searchOn = switchValue(state.fields[FIELD.search]?.text ?? "");
@@ -365,15 +393,15 @@ function TinyfishCard(props: CardProps) {
         )}
       </div>
       <SettingsSecretField
-        id={`plugin-config-tinyfish-${FIELD.apiKey}`}
-        label={t("apiKey")}
-        hint={t("apiKeyHint")}
-        text={state.key.text}
+        id={`plugin-config-tinyfish-${keyChannel}`}
+        label={channel === "monid" ? t("monidApiKey") : t("apiKey")}
+        hint={channel === "monid" ? t("monidApiKeyHint") : t("apiKeyHint")}
+        text={key.text}
         disabled={disabled}
-        configured={named}
-        stateLabel={named ? t("apiKeySet") : t("apiKeyUnset")}
+        configured={key.named}
+        stateLabel={key.named ? t("apiKeySet") : t("apiKeyUnset")}
         onEdit={(text: string) => {
-          props.edit(FIELD.apiKey, text);
+          props.edit(keyChannel, text);
         }}
       />
       {searchOn && (
@@ -446,16 +474,36 @@ export function apply(ctx: ClientContext) {
   // answer synchronously, and what actually decides where a key is looked up, is
   // which reference the section names. The control reports that instead of
   // claiming a key is present when it has not checked.
+  // Two secrets, one per channel, each written to its own reference. The
+  // primitive takes an array, so this costs nothing over the single field it
+  // replaces — and it is what lets a user save both keys and keep them.
   const model = new SettingsFormModel(scope, SPECS, [
     {
       field: FIELD.apiKey,
       write: async (text) => {
         try {
-          await ctx.remote.credentials.set(refOf(scope.getSnapshot()), text);
+          await ctx.remote.credentials.set(
+            refOf(scope.getSnapshot(), "direct"),
+            text
+          );
           return true;
         } catch {
           // A refused write surfaces through the form's own failed state;
           // throwing here would take the page down instead of showing it.
+          return false;
+        }
+      },
+    },
+    {
+      field: FIELD.monidApiKey,
+      write: async (text) => {
+        try {
+          await ctx.remote.credentials.set(
+            refOf(scope.getSnapshot(), "monid"),
+            text
+          );
+          return true;
+        } catch {
           return false;
         }
       },
@@ -467,10 +515,16 @@ export function apply(ctx: ClientContext) {
     fields: Object.fromEntries(
       SPECS.map((spec) => [spec.field, model.field(spec.field)])
     ),
-    key: {
-      text: model.field(FIELD.apiKey).text,
-      // Synchronous: does the accepted section name a reference of its own?
-      named: refOf(scope.getSnapshot()) !== DEFAULT_API_KEY_REF,
+    keys: {
+      direct: {
+        text: model.field(FIELD.apiKey).text,
+        // Synchronous: does the accepted section name a reference of its own?
+        named: refOf(scope.getSnapshot(), "direct") !== DEFAULT_API_KEY_REF,
+      },
+      monid: {
+        text: model.field(FIELD.monidApiKey).text,
+        named: refOf(scope.getSnapshot(), "monid") !== DEFAULT_MONID_KEY_REF,
+      },
     },
   }));
 

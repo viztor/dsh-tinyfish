@@ -213,6 +213,49 @@ test("a literal key still outranks the credentials service", async () => {
   assert.equal(key, "literal");
 });
 
+test("each channel reads its own credential ref, never the other's", async () => {
+  // A user who stores both keys must not have the TinyFish key sent to Monid
+  // as its bearer token. That fails upstream as a 401, which reads as "your
+  // Monid key is wrong" rather than as "the wrong slot was consulted".
+  const store = {
+    TINYFISH_API_KEY: "tinyfish-key",
+    MONID_API_KEY: "monid-key",
+  };
+  const resolveCredential = async (name) => store[name];
+
+  assert.equal(
+    await resolveApiKeyAsync("direct", {
+      apiKeyEnv: "TINYFISH_API_KEY",
+      monidKeyEnv: "MONID_API_KEY",
+      resolveCredential,
+      tinyfishConfigPath: "/nope/absent",
+    }),
+    "tinyfish-key"
+  );
+  assert.equal(
+    await resolveApiKeyAsync("monid", {
+      apiKeyEnv: "TINYFISH_API_KEY",
+      monidKeyEnv: "MONID_API_KEY",
+      resolveCredential,
+      credentialsPath: "/nope/absent",
+    }),
+    "monid-key"
+  );
+});
+
+test("a channel with no ref of its own falls through to its own rungs", async () => {
+  // The monid channel's fallbacks (MONID_API_KEY, MONID_MCP_TOKEN, the CLI
+  // store) are already the right answers, so an unconfigured ref must simply
+  // be skipped rather than defaulted to the other channel's name.
+  const key = await resolveApiKeyAsync("monid", {
+    apiKeyEnv: "TINYFISH_API_KEY",
+    monidKeyEnv: undefined,
+    resolveCredential: async () => "should-not-be-read",
+    env: { MONID_API_KEY: "monid-from-env" },
+  });
+  assert.equal(key, "monid-from-env");
+});
+
 test("a cancelled signal still aborts, even when the service is failing", async () => {
   // The one case that must not fall through: the caller gave up, so spending
   // another lookup on their behalf is wrong.

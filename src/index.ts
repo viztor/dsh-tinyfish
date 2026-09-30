@@ -75,14 +75,24 @@ export const Config = z.object({
     .role("secret")
     .volatile()
     .description(
-      "Literal credential. Prefer a credential ref or the environment."
+      "Literal credential, overriding both refs. Prefer a credential ref or the environment."
     ),
   apiKeyEnv: z
     .string()
     .role("credential-ref")
     .default("TINYFISH_API_KEY")
     .volatile()
-    .description("Stored credential or environment variable to read."),
+    .description(
+      "Stored credential or environment variable for the direct channel."
+    ),
+  monidKeyEnv: z
+    .string()
+    .role("credential-ref")
+    .default("MONID_API_KEY")
+    .volatile()
+    .description(
+      "Stored credential or environment variable for the monid channel. Kept separate so both keys can be saved at once."
+    ),
   purpose: z
     .string()
     .volatile()
@@ -280,6 +290,11 @@ export function resolveOptions(
     // credentials service, the environment, and then the CLI store.
     apiKey: apiKey || undefined,
     apiKeyEnv: readField(section, "apiKeyEnv") || "TINYFISH_API_KEY",
+    // A second ref, not a second `apiKey`: the two channels authenticate
+    // against different services, so a user who has both keys must be able to
+    // save both. The literal `apiKey` above still overrides either channel,
+    // which is the operator escape hatch for a patch file.
+    monidKeyEnv: readField(section, "monidKeyEnv") || "MONID_API_KEY",
     resolveCredential: ctx ? credentialLookup(ctx) : undefined,
     purpose: purpose || undefined,
     filters,

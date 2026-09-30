@@ -31,6 +31,7 @@ const OPTIONS = {
   channel: "monid",
   apiKey: "k",
   apiKeyEnv: "TINYFISH_API_KEY",
+  monidKeyEnv: "MONID_API_KEY",
   filters: {},
   attempts: 1,
   delayMs: 1,
@@ -344,4 +345,61 @@ test("empty page text is still a result, not a failure", async () => {
   );
   assert.equal(result.statusCode, 200);
   assert.equal(result.body.content, "");
+});
+
+/* ------------------------------------------------- the stored credential */
+
+test("a search sends the key the Settings store holds, not the CLI one", async () => {
+  // The regression this guards: the provider resolved options but never passed
+  // the credential-ref or the resolver down to the client, so a key saved from
+  // the settings UI was never consulted and the request fell through to the
+  // environment and the CLI store. The UI would look like it saved a key while
+  // searches kept using a different one.
+  const options = {
+    ...OPTIONS,
+    apiKey: undefined,
+    resolveCredential: async (name) =>
+      name === "MONID_API_KEY" ? "stored-monid" : undefined,
+  };
+  const { calls } = await withStubbedFetch(
+    [{ respond: () => ({ body: searchEnvelope([]) }) }],
+    async () => new TinyfishSearchProvider(() => options).search({ query: "q" })
+  );
+  assert.equal(
+    calls[0].headers.Authorization,
+    "Bearer stored-monid",
+    "the monid channel reads the monid ref"
+  );
+});
+
+test("the direct channel reads its own ref, never the monid one", async () => {
+  const store = {
+    TINYFISH_API_KEY: "stored-tinyfish",
+    MONID_API_KEY: "stored-monid",
+  };
+  const { calls } = await withStubbedFetch(
+    [{ respond: () => ({ body: { results: [], total_results: 0 } }) }],
+    async () =>
+      new TinyfishSearchProvider(() => ({
+        ...OPTIONS,
+        channel: "direct",
+        apiKey: undefined,
+        resolveCredential: async (name) => store[name],
+      })).search({ query: "q" })
+  );
+  assert.equal(calls[0].headers["X-API-Key"], "stored-tinyfish");
+});
+
+test("a fetch also uses the stored credential", async () => {
+  const { calls } = await withStubbedFetch(
+    [{ respond: () => ({ body: fetchEnvelope([{ url: "https://x" }]) }) }],
+    async () =>
+      new TinyfishFetchProvider(() => ({
+        ...OPTIONS,
+        apiKey: undefined,
+        resolveCredential: async (name) =>
+          name === "MONID_API_KEY" ? "stored-monid" : undefined,
+      })).fetch({ url: "https://x" })
+  );
+  assert.equal(calls[0].headers.Authorization, "Bearer stored-monid");
 });

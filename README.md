@@ -103,8 +103,9 @@ The patch file is still the honest place for the first edit — it is where a se
 | key | default | meaning |
 | --- | --- | --- |
 | `channel` | `direct` | `monid` or `direct`; see [Credentials](#credentials) |
-| `apiKey` | _(unset)_ | literal credential; prefer `apiKeyEnv` |
-| `apiKeyEnv` | `TINYFISH_API_KEY` | credential reference, or env var, to resolve |
+| `apiKey` | _(unset)_ | literal credential for either channel; prefer a ref |
+| `apiKeyEnv` | `TINYFISH_API_KEY` | credential reference, or env var, for `direct` |
+| `monidKeyEnv` | `MONID_API_KEY` | credential reference, or env var, for `monid` |
 | `purpose` | _(unset)_ | goal statement; TinyFish ranks on it |
 | `attempts` | `3` | retries for a transient failure or an empty search (1–5) |
 | `filters.domainType` | _(unset)_ | `web` \| `news` \| `research_paper` |
@@ -138,15 +139,21 @@ An endpoint that does not parse makes the provider report itself unavailable rat
 
 Resolved **per call**, so a key rotated anywhere below takes effect on the next search with no restart. First match wins:
 
-| #   | source                  | set it by                                    |
-| --- | ----------------------- | -------------------------------------------- |
-| 1   | the `apiKey` literal    | the row — a secret in config; prefer 2–3     |
-| 2   | the credentials service | the profile's `web-tinyfish` `apiKeyEnv` row |
-| 3   | the launch environment  | exported before DSH started                  |
-| 4   | the live environment    | `MONID_API_KEY` / `TINYFISH_API_KEY`         |
-| 5   | the channel's CLI store | `monid keys add` / `tinyfish auth login`     |
+| # | source | set it by |
+| --- | --- | --- |
+| 1 | the `apiKey` literal | the row — a secret in config; prefer 2–3 |
+| 2 | the credentials service | `apiKeyEnv` (direct) or `monidKeyEnv` (monid) in the settings UI |
+| 3 | the launch environment | exported before DSH started |
+| 4 | the live environment | `MONID_API_KEY` / `TINYFISH_API_KEY` |
+| 5 | the channel's CLI store | `monid keys add` / `tinyfish auth login` |
 
 The harness services sit above the environment on purpose: a value someone typed into Settings is a more deliberate choice than one that merely happens to be exported. A failing service falls through to the next source rather than failing the search, and a host that mounts neither still works.
+
+### Two keys, one settings page
+
+The two channels authenticate against different services, so each has **its own** credential reference: `apiKeyEnv` (default `TINYFISH_API_KEY`) for `direct`, and `monidKeyEnv` (default `MONID_API_KEY`) for `monid`. Saving one never overwrites the other, so both can be live at once and switching channels back and forth loses nothing.
+
+The page shows the key for the **selected** channel only. Showing both at once would invite pasting the Monid platform key into the field TinyFish authenticates with — and a key sent to the wrong service fails as a 401, which reads as "that key is wrong" rather than as "that was the wrong field". The `apiKey` literal still overrides either channel; it exists for a patch file, and the settings page does not write it.
 
 ## Why the fetch path is a real improvement
 

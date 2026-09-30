@@ -47,6 +47,14 @@ export interface TinyfishProviderOptions {
    */
   readonly apiKeyEnv: string;
   /**
+   * The monid channel's stored-credential name.
+   *
+   * Separate from {@link TinyfishProviderOptions.apiKeyEnv} because the two
+   * channels authenticate against different services, so a user who has both
+   * keys must be able to save both without one overwriting the other.
+   */
+  readonly monidKeyEnv: string;
+  /**
    * Resolves a stored credential by name, when the host provides a service.
    *
    * Built by `apply` from `ctx`, so the plugin uses the *host's* credentials
@@ -174,6 +182,12 @@ export class TinyfishSearchProvider implements WebSearchProvider {
     const payload: TinyfishSearchPayload = await tinyfishSearch({
       channel: options.channel,
       apiKey: options.apiKey,
+      // The stored-credential path. Without these two the Settings credential
+      // is never consulted and a key saved from the UI is silently ignored in
+      // favour of the environment and the CLI stores.
+      apiKeyEnv: options.apiKeyEnv,
+      monidKeyEnv: options.monidKeyEnv,
+      resolveCredential: options.resolveCredential,
       query: request.query,
       filters: { ...options.filters },
       monidBase: options.monidBase,
@@ -259,6 +273,12 @@ export class TinyfishFetchProvider implements WebFetchProvider {
     const payload: TinyfishFetchPayload = await tinyfishFetch({
       channel: options.channel,
       apiKey: options.apiKey,
+      // The stored-credential path. Without these two the Settings credential
+      // is never consulted and a key saved from the UI is silently ignored in
+      // favour of the environment and the CLI stores.
+      apiKeyEnv: options.apiKeyEnv,
+      monidKeyEnv: options.monidKeyEnv,
+      resolveCredential: options.resolveCredential,
       urls: [request.url],
       purpose: options.purpose,
       monidBase: options.monidBase,
@@ -318,15 +338,20 @@ export class TinyfishFetchProvider implements WebFetchProvider {
  * service-backed path in the client.
  */
 function hasCredential(options: TinyfishProviderOptions): boolean {
+  // The active channel's ref, not a shared one: a direct-channel check that
+  // consulted the monid ref would report "configured" off a Monid key.
+  const ref =
+    options.channel === "monid" ? options.monidKeyEnv : options.apiKeyEnv;
   return Boolean(
     resolveApiKey(options.channel, {
       apiKey: options.apiKey,
+      monidKeyEnv: options.monidKeyEnv,
       env: {
-        // The configured ref is checked under both the harness convention and
+        // The channel's ref is checked under both the harness convention and
         // the per-channel variable, because a ref may name either.
-        TINYFISH_API_KEY: process.env[options.apiKeyEnv],
-        MONID_API_KEY: process.env[options.apiKeyEnv],
-        MONID_MCP_TOKEN: process.env[options.apiKeyEnv],
+        TINYFISH_API_KEY: process.env[ref],
+        MONID_API_KEY: process.env[ref],
+        MONID_MCP_TOKEN: process.env[ref],
       },
     })
   );

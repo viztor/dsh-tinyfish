@@ -44,6 +44,7 @@ const SOURCE = readFileSync(BUNDLE, "utf8");
 function loadBundle() {
   const loaded = [];
   const modelCalls = [];
+  const bindings = [];
   let registration;
   const window = {
     __ModuleLoader__: {
@@ -88,7 +89,10 @@ function loadBundle() {
           // card that forgets one is a control the user cannot reach.
           modelCalls.push({ specs, secrets });
           return {
-            bind: () => ({}),
+            bind: (project) => {
+              bindings.push(project);
+              return {};
+            },
             shell: () => ({
               available: true,
               writable: true,
@@ -142,6 +146,7 @@ function loadBundle() {
     registration,
     loaded,
     modelCalls,
+    bindings,
     exports: registration.factory(require),
   };
 }
@@ -324,13 +329,11 @@ test("apply registers the bundle config form, gated on the namespace being serve
   for (const key of ["channel", "purpose", "attempts", "search", "fetch"]) {
     assert.ok(fields.has(key), `${key} has a control`);
   }
+  const written = [...secrets].map((secret) => secret.field);
   assert.deepEqual(
-    // Spread into this realm: the bundle runs in a `node:vm` context and its
-    // array carries a different prototype, which strictEqual rejects for
-    // that reason rather than a real difference.
-    [...secrets].map((secret) => secret.field),
-    ["apiKey"],
-    "the API key is the one write-only control"
+    written,
+    ["apiKey", "monidApiKey"],
+    "one write-only control per channel, so both keys can be saved"
   );
 });
 
@@ -407,7 +410,10 @@ function renderCard(sectionValue = {}) {
       failed: false,
     },
     fields,
-    key: { text: "", named: false },
+    keys: {
+      direct: { text: "", named: false },
+      monid: { text: "", named: false },
+    },
   };
   // Patch the fields the card reads so unset keys resolve like the real model:
   // schema defaults for the switches and channel, blank for the rest.
@@ -520,4 +526,58 @@ test("the field specs cover every editable key in the host schema", () => {
       `${key} appears in the built client`
     );
   }
+});
+
+test("the key field shown follows the selected channel", () => {
+  // Both keys are stored; only the one that will actually be sent is shown, so
+  // a user cannot paste the Monid platform key into the field TinyFish
+  // authenticates with — the mix-up the two refs exist to prevent.
+  const direct = findByType(renderCard({}), "SettingsSecretField");
+  const monid = findByType(
+    renderCard({ channel: "monid" }),
+    "SettingsSecretField"
+  );
+  assert.equal(direct.length, 1, "exactly one key field on each channel");
+  assert.equal(monid.length, 1, "exactly one key field on each channel");
+  assert.equal(direct[0].props.id, "plugin-config-tinyfish-apiKey");
+  assert.equal(monid[0].props.id, "plugin-config-tinyfish-monidApiKey");
+  assert.equal(direct[0].props.label, "apiKey");
+  assert.equal(monid[0].props.label, "monidApiKey");
+});
+
+test("the published state carries a key entry for both channels", () => {
+  // The card indexes `keys` by channel, so a missing entry would render a
+  // crash rather than an empty field. The store is what decides that, and it
+  // is built in `apply` rather than in the card, so it is asserted here.
+  const { exports, bindings } = loadBundle();
+  exports.apply({
+    effect: (body) => {
+      const disposer = body();
+      if (typeof disposer === "function") disposer();
+    },
+    locale: { bind: () => (key) => key, register: () => {} },
+    configForms: {
+      get: () => ({
+        getSnapshot: () => ({
+          status: "ready",
+          value: {},
+          base: {},
+          user: {},
+          writable: true,
+          revision: 1,
+        }),
+        subscribe: () => () => {},
+        mutate: async () => true,
+      }),
+      whileServed: (namespaces, register) => register(new Set(namespaces)),
+    },
+    slots: { inject: (slot, register) => register(), register: () => {} },
+    remote: { $on: () => () => {}, credentials: { set: async () => true } },
+  });
+  assert.equal(bindings.length, 1, "the card binds one projection");
+  const state = bindings[0]();
+  assert.ok(state.keys.direct, "a key entry for the direct channel");
+  assert.ok(state.keys.monid, "a key entry for the monid channel");
+  assert.equal(typeof state.keys.direct.text, "string");
+  assert.equal(typeof state.keys.monid.text, "string");
 });

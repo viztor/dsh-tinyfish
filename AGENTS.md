@@ -160,10 +160,17 @@ Write commit messages with a heredoc — `git commit -F - <<'EOF' … EOF` — n
 Resolution order, first match wins:
 
 1. a literal `apiKey` in the settings row
-2. the harness **credentials service**, by the `apiKeyEnv` reference
+2. the harness **credentials service**, by the channel's own reference: `apiKeyEnv` for `direct`, `monidKeyEnv` for `monid`
 3. the harness **launch environment** — the snapshot frozen at boot, which is what keeps a value stable across a `chdir` or a workspace switch
 4. `MONID_API_KEY` / `MONID_MCP_TOKEN` / `TINYFISH_API_KEY` from the live env
 5. the CLI stores — `~/.config/monid/credentials.yaml`, `~/.tinyfish/config.json`
+
+The reference is chosen **by the channel that is about to use it**, inside `resolveApiKeyAsync`, which is the only function that takes both. A single shared reference sends a TinyFish key to Monid as its bearer token, and that fails upstream as a 401 — indistinguishable from "your Monid key is wrong". Two rules follow, and both have a test that fails without them:
+
+- `tinyfishSearch` / `tinyfishFetch` resolve through **`resolveApiKeyAsync`**, never the synchronous `resolveApiKey`. The sync form cannot reach the credentials service, so calling it here means the ref, the service, and the settings page's secret field all exist while no request ever consults them.
+- `hasCredential` (the `available()` path) is synchronous by contract and so cannot await the service. It uses the channel's ref to decide, which is enough for a cheap liveness check.
+
+The settings page keeps one secret field per channel and shows the one the selected channel will send, so a key can never be pasted into the field the other service authenticates with. The primitive takes an array of secrets, so a second channel costs nothing over the first.
 
 Both harness services are **peers, not dependencies**, pinned to the exact harness version. That is deliberate: a private copy would be a second service instance with its own store, and the user changing a key in Settings would never be seen. `apply` builds the lookup from `ctx.get("credentials")` and `launchEnvironmentOf(ctx)`; both are optional at runtime and both lookups are guarded, because a missing service must degrade the credential path rather than fail plugin registration.
 

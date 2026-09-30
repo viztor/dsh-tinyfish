@@ -145,8 +145,20 @@ export interface ResolveApiKeyOptions {
    *
    * Checked after the literal key and before the ambient environment, because
    * a stored credential is more specific than whatever happens to be exported.
+   * This is the **direct** channel's ref; the monid channel reads
+   * {@link ResolveApiKeyOptions.monidKeyEnv}.
    */
   apiKeyEnv?: string;
+  /**
+   * The monid channel's stored-credential name, kept separate from
+   * {@link ResolveApiKeyOptions.apiKeyEnv} so a user can save both keys.
+   *
+   * One shared ref would hand a TinyFish key to Monid as its bearer token,
+   * which fails upstream as a 401 — indistinguishable from "your Monid key is
+   * wrong". Left unset, the monid channel skips the store and falls through to
+   * its own rungs (`MONID_API_KEY`, `MONID_MCP_TOKEN`, the CLI store).
+   */
+  monidKeyEnv?: string;
   /** The harness credentials service, when the host provides one. */
   resolveCredential?: CredentialResolver;
   /** Override the Monid CLI credential path. */
@@ -372,16 +384,20 @@ export async function resolveApiKeyAsync(
   const explicit = options.apiKey?.trim();
   if (explicit) return explicit;
 
-  const { apiKeyEnv, resolveCredential } = options;
+  const { apiKeyEnv, monidKeyEnv, resolveCredential } = options;
+  // The ref belongs to the channel that is about to use it. Selecting it here,
+  // where the channel is already an argument, is what keeps a user who saved
+  // both keys from having the wrong one sent.
+  const ref = channel === "monid" ? monidKeyEnv : apiKeyEnv;
   // Check before *invoking* the resolver, not just before awaiting it. An
   // already-aborted caller should not cause a credential lookup at all, and an
   // unguarded rejection from the abandoned call would surface as an
   // unhandledRejection rather than as a cancellation.
   throwIfAborted(options.signal);
-  if (apiKeyEnv && resolveCredential) {
+  if (ref && resolveCredential) {
     try {
       const stored = await abortable(
-        Promise.resolve(resolveCredential(apiKeyEnv)),
+        Promise.resolve(resolveCredential(ref)),
         options.signal
       );
       const trimmed = stored?.trim();
@@ -728,6 +744,9 @@ export async function tinyfishSearch(
     channel,
     query,
     apiKey,
+    apiKeyEnv,
+    monidKeyEnv,
+    resolveCredential,
     credentialsPath,
     tinyfishConfigPath,
     filters = {},
@@ -741,11 +760,21 @@ export async function tinyfishSearch(
     maxPolls = DEFAULT_MAX_POLLS,
   } = options;
 
-  const key = resolveApiKey(channel, {
+  // The async resolver, so a credential the host stores — the one a user saves
+  // from the settings UI — is actually consulted. The synchronous form was
+  // used here, which quietly meant the harness credentials service was never
+  // reached: the ref, the service and the settings screen's secret field all
+  // existed, and no request ever used them. It falls back to the same
+  // environment and CLI rungs when no resolver is supplied.
+  const key = await resolveApiKeyAsync(channel, {
     apiKey,
+    apiKeyEnv,
+    monidKeyEnv,
+    resolveCredential,
     credentialsPath,
     env: options.env,
     tinyfishConfigPath,
+    signal,
   });
   requireKey(channel, key);
   const params: Record<string, string | number> = { query, ...filters };
@@ -792,6 +821,9 @@ export async function tinyfishFetch(
     channel,
     urls,
     apiKey,
+    apiKeyEnv,
+    monidKeyEnv,
+    resolveCredential,
     credentialsPath,
     tinyfishConfigPath,
     purpose,
@@ -803,11 +835,15 @@ export async function tinyfishFetch(
     onRetry,
   } = options;
 
-  const key = resolveApiKey(channel, {
+  const key = await resolveApiKeyAsync(channel, {
     apiKey,
+    apiKeyEnv,
+    monidKeyEnv,
+    resolveCredential,
     credentialsPath,
     env: options.env,
     tinyfishConfigPath,
+    signal,
   });
   requireKey(channel, key);
   const body: Record<string, unknown> = { urls, format: "markdown" };

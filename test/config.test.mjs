@@ -66,6 +66,14 @@ const FIELDS = [
     set: "OTHER_KEY",
     junk: "TINYFISH_API_KEY",
   },
+  {
+    // The monid channel's own ref, as its own field rather than a second
+    // possible value of `apiKeyEnv`, so a user can save both keys at once.
+    name: "monidKeyEnv",
+    default: "MONID_API_KEY",
+    set: "MY_PLATFORM_KEY",
+    junk: "MONID_API_KEY",
+  },
   // `purpose` is the field that needed the `set` column. Its default and its
   // junk behaviour are both `undefined`, so a `purpose` dropped from the
   // resolver satisfies every other assertion in this test — and a field that is
