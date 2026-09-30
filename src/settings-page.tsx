@@ -26,6 +26,7 @@ import {
   settingsNumberField,
   settingsTextField,
   type SettingsFieldSpec,
+  type SettingsFormScope,
 } from "@deepseek-ai/dsh-client-ui-primitives";
 
 /**
@@ -172,7 +173,7 @@ interface ClientContext {
     register: (ns: string, dictionaries: { en: unknown; zh: unknown }) => void;
   };
   configForms: {
-    get: (ns: string) => ConstructorParameters<typeof SettingsFormModel>[0];
+    get: (ns: string) => SettingsFormScope<unknown>;
     whileServed: (
       namespaces: string[],
       register: (served: Set<string>) => void
@@ -354,7 +355,6 @@ function TinyfishCard(props: CardProps) {
  * @param ctx - the browser plugin context.
  */
 export function apply(ctx: ClientContext) {
-  const t = ctx.locale.bind(NS);
   ctx.effect(() => {
     ctx.locale.register(NS, { zh, en });
   }, "dsh-tinyfish: dictionaries");
@@ -408,13 +408,18 @@ export function apply(ctx: ClientContext) {
     // Gated on the Host serving the namespace, so the page disappears when the
     // plugin is not loaded rather than rendering a form that cannot save.
     ctx.configForms.whileServed([NS], () => {
-      ctx.slots.inject("plugins.item", () => {
+      // `plugins.bundle.config`, NOT `plugins.item`. The item slot is the list
+      // of official plugins rendered beside the official bundles; a
+      // third-party bundle's own page renders `plugins.bundle.config`,
+      // filtered by `entryKey: pkg.name` — which is why the key below is the
+      // package name, spelled here rather than imported for the same reason
+      // the namespace is. A keyed slot requires `options.key`; the list-slot
+      // fields (`id`, `order`, `label`) do not apply here.
+      ctx.slots.inject("plugins.bundle.config", () => {
         ctx.slots.register(
           {
-            name: "plugins.item",
-            id: "tinyfish",
-            order: 40,
-            label: () => t("title"),
+            name: "plugins.bundle.config",
+            key: "dsh-tinyfish",
             locale: NS,
             // The hook key becomes the `useTinyfishCard` prop; the actions
             // spread in as `edit` / `resetField` / `save` / `discard`.

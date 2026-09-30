@@ -210,7 +210,7 @@ test("it asks the host for React and the primitives instead of bundling them", (
   );
 });
 
-test("apply registers one plugins.item slot, gated on the namespace being served", () => {
+test("apply registers the bundle config form, gated on the namespace being served", () => {
   const { exports, modelCalls } = loadBundle();
   const effects = [];
   const served = [];
@@ -257,7 +257,10 @@ test("apply registers one plugins.item slot, gated on the namespace being served
     },
     slots: {
       inject: (slot, register) => {
-        assert.equal(slot, "plugins.item");
+        // `plugins.bundle.config` is the keyed slot a bundle's own detail page
+        // renders; `plugins.item` is the official-plugins list, which is not
+        // where a third-party form belongs.
+        assert.equal(slot, "plugins.bundle.config");
         register();
       },
       register: (entry, component) => {
@@ -279,9 +282,12 @@ test("apply registers one plugins.item slot, gated on the namespace being served
   );
   assert.equal(registered.length, 1, "exactly one slot entry");
   const { entry, component } = registered[0];
-  assert.equal(entry.name, "plugins.item");
-  assert.equal(entry.id, "tinyfish");
-  assert.equal(typeof entry.label, "function");
+  assert.equal(entry.name, "plugins.bundle.config");
+  // The detail page filters by `entryKey: pkg.name`, so the key must be the
+  // package name spelled here — the same reason the namespace is spelled.
+  const manifest = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8"));
+  assert.equal(entry.key, manifest.name, "the key matches the manifest name");
+  assert.equal(typeof entry.inject, "function");
   assert.equal(
     typeof component,
     "function",
