@@ -21,7 +21,9 @@
     "url": "git+https://github.com/viztor/dsh-tinyfish.git"
   },
   "files": [
-    "lib",
+    "lib/index.mjs",
+    "lib/index.d.mts",
+    "lib/client.cjs",
     "cordis.patch.yml",
     "README.md",
     "LICENSE"
@@ -36,7 +38,10 @@
       "default": "./lib/index.mjs"
     },
     "./src/*": "./src/*",
-    "./package.json": "./package.json"
+    "./package.json": "./package.json",
+    "./client": {
+      "default": "./lib/client.cjs"
+    }
   },
   "scripts": {
     "build": "vp pack",
@@ -59,10 +64,13 @@
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "~4.0.4",
+    "@deepseek-ai/dsh-client-ui-primitives": "0.2.0-rc.1",
     "@deepseek-ai/dsh-credentials": "0.2.0-rc.1",
     "@deepseek-ai/dsh-launch-environment": "0.2.0-rc.1",
     "@deepseek-ai/dsh-web": "0.2.0-rc.1",
     "@types/node": "^26.6.3",
+    "@types/react": "^18.3.31",
+    "react": "^18.3.1",
     "typescript": "^7.0.2",
     "ultracite": "^7.12.1",
     "vite-plus": "catalog:"
@@ -80,6 +88,15 @@
   "dsh": {
     "bundle": {
       "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "inject": [
+        "@deepseek-ai/dsh-client-locale",
+        "@deepseek-ai/dsh-client-ui-settings",
+        "@deepseek-ai/dsh-client-ui-plugin-manager",
+        "@deepseek-ai/dsh-api-remotes"
+      ],
+      "platform": "web"
     }
   }
 }

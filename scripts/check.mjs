@@ -408,7 +408,7 @@ try {
   });
 
   ok(
-    `installed the packed tarball with plain npm (${packed.entryCount} entries) and loaded it`
+    `installed the packed tarball with plain npm (${packed.entryCount} entries) and loaded the host + client halves`
   );
 } catch (error) {
   const detail = [error.stderr, error.message]

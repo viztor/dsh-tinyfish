@@ -153,41 +153,82 @@ export default defineConfig({
     sortPackageJson: true,
   },
 
-  pack: {
-    // Declarations are generated from the source, so there is no hand-written
-    // `.d.ts` anywhere that could drift from the implementation.
-    dts: true,
-    // ESM only. The harness loads the bundle with `import`; a CommonJS build
-    // would be dead weight in the tarball, and the fleet's own packages ship
-    // ESM with a single `default` export condition.
-    format: ["esm"],
-    // No sourcemaps. A bundle has no consumer for them inside the harness, and
-    // the package check fails the build if any reappear — they were once most
-    // of the published tarball.
-    sourcemap: false,
-    // The harness supplies these. Bundling a copy would put a second
-    // `@deepseek-ai/schemastery` in the artifact with its own `~standard`
-    // object beside the loader's, which is the same identity problem that made
-    // the peer ranges matter in the first place.
-    //
-    // `deps.neverBundle`, not the deprecated `external` alias.
-    deps: {
-      neverBundle: [
-        "@deepseek-ai/schemastery",
-        "@deepseek-ai/cordis",
-        "@deepseek-ai/dsh-web",
-        "@deepseek-ai/dsh-credentials",
-        "@deepseek-ai/dsh-launch-environment",
-      ],
+  // Two targets, because this package ships two artifacts: the host bundle the
+  // harness loads, and the browser bundle the web client loads for its settings
+  // page. `dsh-app-boot` reads `dsh.bundle`; `dsh-client-modules` reads
+  // `dsh.client`; the two never consult each other, which is why one package can
+  // carry both and the user installs once.
+  pack: [
+    {
+      // Declarations are generated from the source, so there is no hand-written
+      // `.d.ts` anywhere that could drift from the implementation.
+      dts: true,
+      // ESM only. The harness loads the bundle with `import`; a CommonJS build
+      // would be dead weight in the tarball, and the fleet's own packages ship
+      // ESM with a single `default` export condition.
+      format: ["esm"],
+      // No sourcemaps. A bundle has no consumer for them inside the harness, and
+      // the package check fails the build if any reappear — they were once most
+      // of the published tarball.
+      sourcemap: false,
+      // The harness supplies these. Bundling a copy would put a second
+      // `@deepseek-ai/schemastery` in the artifact with its own `~standard`
+      // object beside the loader's, which is the same identity problem that made
+      // the peer ranges matter in the first place.
+      //
+      // `deps.neverBundle`, not the deprecated `external` alias.
+      deps: {
+        neverBundle: [
+          "@deepseek-ai/schemastery",
+          "@deepseek-ai/cordis",
+          "@deepseek-ai/dsh-web",
+          "@deepseek-ai/dsh-credentials",
+          "@deepseek-ai/dsh-launch-environment",
+        ],
+      },
+      // `lib/`, not tsdown's default `dist/`: every @deepseek-ai package ships
+      // from `lib`, and the harness resolves `main` without caring either way.
+      // Keeping it means the manifest, the docs and the ecosystem agree.
+      outDir: "lib",
+      platform: "node",
+      target: "node22",
+      // Only the host target cleans. If both did, whichever ran second would
+      // delete the other's output.
+      clean: true,
     },
-    // `lib/`, not tsdown's default `dist/`: every @deepseek-ai package ships
-    // from `lib`, and the harness resolves `main` without caring either way.
-    // Keeping it means the manifest, the docs and the ecosystem agree.
-    outDir: "lib",
-    platform: "node",
-    target: "node22",
-    clean: true,
-  },
+    {
+      // A named entry, so the artifact is `lib/client.cjs` rather than
+      // `lib/settings-page.cjs`: `client` is what the harness calls the browser
+      // half, and the manifest exports it under that name.
+      entry: { client: "src/settings-page.tsx" },
+      outDir: "lib",
+      // CommonJS, because the web client's loader hands the bundle a `require`
+      // and expects `module.exports` — that is the shape of the wrapper below,
+      // not a choice about module systems.
+      format: ["cjs"],
+      platform: "browser",
+      // No declarations: nothing imports this bundle, the loader calls it.
+      dts: false,
+      sourcemap: false,
+      clean: false,
+      // React and the primitives come from the host's module loader at runtime.
+      // Bundling them would put a second React, or a second set of primitives,
+      // in the page beside the client's own.
+      deps: {
+        neverBundle: [
+          "react",
+          "react/jsx-runtime",
+          "@deepseek-ai/dsh-client-ui-primitives",
+        ],
+      },
+      // The loader contract. A client bundle is not a module the page imports;
+      // it is a factory the page hands a `require` to, and it must call this
+      // before anything else runs.
+      banner:
+        'window.__ModuleLoader__.load({\n  id: "dsh-tinyfish",\n  factory: (require) => {\n    var module = { exports: {} };\n    var exports = module.exports;',
+      footer: "    return module.exports;\n  },\n});",
+    },
+  ],
 
   test: {
     // The suite is hermetic and free: `fetch` is stubbed per test in
