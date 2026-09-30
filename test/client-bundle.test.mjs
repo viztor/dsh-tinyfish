@@ -43,6 +43,7 @@ const SOURCE = readFileSync(BUNDLE, "utf8");
  */
 function loadBundle() {
   const loaded = [];
+  const modelCalls = [];
   let registration;
   const window = {
     __ModuleLoader__: {
@@ -67,7 +68,10 @@ function loadBundle() {
         // object hands that object back — which sidesteps
         // `class-methods-use-this` honestly: this stub has no state, so a method
         // that ignores `this` is exactly what the rule would be pointing at.
-        SettingsFormModel: function SettingsFormModel() {
+        SettingsFormModel: function SettingsFormModel(scope, specs, secrets) {
+          // Record the arguments: these are the fields the page renders, and a
+          // card that forgets one is a control the user cannot reach.
+          modelCalls.push({ specs, secrets });
           return {
             bind: () => ({}),
             shell: () => ({
@@ -117,7 +121,12 @@ function loadBundle() {
   });
 
   assert.ok(registration, "the bundle called window.__ModuleLoader__.load");
-  return { registration, loaded, exports: registration.factory(require) };
+  return {
+    registration,
+    loaded,
+    modelCalls,
+    exports: registration.factory(require),
+  };
 }
 
 test("the artifact is named the way the harness resolves it", () => {
@@ -202,7 +211,7 @@ test("it asks the host for React and the primitives instead of bundling them", (
 });
 
 test("apply registers one plugins.item slot, gated on the namespace being served", () => {
-  const { exports } = loadBundle();
+  const { exports, modelCalls } = loadBundle();
   const effects = [];
   const served = [];
   const registered = [];
@@ -281,6 +290,24 @@ test("apply registers one plugins.item slot, gated on the namespace being served
   assert.ok(
     effects.some((label) => label.includes("page")),
     "the registration is an effect, so it is torn down on unload"
+  );
+
+  // The fields the page renders, read back off the model the card built. Every
+  // editable key in the host schema should be reachable, and the credential is a
+  // secret (written through the credentials domain, not the section).
+  assert.equal(modelCalls.length, 1, "one form model is constructed");
+  const { specs, secrets } = modelCalls[0];
+  const fields = new Set(specs.map((spec) => spec.field));
+  for (const key of ["channel", "purpose", "attempts", "search", "fetch"]) {
+    assert.ok(fields.has(key), `${key} has a control`);
+  }
+  assert.deepEqual(
+    // Spread into this realm: the bundle runs in a `node:vm` context and its
+    // array carries a different prototype, which strictEqual rejects for
+    // that reason rather than a real difference.
+    [...secrets].map((secret) => secret.field),
+    ["apiKey"],
+    "the API key is the one write-only control"
   );
 });
 
