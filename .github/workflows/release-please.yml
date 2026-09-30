@@ -22,16 +22,12 @@ jobs:
       # Secret: RELEASE_PLEASE_TOKEN — a fine-grained PAT with Contents and
       # Pull requests read/write on this repository only.
       #
-      # Until it is set the job explains itself rather than failing on every
-      # push with "Input required and not supplied: token", which says nothing
-      # about what to do next. See CONTRIBUTING.md for the one-time setup.
-      - name: Say why nothing happened
-        if: ${{ secrets.RELEASE_PLEASE_TOKEN == '' }}
-        run: |
-          echo "::notice title=release-please skipped::RELEASE_PLEASE_TOKEN is not set, so no version-bump PR was opened. See CONTRIBUTING.md, 'Releasing'."
-
+      # Until that secret is set this job fails on every push with "Input
+      # required and not supplied: token". That is the upstream action's message
+      # and it is not improved here: guarding the step on `secrets` in an `if`
+      # made GitHub reject the whole file as invalid, which is a worse failure
+      # than a clear one. The one-time setup is in CONTRIBUTING.md.
       - uses: googleapis/release-please-action@v5
-        if: ${{ secrets.RELEASE_PLEASE_TOKEN != '' }}
         with:
           release-type: node
           token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
