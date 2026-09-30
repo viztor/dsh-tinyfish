@@ -21,7 +21,17 @@ jobs:
       # running on the default token would produce a tag that never publishes.
       # Secret: RELEASE_PLEASE_TOKEN — a fine-grained PAT with Contents and
       # Pull requests read/write on this repository only.
+      #
+      # Until it is set the job explains itself rather than failing on every
+      # push with "Input required and not supplied: token", which says nothing
+      # about what to do next. See CONTRIBUTING.md for the one-time setup.
+      - name: Say why nothing happened
+        if: ${{ secrets.RELEASE_PLEASE_TOKEN == '' }}
+        run: |
+          echo "::notice title=release-please skipped::RELEASE_PLEASE_TOKEN is not set, so no version-bump PR was opened. See CONTRIBUTING.md, 'Releasing'."
+
       - uses: googleapis/release-please-action@v5
+        if: ${{ secrets.RELEASE_PLEASE_TOKEN != '' }}
         with:
           release-type: node
           token: ${{ secrets.RELEASE_PLEASE_TOKEN }}

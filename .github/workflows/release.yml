@@ -12,9 +12,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+      # No `version:` input: pnpm/action-setup refuses to run when it is given
+      # both that and a `packageManager` field, and package.json pins 12.6.0
+      # exactly. One source of truth, and the action reads it.
       - uses: pnpm/action-setup@v6
-        with:
-          version: 12
       - uses: actions/setup-node@v7
         with:
           node-version: 24
@@ -35,9 +36,10 @@ jobs:
       id-token: write
     steps:
       - uses: actions/checkout@v7
+      # No `version:` input: pnpm/action-setup refuses to run when it is given
+      # both that and a `packageManager` field, and package.json pins 12.6.0
+      # exactly. One source of truth, and the action reads it.
       - uses: pnpm/action-setup@v6
-        with:
-          version: 12
       - uses: actions/setup-node@v7
         with:
           node-version: 24
