@@ -58,7 +58,22 @@ function loadBundle() {
   const require = (name) => {
     loaded.push(name);
     if (name === "react/jsx-runtime" || name === "react") {
-      return { jsx: () => null, jsxs: () => null, Fragment: null };
+      // A minimal element tree: enough to assert *what* the card renders
+      // (which components, with which props) without a DOM.
+      const el = (type, props, ...rest) => {
+        let fromProps = [];
+        if (props?.children !== undefined) {
+          fromProps = Array.isArray(props.children)
+            ? props.children
+            : [props.children];
+        }
+        return {
+          type: typeof type === "function" ? type.name || "fn" : type,
+          props: props ?? {},
+          children: [...rest, ...fromProps].flat(Infinity),
+        };
+      };
+      return { jsx: el, jsxs: el, Fragment: "Fragment" };
     }
     if (name === "@deepseek-ai/dsh-client-ui-primitives") {
       return {
@@ -94,6 +109,8 @@ function loadBundle() {
         },
         SettingsSecretField: () => null,
         SettingsValueField: () => null,
+        Switch: () => null,
+        SegmentedControl: () => null,
         settingsNumberField: (field) => ({
           field,
           format: String,
@@ -314,6 +331,171 @@ test("apply registers the bundle config form, gated on the namespace being serve
     [...secrets].map((secret) => secret.field),
     ["apiKey"],
     "the API key is the one write-only control"
+  );
+});
+
+/**
+ * Render the card against a section value, returning the element tree.
+ *
+ * The stubbed jsx builds `{ type, props, children }` nodes instead of DOM, so
+ * assertions read the structure the card *would* render: which components, in
+ * which order, with which props — including what conditional rendering hides.
+ */
+function renderCard(sectionValue = {}) {
+  const { exports } = loadBundle();
+  let card = null;
+  const ctx = {
+    effect: (body) => {
+      const disposer = body();
+      if (typeof disposer === "function") disposer();
+    },
+    locale: { bind: () => (key) => key, register: () => {} },
+    configForms: {
+      get: () => ({
+        getSnapshot: () => ({
+          status: "ready",
+          value: sectionValue,
+          base: {},
+          user: {},
+          writable: true,
+          revision: 1,
+        }),
+        subscribe: () => () => {},
+        mutate: async () => true,
+      }),
+      whileServed: (namespaces, register) => register(new Set(namespaces)),
+    },
+    slots: {
+      inject: (slot, register) => register(),
+      register: (entry, component) => {
+        card = component;
+      },
+    },
+    remote: {
+      $on: () => () => {},
+      credentials: { set: async () => true, describe: async () => [] },
+    },
+  };
+  exports.apply(ctx);
+  assert.ok(card, "the card component was registered");
+
+  // The injected actions the slot entry provides, mirroring model.actions().
+  const actions = {
+    edit: () => {},
+    resetField: () => {},
+    save: () => {},
+    discard: () => {},
+  };
+  // The store projection the real SettingsFormModel builds: shell, per-field
+  // { text, overridden, invalid }, and the key state. Draft text mirrors the
+  // section value the way spec.format would render it.
+  const fields = {};
+  for (const [name, value] of Object.entries(sectionValue)) {
+    fields[name] = {
+      text: value === undefined ? "" : String(value),
+      overridden: true,
+      invalid: false,
+    };
+  }
+  const state = {
+    shell: {
+      available: true,
+      writable: true,
+      dirty: false,
+      invalid: false,
+      saving: false,
+      failed: false,
+    },
+    fields,
+    key: { text: "", named: false },
+  };
+  // Patch the fields the card reads so unset keys resolve like the real model:
+  // schema defaults for the switches and channel, blank for the rest.
+  const withDefaults = new Proxy(state.fields, {
+    get: (target, name) => {
+      if (name in target) return target[name];
+      if (name === "search" || name === "fetch" || name === "channel") {
+        return { text: "", overridden: false, invalid: false };
+      }
+      return { text: "", overridden: false, invalid: false };
+    },
+  });
+  const tree = card({
+    view: "page",
+    t: (key) => key,
+    useTinyfishCard: (select) => select({ ...state, fields: withDefaults }),
+    ...actions,
+    edit: (f, v) => {
+      fields[f] = { text: v, overridden: true, invalid: false };
+    },
+    resetField: (f) => {
+      fields[f] = { text: "", overridden: false, invalid: false };
+    },
+  });
+  return tree;
+}
+
+/** Find elements by type in a tree. */
+function findByType(node, type, acc = []) {
+  if (!node || typeof node !== "object") return acc;
+  if (node.type === type) acc.push(node);
+  for (const child of node.children ?? []) findByType(child, type, acc);
+  return acc;
+}
+
+test("channel renders as a segmented control, not a text field", () => {
+  const tree = renderCard({});
+  const segmented = findByType(tree, "SegmentedControl");
+  assert.equal(segmented.length, 1, "exactly one segmented control");
+  const got = segmented[0].props.options.map((o) => o.value);
+  assert.equal(got.length, 2, "two channel options");
+  assert.equal(got[0], "direct");
+  assert.equal(got[1], "monid");
+  assert.equal(segmented[0].props.value, "direct", "defaulting to direct");
+});
+
+test("search and fetch render as switches, not text fields", () => {
+  const tree = renderCard({});
+  const switches = findByType(tree, "Switch");
+  assert.equal(switches.length, 2, "two switches");
+  for (const s of switches) {
+    assert.equal(s.props.checked, true, "on by default");
+    assert.equal(typeof s.props.onChange, "function");
+  }
+  // No text field may still carry the boolean hints.
+  const treeText = JSON.stringify(tree);
+  assert.ok(!treeText.includes("boolHint"), "no boolean hint text remains");
+});
+
+test("purpose hides when search is off", () => {
+  const on = renderCard({ search: true });
+  const off = renderCard({ search: false });
+  const hasPurpose = (tree) =>
+    findByType(tree, "SettingsValueField").some(
+      (f) => f.props.id === "plugin-config-tinyfish-purpose"
+    );
+  assert.ok(hasPurpose(on), "purpose shows when search is on");
+  assert.ok(!hasPurpose(off), "purpose hides when search is off");
+});
+
+test("a warning shows only when both providers are off", () => {
+  const texts = (tree) =>
+    findByType(tree, "p").map((p) =>
+      (p.children ?? []).filter((c) => typeof c === "string").join("")
+    );
+  assert.ok(
+    !texts(renderCard({})).some((s) => s.includes("bothOff")),
+    "no warning by default"
+  );
+  assert.ok(
+    !texts(renderCard({ search: false })).some((s) => s.includes("bothOff")),
+    "no warning when only search is off"
+  );
+  assert.ok(
+    texts(renderCard({ search: false, fetch: false })).some((s) =>
+      s.includes("bothOff")
+    ),
+    "warning when both are off"
   );
 });
 

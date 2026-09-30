@@ -19,10 +19,12 @@
  */
 
 import {
+  SegmentedControl,
   SettingsForm,
   SettingsFormModel,
   SettingsSecretField,
   SettingsValueField,
+  Switch,
   settingsNumberField,
   settingsTextField,
   type SettingsFieldSpec,
@@ -70,14 +72,16 @@ const en = {
   attempts: "Attempts",
   attemptsHint: "Retries for a transient failure or an empty result, 1 to 5.",
   search: "Offer search",
-  searchHint: "false stops this plugin being chosen for web_search.",
+  searchHint: "When off, web_search falls through to another provider.",
   fetch: "Offer fetch",
-  fetchHint: "false stops this plugin being chosen for web_fetch.",
-  boolHint: "Type true or false.",
+  fetchHint: "When off, web_fetch falls through to another provider.",
+  channelDirect: "Direct",
+  channelMonid: "Monid",
+  bothOff:
+    "Both providers are off, so this plugin is registered but answers nothing. Turn one back on to use it.",
   overridden: "Overridden",
   reset: "Reset to default",
   invalidNumber: "Enter a whole number, or leave blank to use the default.",
-  invalidBoolean: "Enter true or false, or leave blank to use the default.",
   invalidText: "This value was not accepted; leave blank to use the default.",
   readOnly: "This deployment stores settings read-only.",
   unavailable:
@@ -103,14 +107,16 @@ const zh = {
   attempts: "尝试次数",
   attemptsHint: "瞬时失败或结果为空时的重试次数，1 到 5。",
   search: "提供搜索",
-  searchHint: "设为 false 后不再被选为 web_search 的提供方。",
+  searchHint: "关闭后，web_search 会转由其他提供方处理。",
   fetch: "提供抓取",
-  fetchHint: "设为 false 后不再被选为 web_fetch 的提供方。",
-  boolHint: "请输入 true 或 false。",
+  fetchHint: "关闭后，web_fetch 会转由其他提供方处理。",
+  channelDirect: "直连",
+  channelMonid: "Monid",
+  bothOff:
+    "搜索与抓取均已关闭，此插件已注册但不再响应任何请求。重新开启其中一个即可恢复使用。",
   overridden: "已覆盖",
   reset: "恢复默认",
   invalidNumber: "请填整数；留空表示使用默认值。",
-  invalidBoolean: "请填 true 或 false；留空表示使用默认值。",
   invalidText: "该值未被接受；留空表示使用默认值。",
   readOnly: "本部署的设置为只读。",
   unavailable: "该插件当前未加载，暂时无法配置。",
@@ -273,6 +279,20 @@ const formLabels = (t: Translate) => ({
  * actions, and the credential's configured state.
  * @returns the summary, or the form.
  */
+/**
+ * Resolve a boolean switch to its effective value.
+ *
+ * The draft text is authoritative when present; a blank draft means untouched,
+ * so it falls back to the schema default (on for both switches). The Switch
+ * only ever writes "true" or "false", so any other text cannot occur through
+ * the UI — but the fallback keeps the control honest if the section arrives
+ * in an unexpected shape.
+ */
+function switchValue(text: string): boolean {
+  if (text === "false") return false;
+  return true;
+}
+
 function TinyfishCard(props: CardProps) {
   const { t } = props;
   if (props.view === "summary") return t("description");
@@ -294,6 +314,29 @@ function TinyfishCard(props: CardProps) {
     },
   });
 
+  // The channel draft, or the schema default when untouched. SegmentedControl
+  // needs exactly one of its option values — never blank.
+  const channelText = state.fields[FIELD.channel]?.text ?? "";
+  const channel = channelText === "monid" ? "monid" : "direct";
+
+  // Effective switch states, driving both the controls and what renders below.
+  const searchOn = switchValue(state.fields[FIELD.search]?.text ?? "");
+  const fetchOn = switchValue(state.fields[FIELD.fetch]?.text ?? "");
+
+  // A reset control matching the form's visual language, for the custom
+  // controls that SettingsValueField would otherwise provide one for.
+  const resetButton = (name: string, overridden: boolean) =>
+    overridden && !disabled ? (
+      <button
+        type="button"
+        onClick={() => {
+          props.resetField(name);
+        }}
+      >
+        {t("reset")}
+      </button>
+    ) : null;
+
   return (
     <SettingsForm
       labels={formLabels(t)}
@@ -301,13 +344,26 @@ function TinyfishCard(props: CardProps) {
       onSave={props.save}
       onDiscard={props.discard}
     >
-      <SettingsValueField
-        {...field(FIELD.channel)}
-        label={t("channel")}
-        hint={t("channelHint")}
-        invalidLabel={t("invalidText")}
-        placeholder="direct"
-      />
+      <div>
+        <SegmentedControl
+          id={`plugin-config-tinyfish-${FIELD.channel}`}
+          label={t("channel")}
+          value={channel}
+          options={[
+            { value: "direct", label: t("channelDirect") },
+            { value: "monid", label: t("channelMonid") },
+          ]}
+          onChange={(next) => {
+            props.edit(FIELD.channel, next);
+          }}
+          disabled={disabled}
+        />
+        <p>{t("channelHint")}</p>
+        {resetButton(
+          FIELD.channel,
+          state.fields[FIELD.channel]?.overridden ?? false
+        )}
+      </div>
       <SettingsSecretField
         id={`plugin-config-tinyfish-${FIELD.apiKey}`}
         label={t("apiKey")}
@@ -320,12 +376,14 @@ function TinyfishCard(props: CardProps) {
           props.edit(FIELD.apiKey, text);
         }}
       />
-      <SettingsValueField
-        {...field(FIELD.purpose)}
-        label={t("purpose")}
-        hint={t("purposeHint")}
-        invalidLabel={t("invalidText")}
-      />
+      {searchOn && (
+        <SettingsValueField
+          {...field(FIELD.purpose)}
+          label={t("purpose")}
+          hint={t("purposeHint")}
+          invalidLabel={t("invalidText")}
+        />
+      )}
       <SettingsValueField
         {...field(FIELD.attempts)}
         label={t("attempts")}
@@ -333,18 +391,37 @@ function TinyfishCard(props: CardProps) {
         invalidLabel={t("invalidNumber")}
         numeric
       />
-      <SettingsValueField
-        {...field(FIELD.search)}
-        label={t("search")}
-        hint={`${t("searchHint")} ${t("boolHint")}`}
-        invalidLabel={t("invalidBoolean")}
-      />
-      <SettingsValueField
-        {...field(FIELD.fetch)}
-        label={t("fetch")}
-        hint={`${t("fetchHint")} ${t("boolHint")}`}
-        invalidLabel={t("invalidBoolean")}
-      />
+      <div>
+        <Switch
+          label={t("search")}
+          checked={searchOn}
+          onChange={(next) => {
+            props.edit(FIELD.search, String(next));
+          }}
+          disabled={disabled}
+        />
+        <p>{t("searchHint")}</p>
+        {resetButton(
+          FIELD.search,
+          state.fields[FIELD.search]?.overridden ?? false
+        )}
+      </div>
+      <div>
+        <Switch
+          label={t("fetch")}
+          checked={fetchOn}
+          onChange={(next) => {
+            props.edit(FIELD.fetch, next.toString());
+          }}
+          disabled={disabled}
+        />
+        <p>{t("fetchHint")}</p>
+        {resetButton(
+          FIELD.fetch,
+          state.fields[FIELD.fetch]?.overridden ?? false
+        )}
+      </div>
+      {!searchOn && !fetchOn && <p>{t("bothOff")}</p>}
     </SettingsForm>
   );
 }
