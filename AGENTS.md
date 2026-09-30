@@ -155,6 +155,10 @@ Run `release:gate` before every commit that touches `src/`, `cordis.patch.yml`, 
 
 Write commit messages with a heredoc — `git commit -F - <<'EOF' … EOF` — not through a scratch file in the tree. A temp file has to be excluded from `git add` and deleted afterwards, and safety that depends on remembering two steps is not safety; this repository ships one package and a stray file in it is exactly the kind of thing the Safety section rules out. The quoted delimiter keeps `"quotes"`, `` `backticks` `` and `$variables` intact.
 
+The subject line is a **Conventional Commit** — `feat:`, `fix:`, `docs:`, `chore:`, `refactor:`, `test:`, `ci:`, `perf:` — because `release-please` parses it to decide the next version and to write the changelog. A prose subject contributes nothing to either, so the release it would have described is simply never made. `BREAKING CHANGE:` in the footer, or a `!` after the type, is a major.
+
+The body explains what was true before, what is true now, and why the obvious alternative was rejected. The "why" is the part that is unrecoverable from the diff later.
+
 ## Credentials
 
 Resolution order, first match wins:

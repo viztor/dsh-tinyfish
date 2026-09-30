@@ -1,0 +1,27 @@
+name: release-please
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  release-please:
+    runs-on: ubuntu-latest
+    steps:
+      # Reads conventional commits (feat:, fix:, …) since the last tag, then
+      # opens a version-bump and CHANGELOG pull request. Merging that PR creates
+      # the tag and the GitHub Release, which fires `release.yml`.
+      #
+      # The PAT is not optional. Tags and releases created with the built-in
+      # GITHUB_TOKEN do not trigger downstream workflows, so a release-please
+      # running on the default token would produce a tag that never publishes.
+      # Secret: RELEASE_PLEASE_TOKEN — a fine-grained PAT with Contents and
+      # Pull requests read/write on this repository only.
+      - uses: googleapis/release-please-action@v5
+        with:
+          release-type: node
+          token: ${{ secrets.RELEASE_PLEASE_TOKEN }}

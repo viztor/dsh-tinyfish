@@ -1,0 +1,76 @@
+name: release
+
+on:
+  push:
+    tags: ["v*.*.*"]
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 12
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run build
+      - run: pnpm exec vp check
+      - run: pnpm exec vp test --coverage
+      - run: node scripts/check.mjs
+
+  publish:
+    needs: verify
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # OIDC trusted publishing needs this and nothing else: no token is stored
+      # in the repository, and provenance is automatic.
+      id-token: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 12
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+          registry-url: https://registry.npmjs.org
+      - run: pnpm install --frozen-lockfile
+
+      # A tag that disagrees with the manifest publishes a version nobody can
+      # match to a commit, so this is checked before anything is built.
+      - name: The tag matches the manifest version
+        run: |
+          expected="v$(node -p "require('./package.json').version")"
+          if [ "${{ github.ref_name }}" != "$expected" ]; then
+            echo "::error::${{ github.ref_name }} does not match package.json $expected"
+            exit 1
+          fi
+
+      - name: Build
+        run: pnpm run build
+
+      # Trusted publishing: the registry verifies this workflow's OIDC identity,
+      # so no secret exists to leak or expire. To set it up, add
+      # viztor/dsh-tinyfish + `release.yml` to the package's Trusted Publisher
+      # settings on npmjs.com and allow the `npm publish` action.
+      #
+      # The guard keeps a re-run idempotent. npm refuses to republish a version,
+      # so without it a retried tag — a failed mirror, a re-pushed tag — fails
+      # the whole release instead of resuming.
+      - name: Publish to npmjs (OIDC, provenance)
+        run: |
+          version=$(node -p "require('./package.json').version")
+          if npm view "dsh-tinyfish@$version" version 2>/dev/null; then
+            echo "$version is already on npmjs, skipping"
+          else
+            npm publish --provenance --access public --ignore-scripts
+          fi

@@ -424,6 +424,100 @@ try {
   rmSync(scratch, { recursive: true, force: true });
 }
 
+/* ------------------------------------------------- 8. the release can fire */
+
+/**
+ * A publish job that cannot be reached is worse than no publish job: it reads
+ * as a working release process in a file that looks right, and the failure only
+ * appears at release time.
+ *
+ * This exists because that is exactly the bug this repository shipped. The
+ * publish job lived in `ci.yml` behind `if: startsWith(github.ref, 'refs/tags/')`
+ * while that workflow's only trigger was `push: branches: [main]`. A tag push
+ * matches no branch, so the workflow never ran and the condition guarding the
+ * publish was never evaluated by anything.
+ */
+const workflows = join(ROOT, ".github/workflows");
+const release = readFileSync(join(workflows, "release.yml"), "utf8");
+const ci = readFileSync(join(workflows, "ci.yml"), "utf8");
+
+if (!/^\s*tags:\s*\[?\s*"?v\*\.\*\.\*"?/m.test(release)) {
+  fail("release.yml does not trigger on v*.*.* tags — nothing would publish");
+} else {
+  ok("release.yml is triggered by a version tag");
+}
+
+if (!/^\s*tags-ignore:\s*\[?\s*"?v\*\.\*\.\*"?/m.test(ci)) {
+  fail(
+    "ci.yml does not ignore version tags; a tag push matches no branch, so " +
+      "ci.yml never runs on one and anything gated on it is unreachable"
+  );
+} else {
+  ok("ci.yml ignores version tags, leaving them to release.yml");
+}
+
+if (!/^\s*id-token:\s*write/m.test(release)) {
+  fail(
+    "release.yml has no id-token: write, so npm trusted publishing cannot " +
+      "authenticate and the publish would need a stored token"
+  );
+} else {
+  ok("release.yml grants id-token: write for OIDC trusted publishing");
+}
+
+if (!/npm view .* version 2>\/dev\/null/.test(release)) {
+  fail(
+    "release.yml does not skip an already-published version, so re-running a " +
+      "tag fails on npm's refusal to republish"
+  );
+} else {
+  ok("release.yml skips a version that is already on the registry");
+}
+
+/* --------------------------------------------------- 9. the toolchain is Vite+ */
+
+/**
+ * Vite+ is not just a preference here. It is what makes the lint and format
+ * configuration *live*: it disables nested `oxlint.config` / `.oxfmtrc` files,
+ * so a config in its own file is read by nobody and the gate passes with the
+ * rules switched off. That is not hypothetical — it happened here, and CI was
+ * green the whole time it was inert.
+ *
+ * So the toolchain is asserted rather than assumed: the package depends on
+ * `vite-plus`, and every build/lint/format/test script goes through `vp`
+ * rather than the underlying binaries, which would bypass the entry point that
+ * reads the config at all.
+ */
+const TOOLCHAIN = ["build", "check", "format", "lint", "test"];
+const UNBYPASSED = /(?:^|[\s(])(oxlint|oxfmt|tsdown|vitest|tsc)(?:[\s)]|$)/;
+
+if (!pkg.devDependencies?.["vite-plus"]) {
+  fail("the package does not depend on vite-plus; the toolchain is unpinned");
+} else {
+  ok(`the toolchain is vite-plus (${pkg.devDependencies["vite-plus"]})`);
+}
+
+for (const name of TOOLCHAIN) {
+  const script = pkg.scripts?.[name];
+  if (!script) {
+    fail(`no ${name} script`);
+  } else if (!/\bvp\b/.test(script)) {
+    fail(`the ${name} script does not go through vp: ${script}`);
+  } else if (UNBYPASSED.test(script.replaceAll(/\bvp\b[^\s]*/g, ""))) {
+    // `vp check` covers types too, so a bare `tsc` alongside it is redundant
+    // rather than wrong — but a bare oxlint/oxfmt/vitest is a bypass.
+    const bare = script.match(new RegExp(UNBYPASSED, "g")) ?? [];
+    const real = bare.filter((tool) => tool.trim() !== "tsc");
+    if (real.length > 0) {
+      fail(
+        `the ${name} script reaches past vp for ${real.map((t) => t.trim()).join(", ")}; ` +
+          "that bypasses the entry point that reads the config"
+      );
+    }
+  }
+}
+ok(`${TOOLCHAIN.length} toolchain scripts route through vp`);
+
 /* ------------------------------------------------------------------- report */
 
 for (const note of notes) console.log(`  ok   ${note}`);

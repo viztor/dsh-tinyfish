@@ -1,3 +1,5 @@
+import { fileURLToPath } from "node:url";
+
 import ultraciteFmt from "ultracite/oxfmt";
 import ultraciteLint from "ultracite/oxlint/core";
 import { defineConfig } from "vite-plus";
@@ -241,13 +243,39 @@ export default defineConfig({
     // a second name. Two files say plainly what each run covers.
     include: ["test/**/*.test.mjs"],
     exclude: ["test/integration/**"],
+    // The UI primitives are external in the browser bundle — the host supplies
+    // them — and outside the host they do not resolve: the package imports
+    // `*.module.css` and host-only workspace utilities that no consumer has.
+    // So a test that imports the *source* of the settings page aliases the kit
+    // to a stub. Testing our code with the host's kit stubbed is the right
+    // boundary anyway; `test/client-bundle.test.mjs` covers the built artifact
+    // against the same stub.
+    alias: {
+      "@deepseek-ai/dsh-client-ui-primitives": fileURLToPath(
+        new URL("test/primitives-stub.tsx", import.meta.url)
+      ),
+    },
     coverage: {
       provider: "v8",
-      include: ["src/**/*.ts"],
-      // Reported, not enforced as a gate. The fleet's rule is to close the gap
-      // rather than silence it, so a threshold that failed the build would get
-      // ratcheted down instead of being widened.
-      reporter: ["text-summary"],
+      // `.tsx` is here for a reason: `**/*.ts` does not match it, and
+      // `settings-page.tsx` is the one source file with no unit coverage of its
+      // own — it is exercised by executing the *built* bundle under `node:vm`.
+      // Excluded from the report it had no number at all, which reads as "not
+      // measured" rather than "not counted".
+      include: ["src/**/*.ts", "src/**/*.tsx"],
+      reporter: ["text-summary", "text"],
+      // A floor, not a target. A threshold nobody fails is a check that cannot
+      // fail, which is worth less than no threshold at all: it reads as
+      // "covered" on the dashboard. These sit just under what the suite
+      // actually reaches today (92 / 86 / 89 / 92), so a real regression fails
+      // and closing a gap lets them be raised. Widening one is a deliberate act
+      // visible in the diff — which is the point.
+      thresholds: {
+        statements: 90,
+        branches: 85,
+        functions: 88,
+        lines: 90,
+      },
     },
   },
 });
