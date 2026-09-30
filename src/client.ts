@@ -744,6 +744,7 @@ export async function tinyfishSearch(
   const key = resolveApiKey(channel, {
     apiKey,
     credentialsPath,
+    env: options.env,
     tinyfishConfigPath,
   });
   requireKey(channel, key);
@@ -805,6 +806,7 @@ export async function tinyfishFetch(
   const key = resolveApiKey(channel, {
     apiKey,
     credentialsPath,
+    env: options.env,
     tinyfishConfigPath,
   });
   requireKey(channel, key);

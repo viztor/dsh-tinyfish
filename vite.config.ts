@@ -191,7 +191,7 @@ export default defineConfig({
       // Keeping it means the manifest, the docs and the ecosystem agree.
       outDir: "lib",
       platform: "node",
-      target: "node22",
+      target: "node24",
       // Only the host target cleans. If both did, whichever ran second would
       // delete the other's output.
       clean: true,
