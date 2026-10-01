@@ -90,43 +90,29 @@ try {
   // it matters and the failure would return.
   const inCI =
     process.env.CI === "true" || process.env.GITHUB_ACTIONS === "true";
-  // A web-login token requires a one-time password for publishing; an
-  // automation token does not. Two ways through, in order of preference:
+  // Authentication, exactly one route per registry:
   //
-  //   NPM_TOKEN=npm_xxx node scripts/publish-scoped.ts
-  //     An automation (or granular, publish-scoped) token, pasted once. No
-  //     code, no browser round-trip. Create one at npmjs.com → Access Tokens.
-  //     It is used for this publish only and never written to disk — the temp
-  //     npmrc below is deleted with the scratch dir.
+  // - npmjs: OIDC via the workflow's id-token. No secret exists to pass, so
+  //   there is nothing to configure here — the trust lives on npmjs.com.
+  // - GitHub Packages mirror: the workflow token (`NODE_AUTH_TOKEN`), because
+  //   GHP has no trusted-publisher concept and this is the only route.
+  // - Locally: nothing. Both names exist and CI publishes both, so there is
+  //   no manual publish left to support. A run outside CI with no mirror token
+  //   lets npm say what it needs rather than failing on a stale secret.
   //
-  //   NPM_OTP=123456 node scripts/publish-scoped.ts
-  //     The code the authenticator shows right now, for a web-login token.
-  //
-  // Absent both, the command runs as-is and npm says what it needs, which is
-  // a clearer failure than a stale cached secret.
-  const token = process.env.NPM_TOKEN?.trim();
-  const otp = process.env.NPM_OTP?.trim();
-  // The mirror authenticates with the workflow token, not OIDC: GitHub
-  // Packages has no trusted-publisher concept, so this is the only route.
+  // An earlier version also accepted pasted tokens and OTP codes for the
+  // manual first-publish of each name. Both names are out now, OIDC and the
+  // workflow token cover every repeat, and keeping those paths would be
+  // options nobody exercises — which is how a secret-handling branch survives
+  // untested until the day it mishandles one.
   const mirrorToken =
     registry === "https://registry.npmjs.org"
       ? undefined
       : process.env.NODE_AUTH_TOKEN?.trim();
-  // Exactly one auth route ever applies: an explicitly pasted token wins,
-  // then the mirror's workflow token, then nothing and npm says what it needs.
-  // Written as early returns rather than a nested ternary, which reads as a
-  // decision instead of a puzzle.
-  const npmrc = ((): string[] => {
-    if (token !== undefined && token !== "") {
-      const file = join(scratch, ".npmrc");
-      writeFileSync(file, `//${host}/:_authToken=${token}\n`, { mode: 0o600 });
-      return ["--userconfig", file];
-    }
-    if (mirrorToken !== undefined && mirrorToken !== "") {
-      return [`--//${host}/:_authToken=${mirrorToken}`];
-    }
-    return [];
-  })();
+  const npmrc: string[] =
+    mirrorToken !== undefined && mirrorToken !== ""
+      ? [`--//${host}/:_authToken=${mirrorToken}`]
+      : [];
   // Provenance attests to npmjs via the workflow's OIDC identity. The mirror
   // gets none: GitHub Packages accepts no attestation, and asserting one for
   // the wrong registry would fail the publish it is meant to protect.
@@ -139,7 +125,6 @@ try {
       scratch,
       `--registry=${registry}`,
       ...attest,
-      ...(otp ? ["--otp", otp] : []),
       ...npmrc,
       "--access",
       "public",
