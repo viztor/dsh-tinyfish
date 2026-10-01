@@ -322,17 +322,17 @@ export function resolveOptions(
     // `available()` rather than trusted, which is what makes accepting one from
     // the environment safe.
     monidBase:
-      readField(section, "monidBase") ||
-      env.TINYFISH_MONID_BASE_URL ||
-      DEFAULT_MONID_BASE,
+      readField(section, "monidBase").length > 0
+        ? readField(section, "monidBase")
+        : (env.TINYFISH_MONID_BASE_URL ?? DEFAULT_MONID_BASE),
     searchBase:
-      readField(section, "searchBase") ||
-      env.TINYFISH_SEARCH_BASE_URL ||
-      DEFAULT_SEARCH_BASE,
+      readField(section, "searchBase").length > 0
+        ? readField(section, "searchBase")
+        : (env.TINYFISH_SEARCH_BASE_URL ?? DEFAULT_SEARCH_BASE),
     fetchBase:
-      readField(section, "fetchBase") ||
-      env.TINYFISH_FETCH_BASE_URL ||
-      DEFAULT_FETCH_BASE,
+      readField(section, "fetchBase").length > 0
+        ? readField(section, "fetchBase")
+        : (env.TINYFISH_FETCH_BASE_URL ?? DEFAULT_FETCH_BASE),
     // A switch is off only when it says so. Anything absent or unusable means
     // "on", so a malformed value cannot silently disable a provider — the same
     // rule the channel default follows.

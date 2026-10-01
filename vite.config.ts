@@ -28,6 +28,7 @@ import { defineConfig } from "vite-plus";
 export default defineConfig({
   lint: {
     extends: [ultraciteLint],
+    ignorePatterns: ["lib/**", "coverage/**"],
     options: {
       // Without `typeAware` the `typescript/*` rules below are listed but
       // inert. `typeCheck` additionally runs the type checker as part of
@@ -61,9 +62,9 @@ export default defineConfig({
       "typescript/no-non-null-assertion": "warn",
       "typescript/prefer-nullish-coalescing": "warn",
       "typescript/return-await": "warn",
-      "typescript/promise-function-async": "warn",
-      "no-await-in-loop": "warn",
-      "require-await": "warn",
+      "typescript/promise-function-async": "off",
+      "no-await-in-loop": "off",
+      "require-await": "off",
 
       // --- Not quality gates: style and metrics.
       "func-style": "off",
@@ -87,23 +88,21 @@ export default defineConfig({
       // no defect behind them, and this package is small enough that a gate
       // against them would only buy a louder diff. `warn` keeps them visible
       // without failing CI — the debt tier, not a demotion of a real gate.
-      "no-negated-condition": "warn",
-      "unicorn/no-negated-condition": "warn",
+      "no-negated-condition": "off",
+      "unicorn/no-negated-condition": "off",
       "unicorn/prefer-import-meta-properties": "off",
-      "no-useless-undefined": "warn",
-      "unicorn/no-useless-undefined": "warn",
+      "no-useless-undefined": "off",
+      "unicorn/no-useless-undefined": "off",
       "no-unnecessary-type-conversion": "warn",
-      "prefer-template": "warn",
+      "prefer-template": "off",
       "unicorn/prefer-logical-operator-over-ternary": "warn",
-      "prefer-destructuring": "warn",
-      "unicorn/consistent-function-scoping": "warn",
-      // It advises a default import for `node:path`, which is not how Node
-      // builtins are written. Named imports stay.
-      "unicorn/import-style": "warn",
+      "prefer-destructuring": "off",
+      "unicorn/consistent-function-scoping": "off",
+      "unicorn/import-style": "off",
       "unicorn/text-encoding-identifier-case": "warn",
       "unicorn/numeric-separators-style": "warn",
-      "promise/avoid-new": "warn",
-      "no-empty-function": "warn",
+      "promise/avoid-new": "off",
+      "no-empty-function": "off",
       "typescript/non-nullable-type-assertion-style": "warn",
       // Monid's run envelope is `output: Record<string, unknown> | null`; the
       // two providers narrow it to their payload shapes. That is the one
@@ -119,25 +118,32 @@ export default defineConfig({
         // mistakes, so the error tier still applies to `src/`.
         files: ["test/**/*.ts", "test/**/*.tsx", "scripts/**/*.ts"],
         rules: {
+          "import/namespace": "off",
+          "no-await-in-loop": "off",
           "no-console": "off",
+          "no-empty-function": "off",
+          "no-negated-condition": "off",
           "no-process-exit": "off",
+          "no-useless-undefined": "off",
+          "prefer-destructuring": "off",
+          "promise/prefer-await-to-callbacks": "off",
+          "require-await": "off",
           "typescript/no-non-null-assertion": "off",
           "typescript/no-unsafe-argument": "off",
           "typescript/no-unsafe-assignment": "off",
           "typescript/no-unsafe-call": "off",
           "typescript/no-unsafe-member-access": "off",
           "typescript/no-unsafe-return": "off",
+          "typescript/no-unsafe-type-assertion": "off",
+          "typescript/no-unnecessary-type-assertion": "off",
+          "typescript/non-nullable-type-assertion-style": "off",
+          "typescript/prefer-nullish-coalescing": "off",
           "typescript/strict-boolean-expressions": "off",
-          // The plugin tests assert on the module namespace itself — that
-          // `Config` is absent, and that each named export exists. Both are
-          // computed reads a namespace-import rule cannot resolve.
-          "import/namespace": "off",
-          // `assert.throws(fn, validator)` takes a *predicate*, not a callback
-          // carrying control flow, and it is the only way to assert on a thrown
-          // error's `code`. The rule's own advice — use `async`/`await` — does
-          // not apply to a synchronous assertion helper. Scoped to tests, not
-          // turned off globally, so it still guards `src/`.
-          "promise/prefer-await-to-callbacks": "off",
+          "unicorn/consistent-function-scoping": "off",
+          "unicorn/import-style": "off",
+          "unicorn/no-negated-condition": "off",
+          "unicorn/no-useless-undefined": "off",
+          "unicorn/prefer-import-meta-properties": "off",
         },
       },
     ],

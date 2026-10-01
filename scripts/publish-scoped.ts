@@ -81,7 +81,7 @@ try {
   manifest.name = SCOPED;
   writeFileSync(
     join(scratch, "package.json"),
-    JSON.stringify(manifest, null, 2) + "\n"
+    `${JSON.stringify(manifest, null, 2)}\n`
   );
 
   const patchPath = join(scratch, "cordis.patch.yml");

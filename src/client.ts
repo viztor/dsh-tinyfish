@@ -232,7 +232,7 @@ const throwIfAborted = (signal?: AbortSignal): void => {
  * from the abandoned operation cannot become an unhandled rejection — the
  * usual failure mode of naively wrapping a promise in a race.
  */
-export async function abortable<T>(
+export function abortable<T>(
   operation: Promise<T>,
   signal?: AbortSignal
 ): Promise<T> {
@@ -254,7 +254,7 @@ export async function abortable<T>(
 }
 
 /** Sleep that rejects promptly when the caller's signal aborts. */
-async function sleep(ms: number, signal?: AbortSignal): Promise<void> {
+function sleep(ms: number, signal?: AbortSignal): Promise<void> {
   return new Promise((resolve, reject) => {
     if (signal?.aborted) {
       reject(aborted(signal));
@@ -789,7 +789,7 @@ export async function tinyfishSearch(
   const params: Record<string, string | number> = { query, ...filters };
 
   return withRetry<TinyfishSearchPayload>(
-    async () =>
+    () =>
       channel === "monid"
         ? searchMonid({
             key,
@@ -859,7 +859,7 @@ export async function tinyfishFetch(
   if (purpose) body.purpose = purpose;
 
   return withRetry<TinyfishFetchPayload>(
-    async () =>
+    () =>
       channel === "monid"
         ? fetchMonid({ key, base: monidBase, body, signal })
         : (call(fetchBase, {
