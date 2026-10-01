@@ -144,15 +144,7 @@ Slot declarations are `declare module` augmentations of `SlotMap`, and declaring
 
 ### Package artwork _is_ reachable: declare `icon` in the manifest
 
-The correction to the blanket claim above. The Plugins page renders
-`pkg.meta?.icon` through `PackageArtwork` on cards, rows, and detail headers,
-with a default fallback when absent — and the manifest `icon` field
-(`"icon": "./icon.svg"`, shipped in `files`) is how a third-party package
-populates it. `dsh-opencode` has done this all along; `dsh-tinyfish` did not
-until the fish moved from `assets/` to root `icon.svg`. So: names stay raw,
-artwork renders. The two `meta` sub-paths really are independent — one dead,
-one live — and any future claim about "no third-party mechanism" needs to
-name which one.
+The correction to the blanket claim above. The Plugins page renders `pkg.meta?.icon` through `PackageArtwork` on cards, rows, and detail headers, with a default fallback when absent — and the manifest `icon` field (`"icon": "./icon.svg"`, shipped in `files`) is how a third-party package populates it. `dsh-opencode` has done this all along; `dsh-tinyfish` did not until the fish moved from `assets/` to root `icon.svg`. So: names stay raw, artwork renders. The two `meta` sub-paths really are independent — one dead, one live — and any future claim about "no third-party mechanism" needs to name which one.
 
 ### The form API
 
