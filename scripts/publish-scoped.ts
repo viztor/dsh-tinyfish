@@ -81,7 +81,7 @@ try {
   // rather than adding a flag, because a flag would be forgotten exactly when
   // it matters and the failure would return.
   const inCI =
-    process.env["CI"] === "true" || process.env["GITHUB_ACTIONS"] === "true";
+    process.env.CI === "true" || process.env.GITHUB_ACTIONS === "true";
   execFileSync(
     "npm",
     [
