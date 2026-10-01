@@ -117,20 +117,33 @@ jobs:
       # The release claim, checked instead of assumed. Both names are advertised
       # as equivalent in README.md, so a mirror that silently lags the canonical
       # package is a broken promise the run has to surface.
+      #
+      # It polls, because a successful `npm publish` does not mean the version
+      # is readable yet: npm answers "Your package is being processed and may
+      # take a few minutes to become available", and an immediate `npm view`
+      # returns nothing. Checking once reported a healthy release as failed.
       - name: Verify every published target
         run: |
           version=$(node -p "require('./package.json').version")
-          missing=""
-          for spec in "dsh-tinyfish@$version" "@viztor/dsh-tinyfish@$version"; do
-            if npm view "$spec" version --registry=https://registry.npmjs.org >/dev/null 2>&1; then
-              echo "ok      $spec  (npmjs.org)"
-            else
-              echo "MISSING $spec  (npmjs.org)"
-              missing="$missing $spec"
+          pending="dsh-tinyfish@$version @viztor/dsh-tinyfish@$version"
+
+          for attempt in $(seq 1 12); do
+            still=""
+            for spec in $pending; do
+              if npm view "$spec" version --registry=https://registry.npmjs.org >/dev/null 2>&1; then
+                echo "ok      $spec  (npmjs.org)"
+              else
+                still="$still $spec"
+              fi
+            done
+            pending=$(echo "$still" | xargs)
+            if [ -z "$pending" ]; then
+              echo "every published target is live on npmjs.org"
+              exit 0
             fi
+            echo "attempt $attempt/12: waiting for npm to index:$pending"
+            sleep 15
           done
-          if [ -n "$missing" ]; then
-            echo "::error::these targets did not publish:$missing — register a Trusted Publisher for each at https://www.npmjs.com/package/<name>/access (repository viztor/dsh-tinyfish, workflow release.yml)"
-            exit 1
-          fi
-          echo "every published target is live on npmjs.org"
+
+          echo "::error::these targets did not publish:$pending — register a Trusted Publisher for each at https://www.npmjs.com/package/<name>/access (repository viztor/dsh-tinyfish, workflow release.yml)"
+          exit 1
