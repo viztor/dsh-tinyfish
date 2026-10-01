@@ -1,0 +1,25 @@
+name: dependency-review
+
+on:
+  pull_request:
+    paths:
+      - "package.json"
+      - "pnpm-lock.yaml"
+
+permissions:
+  contents: read
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    # A dependency change is the one change whose blast radius is invisible in
+    # the diff: a patch bump can pull in a compromised transitive package, and
+    # nothing in the source diff says so. This comments on the PR when a
+    # dependency introduces a known vulnerability or an incompatible license,
+    # before it merges rather than after it ships.
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/dependency-review-action@v4
+        with:
+          fail-on-severity: moderate
+          deny-licenses: GPL-2.0, GPL-3.0, AGPL-1.0, AGPL-3.0

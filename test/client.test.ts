@@ -149,6 +149,54 @@ test("resolveApiKey: reads the tinyfish CLI config", () => {
   }
 });
 
+test("resolveApiKey: tolerates Windows line endings in the CLI file", () => {
+  // An editor or a sync tool can leave `\r\n` behind. The key regex anchors on
+  // `$` with the multiline flag, and `\r` would become part of the captured
+  // key without the trailing `\s*` — sending a key with a carriage return
+  // that the upstream rejects as malformed rather than missing.
+  const dir = mkdtempSync(join(tmpdir(), "tf-monid-"));
+  try {
+    const file = join(dir, "credentials.yaml");
+    writeFileSync(
+      file,
+      ["keys:", "  main:", "    key: monid_live_win", ""].join("\r\n")
+    );
+    assert.equal(
+      resolveApiKey("monid", { env: NO_ENV, credentialsPath: file }),
+      "monid_live_win"
+    );
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("resolveApiKey: an active_key naming nothing falls back to the first key", () => {
+  // A rotated-out entry can leave `active_key` pointing at a name that no
+  // longer exists. Treating that as "no credential" would break a host that
+  // has a perfectly good key under another name; falling back keeps it working
+  // while the operator cleans up the file.
+  const dir = mkdtempSync(join(tmpdir(), "tf-monid-"));
+  try {
+    const file = join(dir, "credentials.yaml");
+    writeFileSync(
+      file,
+      [
+        "active_key: gone",
+        "keys:",
+        "  main:",
+        "    key: monid_live_only",
+        "",
+      ].join("\n")
+    );
+    assert.equal(
+      resolveApiKey("monid", { env: NO_ENV, credentialsPath: file }),
+      "monid_live_only"
+    );
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test("resolveApiKey: a missing or malformed store yields empty, not a throw", () => {
   assert.equal(
     resolveApiKey("monid", { env: NO_ENV, credentialsPath: "/nope/absent" }),

@@ -577,6 +577,31 @@ if (!releaseYml.includes("scripts/publish-scoped.ts")) {
   ok("release.yml publishes @viztor/dsh-tinyfish from the same tree");
 }
 
+/* ------------------------------------------ 11. the client stays lean */
+
+/**
+ * The client bundle ships to every browser that opens Settings, on every
+ * page load that includes it. It must stay small because it is parsed and
+ * evaluated before the page it belongs to can render — and because the most
+ * common way it grows is by accident: bundling React, the primitives, or a
+ * Node polyfill instead of leaving them external, which multiplies its size by
+ * an order of magnitude overnight.
+ *
+ * 25KB is generous headroom over today's ~15KB. It is a ceiling, not a target:
+ * a change that needs more room raises it deliberately, in the diff, with a
+ * reason — which is the point.
+ */
+const CLIENT_BUDGET = 25 * 1024;
+const clientStat = statSync(join(ROOT, "lib/client.js"));
+if (clientStat.size > CLIENT_BUDGET) {
+  fail(
+    `lib/client.js is ${clientStat.size} bytes, over the ${CLIENT_BUDGET} budget — ` +
+      "a dependency was likely bundled instead of left external"
+  );
+} else {
+  ok(`lib/client.js is ${clientStat.size} bytes, under budget`);
+}
+
 /* ------------------------------------------------------------------- report */
 
 for (const note of notes) console.log(`  ok   ${note}`);
