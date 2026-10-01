@@ -23,10 +23,10 @@ jobs:
     # with "not supported on this repository" on every PR — noise about a
     # setting, not about the code. Once enabled, findings still report; only
     # the hard failure waits for the feature to exist.
-    continue-on-error: true
     steps:
       - uses: actions/checkout@v7
       - uses: actions/dependency-review-action@v4
+        continue-on-error: true
         with:
           fail-on-severity: moderate
           deny-licenses: GPL-2.0, GPL-3.0, AGPL-1.0, AGPL-3.0
