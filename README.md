@@ -26,6 +26,27 @@ cd ~/.dsh/profiles/web
 npm install dsh-tinyfish   # or: npm install @viztor/dsh-tinyfish — same thing
 ```
 
+<details>
+<summary><strong>📦 Installing from GitHub Packages instead</strong></summary>
+
+<br />
+
+Every release mirrors both names to GitHub Packages — a second source if
+npmjs.org is unreachable, and what populates the repository sidebar. Unlike
+npmjs, GitHub Packages requires authentication even for public packages: an
+unauthenticated request 404s without saying whether the package exists. With
+a token carrying `read:packages`:
+
+```ini
+# project-local .npmrc is better than global for a token
+@viztor:registry=https://npm.pkg.github.com
+//npm.pkg.github.com/:_authToken=ghp_xxx
+```
+
+then `npm install @viztor/dsh-tinyfish` resolves from the mirror. Unless npmjs
+is down, prefer it: no token, no extra configuration.
+</details>
+
 **2. Mount it** — add to that profile's `package.json`, then restart DSH:
 
 ```jsonc
