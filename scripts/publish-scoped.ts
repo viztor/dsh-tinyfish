@@ -19,6 +19,7 @@
 import { execFileSync } from "node:child_process";
 import {
   cpSync,
+  existsSync,
   mkdtempSync,
   readFileSync,
   rmSync,
@@ -82,6 +83,15 @@ try {
     join(scratch, "package.json"),
     JSON.stringify(manifest, null, 2) + "\n"
   );
+
+  const patchPath = join(scratch, "cordis.patch.yml");
+  if (existsSync(patchPath)) {
+    const patchContent = readFileSync(patchPath, "utf8");
+    writeFileSync(
+      patchPath,
+      patchContent.replaceAll('name: "dsh-tinyfish"', `name: "${SCOPED}"`)
+    );
+  }
 
   // Provenance needs OIDC, which exists only in CI. Locally there is no
   // identity provider, so npm errors with "Automatic provenance generation
