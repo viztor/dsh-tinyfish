@@ -102,11 +102,9 @@ try {
     token !== undefined && token !== ""
       ? (() => {
           const file = join(scratch, ".npmrc");
-          writeFileSync(
-            file,
-            `//registry.npmjs.org/:_authToken=${token}\n`,
-            { mode: 0o600 }
-          );
+          writeFileSync(file, `//registry.npmjs.org/:_authToken=${token}\n`, {
+            mode: 0o600,
+          });
           return ["--userconfig", file];
         })()
       : [];
