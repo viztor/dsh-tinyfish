@@ -76,3 +76,15 @@ jobs:
           else
             npm publish --provenance --access public --ignore-scripts
           fi
+
+      # The same content under the organisation scope. `dsh-tinyfish` is the
+      # name DSH resolves and the docs use; `@viztor/dsh-tinyfish` is for
+      # consumers who install by scope. Published in the same job, from the
+      # same tree, so the two can never diverge — and with `--ignore-scripts`,
+      # because the step above already ran the full gate.
+      #
+      # Needs its own Trusted Publisher entry on npmjs.com: a scoped package is
+      # a separate package as far as the registry is concerned, so add
+      # `@viztor/dsh-tinyfish` with this same workflow file and action.
+      - name: Publish the scoped alias (OIDC, provenance)
+        run: node scripts/publish-scoped.ts

@@ -18,7 +18,11 @@ A DSH bundle that makes [TinyFish](https://tinyfish.ai) the implementation of th
 ```sh
 cd ~/.dsh/profiles/web
 npm install dsh-tinyfish
+# or, identically:
+npm install @viztor/dsh-tinyfish
 ```
+
+Both names ship the same content from the same release; `dsh-tinyfish` is the name DSH resolves and the docs use.
 
 Add the bundle to that profile's `package.json`, then restart DSH:
 

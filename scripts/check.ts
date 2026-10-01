@@ -557,6 +557,26 @@ for (const name of TOOLCHAIN) {
 }
 ok(`${TOOLCHAIN.length} toolchain scripts route through vp`);
 
+/* -------------------------------------------- 10. the scoped alias ships too */
+
+/**
+ * `@viztor/dsh-tinyfish` is the same content under the organisation scope, and
+ * the only thing keeping the two in sync is that one job publishes both from
+ * one tree. If the release workflow stops calling the scoped step — edited out
+ * in a hurry, lost in a merge — the unscoped package moves on and the alias
+ * silently goes stale, and a consumer on the scoped name gets an old plugin
+ * with no indication that it is old.
+ */
+const releaseYml = readFileSync(join(workflows, "release.yml"), "utf8");
+if (!releaseYml.includes("scripts/publish-scoped.ts")) {
+  fail(
+    "release.yml does not publish the scoped alias; @viztor/dsh-tinyfish " +
+      "would go stale while dsh-tinyfish moves on"
+  );
+} else {
+  ok("release.yml publishes @viztor/dsh-tinyfish from the same tree");
+}
+
 /* ------------------------------------------------------------------- report */
 
 for (const note of notes) console.log(`  ok   ${note}`);
