@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.1](https://github.com/viztor/dsh-tinyfish/compare/v0.4.0...v0.4.1) (2026-10-01)
+
+
+### Bug Fixes
+
+* mirror only the scoped name to GitHub Packages ([9270bba](https://github.com/viztor/dsh-tinyfish/commit/9270bba28e9837367ad55d18916f8233ddeb9d43))
+
 ## [0.4.0](https://github.com/viztor/dsh-tinyfish/compare/v0.3.0...v0.4.0) (2026-10-01)
 
 
