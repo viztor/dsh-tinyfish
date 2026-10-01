@@ -82,12 +82,19 @@ try {
   // it matters and the failure would return.
   const inCI =
     process.env.CI === "true" || process.env.GITHUB_ACTIONS === "true";
+  // A web-login token requires a one-time password for publishing; an
+  // automation token does not. Rather than demanding either, accept the code
+  // the authenticator shows right now: `NPM_OTP=123456 node
+  // scripts/publish-scoped.ts`. Absent, the command runs as-is and npm says
+  // what it needs, which is a clearer failure than a stale cached code.
+  const otp = process.env.NPM_OTP?.trim();
   execFileSync(
     "npm",
     [
       "publish",
       scratch,
       ...(inCI ? ["--provenance"] : []),
+      ...(otp ? ["--otp", otp] : []),
       "--access",
       "public",
       "--ignore-scripts",
