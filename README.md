@@ -1,36 +1,36 @@
-# dsh-tinyfish
+<div align="center">
+  <img src="assets/tinyfish.svg" alt="TinyFish logo" width="120" />
+  <h1>dsh-tinyfish</h1>
+  <p><strong>Free web search and fetch for the DeepSeek Harness.</strong><br />Give your agent the live web — at $0 per call.</p>
 
-<img src="assets/tinyfish.svg" alt="TinyFish logo" width="96" />
+[![npm](https://img.shields.io/npm/v/dsh-tinyfish.svg)](https://www.npmjs.com/package/dsh-tinyfish) [![downloads](https://img.shields.io/npm/dm/dsh-tinyfish.svg)](https://www.npmjs.com/package/dsh-tinyfish) [![ci](https://github.com/viztor/dsh-tinyfish/actions/workflows/ci.yml/badge.svg)](https://github.com/viztor/dsh-tinyfish/actions/workflows/ci.yml) [![license](https://img.shields.io/npm/l/dsh-tinyfish.svg)](https://github.com/viztor/dsh-tinyfish/blob/main/LICENSE)
 
-[![npm](https://img.shields.io/npm/v/dsh-tinyfish.svg)](https://www.npmjs.com/package/dsh-tinyfish) [![downloads](https://img.shields.io/npm/dm/dsh-tinyfish.svg)](https://www.npmjs.com/package/dsh-tinyfish) [![ci](https://github.com/viztor/dsh-tinyfish/actions/workflows/ci.yml/badge.svg)](https://github.com/viztor/dsh-tinyfish/actions/workflows/ci.yml) [![license](https://img.shields.io/npm/l/dsh-tinyfish.svg)](https://github.com/viztor/dsh-tinyfish/blob/main/LICENSE) [![node](https://img.shields.io/badge/node-%3E%3D22.14-5FA04E.svg)](https://nodejs.org)
+</div>
 
-**Search and fetch for the DeepSeek Harness, at $0.**
+---
 
-A DSH bundle that makes [TinyFish](https://tinyfish.ai) the implementation of the harness's own `web_search` and `web_fetch` tools. Both endpoints are free, so the web path on your host stops costing money per call.
+Your agent can already reason. This gives it something to reason _about_: live search results and clean page content, wired straight into the harness's own `web_search` and `web_fetch` tools. Powered by [TinyFish](https://tinyfish.ai) — both endpoints are free, so the web path on your host stops costing money per call.
 
-|  | `dsh-web`'s default | with `dsh-tinyfish` |
-| --- | --- | --- |
-| search | `deepseek-official` | TinyFish `/search` via Monid, **$0** |
-| fetch | `http` | TinyFish `/fetch`, **$0**, returns clean Markdown |
-| turndown conversion | yes, on every fetch | **no** — the content is already Markdown |
-| reversibility | — | two words, no reinstall |
+| Before | After |
+| --- | --- |
+| Search bills per call | **$0**, forever |
+| Fetched pages arrive as HTML, converted clumsily | **Clean Markdown**, straight from a browser-grade extractor |
+| Switching providers means reinstalling | **Two words** in a config file, no reinstall |
 
-## Install
+## 🚀 Quick start
+
+**1. Install** — in your web profile:
 
 ```sh
 cd ~/.dsh/profiles/web
-npm install dsh-tinyfish
-# or, identically:
-npm install @viztor/dsh-tinyfish
+npm install dsh-tinyfish   # or: npm install @viztor/dsh-tinyfish — same thing
 ```
 
-Both names ship the same content from the same release; `dsh-tinyfish` is the name DSH resolves and the docs use.
-
-Add the bundle to that profile's `package.json`, then restart DSH:
+**2. Mount it** — add to that profile's `package.json`, then restart DSH:
 
 ```jsonc
 {
-  "dependencies": { "dsh-tinyfish": "^0.2.0" },
+  "dependencies": { "dsh-tinyfish": "^0.3.0" },
   "dsh": {
     "profile": {
       "bundles": [
@@ -43,52 +43,20 @@ Add the bundle to that profile's `package.json`, then restart DSH:
 }
 ```
 
-That is the whole install. The bundle's own `cordis.patch.yml` selects itself:
+> Bundles resolve at boot, so a restart picks it up — reloading the patch alone won't.
 
-```yaml
-- id: web
-  name: "@deepseek-ai/dsh-web"
-  config:
-    searchProvider: tinyfish
-    fetchProvider: tinyfish
-```
+**3. Add a key** — pick a channel below, save the key, and ask your agent to search for something. That's the whole install.
 
-Restarting matters: bundles are resolved when the harness boots, so `patchReload` will not pick up a newly mounted one.
+## 🔑 Two channels, one plugin
 
-**To go back**, set those two back to `deepseek-official` and `http`. The bundle stays mounted and idle — registration and selection are separate, and only your profile decides which provider wins.
-
-**Requirements:** DSH **0.2.0+**, Node **22.14+**, and a credential (below). The harness supplies the `@deepseek-ai/*` peer packages; you do not install them.
-
-## Verify
-
-Ask the agent to search for something. Or check the wiring without an agent:
-
-```sh
-cd ~/.dsh/profiles/web
-node -e '
-  const m = require("dsh-tinyfish");
-  const ctx = { web: { registerSearchProvider(){}, registerFetchProvider(){} }, get: () => undefined };
-  m.apply(ctx, m.Config({}));
-  console.log("registered:", m.name, "| no throw above = wired");
-'
-```
-
-If search reports `WEB_PROVIDER_CREDENTIAL_MISSING` or `WEB_PROVIDER_UNAVAILABLE`, that is the next section.
-
-## Credentials
-
-A fresh install has none, and never will — a key inside an npm tarball would be published forever. Both endpoints are free, but both need an account.
-
-**In the profile patch (no restart needed).** The `web-tinyfish` row in your profile's `cordis.patch.yml` sets `apiKeyEnv`, which the harness resolves through its credentials service and the launch environment, and re-reads on every call — so a change takes effect on the next search.
-
-**By hand:**
-
-| channel | get a key | then |
+|  | Direct _(default)_ | Via Monid |
 | --- | --- | --- |
-| `direct` default | [tinyfish.ai](https://tinyfish.ai) → API keys | `tinyfish auth login`, or `echo $KEY \| tinyfish auth set` |
-| `monid` | [app.monid.ai](https://app.monid.ai) | `monid keys add`, or `export MONID_API_KEY` |
+| What's behind it | TinyFish's own API | The same TinyFish endpoints, through your Monid wallet |
+| You need | A free key from [tinyfish.ai](https://tinyfish.ai) | A platform key from [app.monid.ai](https://app.monid.ai) |
+| Fastest setup | `tinyfish auth login` | `monid keys add` |
+| Costs | $0 | $0 |
 
-The default is `direct` because the package is named for TinyFish: a fresh install asks for the credential its own name implies rather than for an account at a different service. If you would rather go through Monid — it reuses a platform key a Monid MCP mount already holds, and costs the same — pin it in your own profile patch, which is a host decision and does not need a new release of this plugin:
+The default is `direct`, because the package is named for TinyFish — a fresh install asks for the credential its own name implies. Prefer Monid (it reuses a platform key your Monid MCP mount may already hold)? Pin it in your profile patch:
 
 ```yaml
 - id: web-tinyfish
@@ -96,31 +64,38 @@ The default is `direct` because the package is named for TinyFish: a fresh insta
     channel: monid
 ```
 
-Resolution order, first match wins: a literal `apiKey` in the settings row → the harness credentials service → the launch environment → the live environment → the CLI stores. A failing credential service falls through to the next source rather than failing the search.
+Both keys can live side by side — saving one never overwrites the other, and switching channels loses nothing.
 
-## Configuration
+## ⚙️ Settings page
 
-Everything lives in one row, `web-tinyfish`, edited in your profile's `cordis.patch.yml`. The row is validated, so an out-of-range value is rejected with a message rather than silently clamped.
+**Settings → Plugins → TinyFish.** Everything editable lives here: the channel picker, your keys, what the search ranks on, retries, and the search/fetch toggles. Changes stage and save together; a key you type is stored by the harness, never in your profile.
 
-**Settings → Plugins → TinyFish** edits this row, if you prefer a form to a patch file. The plugin ships both halves: the provider the harness loads, and a client bundle that contributes the page. Changes are staged and written on save, and a key you type is stored by the harness rather than in your profile.
+The page shows the key for the **selected** channel, plus the saved-or-not status of both — so you always know where you stand without switching back and forth.
 
-The patch file is still the honest place for the first edit — it is where a selection that overrides someone else's layer belongs, and it needs no build. Use whichever suits the change.
+> Going back is two words: set `searchProvider`/`fetchProvider` to `deepseek-official` and `http`. The bundle stays mounted and idle.
+
+<details>
+<summary><strong>📖 Full configuration reference</strong></summary>
+
+<br />
+
+Everything lives in one row, `web-tinyfish`. The row is validated, so an out-of-range value is rejected with a message rather than silently clamped.
 
 | key | default | meaning |
 | --- | --- | --- |
-| `channel` | `direct` | `monid` or `direct`; see [Credentials](#credentials) |
+| `channel` | `direct` | `monid` or `direct` |
 | `apiKey` | _(unset)_ | literal credential for either channel; prefer a ref |
 | `apiKeyEnv` | `TINYFISH_API_KEY` | credential reference, or env var, for `direct` |
 | `monidKeyEnv` | `MONID_API_KEY` | credential reference, or env var, for `monid` |
 | `purpose` | _(unset)_ | goal statement; TinyFish ranks on it |
 | `attempts` | `3` | retries for a transient failure or an empty search (1–5) |
-| `filters.domainType` | _(unset)_ | `web` \| `news` \| `research_paper` — patch file only, see below |
+| `filters.domainType` | _(unset)_ | `web` \| `news` \| `research_paper` — patch file only |
 | `filters.language` / `.location` | _(unset)_ | geo targeting — patch file only |
 | `filters.includeDomains` / `.excludeDomains` | _(unset)_ | comma-separated — patch file only |
 | `monidBase` / `searchBase` / `fetchBase` | upstream | endpoint override, for staging |
 | `search` / `fetch` | `true` | offer this kind at all; `false` declines without unregistering |
 
-Search and fetch are switched independently. Both always register, so turning one off makes it report _unavailable_ rather than _missing_ — the harness tells those apart, and only the second means "I turned this off" rather than "the install is broken".
+Turning one off reports _unavailable_ rather than _missing_ — the harness tells those apart, and only the second means "the install is broken".
 
 ```yaml
 - id: web-tinyfish
@@ -129,9 +104,9 @@ Search and fetch are switched independently. Both always register, so turning on
     fetch: false # keep TinyFish for search, let dsh-web use another fetch
 ```
 
-### Filters live in the patch file, not the settings page
+### Filters live in the patch file
 
-`filters` is a nested object (`domainType`, `language`, `location`, `includeDomains`, `excludeDomains`), and the settings form can only address top-level keys — one field, one path, no dotted traversal. Flattening the schema would make them editable but would break every existing `filters:` block, and the official search page keeps tuning out of the UI for the same reason. So search tuning stays operator-level:
+`filters` is a nested object, and the settings form addresses one flat key per field — so search tuning stays operator-level:
 
 ```yaml
 - id: web-tinyfish
@@ -143,9 +118,21 @@ Search and fetch are switched independently. Both always register, so turning on
       includeDomains: arxiv.org,openreview.net
 ```
 
-### Where a value comes from
+### Where a credential comes from
 
-Every setting resolves in the same three rungs — **row, then environment, then built-in default** — so a deployment can be retargeted without writing a patch file. This is the shape the shipped providers use for `$DEEPSEEK_SEARCH_BASE_URL`.
+Resolved **per call** — a rotated key takes effect on the next search, no restart. First match wins:
+
+1. the `apiKey` literal in the row (a secret in config; prefer 2–3)
+2. the credentials service — `apiKeyEnv` (direct) or `monidKeyEnv` (monid), saved from the settings UI
+3. the launch environment (exported before DSH started)
+4. the live environment (`MONID_API_KEY` / `TINYFISH_API_KEY`)
+5. the channel's CLI store (`monid keys add` / `tinyfish auth login`)
+
+A failing service falls through to the next source rather than failing the search.
+
+### Where an endpoint comes from
+
+Row, then environment, then built-in default — so staging can retarget without a patch:
 
 | setting      | environment variable       |
 | ------------ | -------------------------- |
@@ -153,73 +140,40 @@ Every setting resolves in the same three rungs — **row, then environment, then
 | `searchBase` | `TINYFISH_SEARCH_BASE_URL` |
 | `fetchBase`  | `TINYFISH_FETCH_BASE_URL`  |
 
-An endpoint that does not parse makes the provider report itself unavailable rather than being trusted.
+</details>
 
-### The credential, in order
+<details>
+<summary><strong>🔍 Behaviour worth knowing</strong></summary>
 
-Resolved **per call**, so a key rotated anywhere below takes effect on the next search with no restart. First match wins:
-
-| # | source | set it by |
-| --- | --- | --- |
-| 1 | the `apiKey` literal | the row — a secret in config; prefer 2–3 |
-| 2 | the credentials service | `apiKeyEnv` (direct) or `monidKeyEnv` (monid) in the settings UI |
-| 3 | the launch environment | exported before DSH started |
-| 4 | the live environment | `MONID_API_KEY` / `TINYFISH_API_KEY` |
-| 5 | the channel's CLI store | `monid keys add` / `tinyfish auth login` |
-
-The harness services sit above the environment on purpose: a value someone typed into Settings is a more deliberate choice than one that merely happens to be exported. A failing service falls through to the next source rather than failing the search, and a host that mounts neither still works.
-
-### Two keys, one settings page
-
-The two channels authenticate against different services, so each has **its own** credential reference: `apiKeyEnv` (default `TINYFISH_API_KEY`) for `direct`, and `monidKeyEnv` (default `MONID_API_KEY`) for `monid`. Saving one never overwrites the other, so both can be live at once and switching channels back and forth loses nothing.
-
-The page shows the key for the **selected** channel only. Showing both at once would invite pasting the Monid platform key into the field TinyFish authenticates with — and a key sent to the wrong service fails as a 401, which reads as "that key is wrong" rather than as "that was the wrong field". The `apiKey` literal still overrides either channel; it exists for a patch file, and the settings page does not write it.
-
-## Why the fetch path is a real improvement
-
-`dsh-tool-web` renders a `kind: "html"` body by running **turndown** to convert HTML to Markdown, behind a depth cap with a `"[HTML content omitted]"` fallback. TinyFish already extracts clean Markdown in a browser-grade extractor, so this provider returns `kind: "text"` and the content reaches the model with no conversion step at all.
-
-## Two channels, one payload
-
-Monid is a thin envelope whose `output` is the direct response verbatim, and it forwards parameter names unchanged. One transport serves both, and nothing above it branches on which is active — a test asserts the two agree on the top hit for the same query.
-
-|        | `direct` (default)           | `monid`                    |
-| ------ | ---------------------------- | -------------------------- |
-| search | `GET api.search.tinyfish.ai` | `POST api.monid.ai/v1/run` |
-| fetch  | `POST api.fetch.tinyfish.ai` | `POST api.monid.ai/v1/run` |
-| auth   | `X-API-Key`                  | `Authorization: Bearer`    |
-| cost   | $0, direct                   | $0, on the Monid wallet    |
-
-## Behaviour worth knowing
+<br />
 
 - **A 404 is a result, not an error.** A per-URL fetch failure comes back carrying its status, because that is resource state the model needs.
-- **`publishedAt` is honest.** TinyFish reports dates as human strings (`"Apr 30, 2026"`, `"1 year ago"`). What parses is coerced to ISO-8601; what does not is dropped rather than invented. Unzoned dates are read as UTC, so the same page reports the same day regardless of where the Worker ran.
-- **Search retries an empty result.** The upstream answers a valid query with nothing about one run in three, so a blank result is retried up to `attempts` before it is believed.
-- **A blocked run is terminal.** If a Monid workspace control stops a run, the error says why and links to top up. It is never retried.
+- **`publishedAt` is honest.** TinyFish reports human dates (`"Apr 30, 2026"`, `"1 year ago"`). What parses becomes ISO-8601; what doesn't is dropped, never invented. Unzoned dates read as UTC, so the same page reports the same day everywhere.
+- **Empty searches retry.** The upstream answers a valid query with nothing about one run in three — a blank result is retried up to `attempts` before it is believed.
+- **A blocked run is terminal.** If a Monid workspace control stops a run, the error says why and links to top up. Never retried.
 
-## Not included
+TinyFish's `agent` and `browser` surfaces are **not** exposed: metered, wallet-billed, and not a search or a fetch. Use the `tinyfish` CLI directly when a page genuinely needs a real browser.
 
-TinyFish's `agent` and `browser` surfaces are **not** exposed. They cost $0.016/step and $0.002/min, are metered against a wallet, and do not fit `ctx.web` — that seam has exactly two provider kinds, and an agent run is an action, not a search or a fetch. Use the `tinyfish` CLI directly when a page genuinely needs a real browser.
+</details>
 
-## Development
+<details>
+<summary><strong>🛠 Development</strong></summary>
 
-The toolchain is [Vite+](https://viteplus.dev): `vp pack` builds the library with tsdown, `vp test` runs Vitest, and `vp lint` / `vp fmt` are Oxlint and Oxfmt, type-aware. Lint and format settings live in the `lint` and `fmt` blocks of `vite.config.ts` — Vite+ disables nested Oxlint/Oxfmt configs, so a standalone `oxlint.config.ts` would be read by nobody.
+<br />
+
+The toolchain is [Vite+](https://viteplus.dev): `vp pack` builds with tsdown, `vp test` runs Vitest, `vp lint` / `vp fmt` are Oxlint and Oxfmt, type-aware. Lint and format live in `vite.config.ts` — Vite+ ignores standalone configs.
 
 ```sh
 pnpm install
-pnpm test               # 78 hermetic tests — no network, no credential
+pnpm test               # 143 hermetic tests — no network, no credential
 pnpm run check          # format + lint + types
-pnpm run release:gate   # build, then the full gate
+pnpm run release:gate   # build, then the full gate incl. 11 package checks
 pnpm run test:live      # the real APIs, still $0, needs credentials
 ```
 
-`pnpm run ci` ends in one script, `scripts/check.mjs`, that runs six package checks in a single pass: `lib/` freshness, peer ranges npm can parse, the bundle contract, the harness surfaces still being present, no credentials in the tree, and — the one that earns its keep — packing the tarball, installing it with plain npm, and loading it. Each is proved by planting the regression it guards, and CI runs all of it.
+Requires **DSH 0.2.0+** and **Node 22.14+**. Full process and invariants: [`AGENTS.md`](./AGENTS.md). Contributing: [`CONTRIBUTING.md`](./CONTRIBUTING.md).
 
-Full process and invariants: [`AGENTS.md`](./AGENTS.md).
-
-## Compatibility
-
-Requires **DSH 0.2.0+**; tested against 0.2.0-rc.1. The `@deepseek-ai/dsh-*` peers are `^0.2.0-rc.1`, so a DSH patch release will not orphan the plugin, and a 0.3 contract change still fails loudly rather than silently.
+</details>
 
 ## License
 
