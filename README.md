@@ -26,6 +26,12 @@ cd ~/.dsh/profiles/web
 npm install dsh-tinyfish   # or: npm install @viztor/dsh-tinyfish — same thing
 ```
 
+Pick **one** name and install it once. Both tarballs carry byte-identical code
+and read the same settings (providers register as `tinyfish`, configuration
+lives under the row id `web-tinyfish`, credentials under the same two refs) —
+so switching names later loses nothing, but mounting both loads the bundle
+twice. `dsh-tinyfish` is the name DSH convention and these docs use.
+
 <details>
 <summary><strong>📦 Installing from GitHub Packages instead</strong></summary>
 

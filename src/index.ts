@@ -157,7 +157,17 @@ export const Config = z.object({
 /** Cordis service dependencies. */
 export const inject = ["web"];
 
-/** The bundle name. Must equal the manifest `name`: the loader matches on it. */
+/**
+ * The bundle name, as the code calls itself.
+ *
+ * This does NOT have to equal the manifest `name`: `dsh-opencode` ships as
+ * `@viztor/dsh-opencode` while exporting `dsh-opencode`, and mounts fine.
+ * Package identity is the install path (`node_modules/dsh-tinyfish` vs
+ * `node_modules/@viztor/dsh-tinyfish`); the providers register as `tinyfish`
+ * and the settings live under the row id `web-tinyfish`, so either install
+ * name reads and writes the same settings. Install exactly one — mounting
+ * both loads the bundle twice.
+ */
 export const name = "dsh-tinyfish";
 
 /**
