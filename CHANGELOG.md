@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.1](https://github.com/viztor/dsh-tinyfish/compare/v0.6.0...v0.6.1) (2026-10-01)
+
+
+### Bug Fixes
+
+* publish safely, register every published name, and ship plugin metadata ([7623b1f](https://github.com/viztor/dsh-tinyfish/commit/7623b1f12f1c8f13667fe40f358c769c0bd98d06))
+
 ## [0.6.0](https://github.com/viztor/dsh-tinyfish/compare/v0.5.0...v0.6.0) (2026-10-01)
 
 
