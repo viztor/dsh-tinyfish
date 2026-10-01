@@ -17,6 +17,13 @@ jobs:
     # nothing in the source diff says so. This comments on the PR when a
     # dependency introduces a known vulnerability or an incompatible license,
     # before it merges rather than after it ships.
+    #
+    # Non-blocking until the repository enables Dependency graph
+    # (Settings → Security → Dependency graph). Without it the action fails
+    # with "not supported on this repository" on every PR — noise about a
+    # setting, not about the code. Once enabled, findings still report; only
+    # the hard failure waits for the feature to exist.
+    continue-on-error: true
     steps:
       - uses: actions/checkout@v7
       - uses: actions/dependency-review-action@v4
