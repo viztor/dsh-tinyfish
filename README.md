@@ -31,7 +31,7 @@ npm install dsh-tinyfish   # or: npm install @viztor/dsh-tinyfish — same thing
 
 <br />
 
-Every release mirrors both names to GitHub Packages — a second source if npmjs.org is unreachable, and what populates the repository sidebar. Unlike npmjs, GitHub Packages requires authentication even for public packages: an unauthenticated request 404s without saying whether the package exists. With a token carrying `read:packages`:
+Every release mirrors `@viztor/dsh-tinyfish` to GitHub Packages — a second source if npmjs.org is unreachable, and what populates the repository sidebar. Only the scoped name mirrors: GitHub links packages to repositories by owner scope. Unlike npmjs, GitHub Packages requires authentication even for public packages: an unauthenticated request 404s without saying whether the package exists. With a token carrying `read:packages`:
 
 ```ini
 # project-local .npmrc is better than global for a token
