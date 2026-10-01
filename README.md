@@ -19,7 +19,21 @@ Your agent can already reason. This gives it something to reason _about_: live s
 
 ## 🚀 Quick start
 
-**1. Install** — in your web profile:
+### Method 1: Direct from Web UI (Recommended)
+
+DeepSeek Harness allows installing plugins directly through the Web interface without touching a terminal:
+
+1. Open DSH Web → **Settings → Plugins** (设置 → 插件).
+2. Click **Install Plugin** (添加插件).
+3. Search or enter `dsh-tinyfish` (or `@viztor/dsh-tinyfish`).
+4. Click **Install** — DSH automatically fetches the package from npm, builds the bundle patch, and activates it live without restarting!
+5. In **Settings → Plugins → TinyFish**, select your channel (`direct` or `monid`), enter your API key, and hit **Save**!
+
+---
+
+### Method 2: Terminal / Profile `package.json`
+
+For headless environments, servers, or version-controlled dotfiles:
 
 ```sh
 cd ~/.dsh/profiles/web
@@ -44,11 +58,11 @@ Every release mirrors `@viztor/dsh-tinyfish` to GitHub Packages — a second sou
 then `npm install @viztor/dsh-tinyfish` resolves from the mirror. Unless npmjs is down, prefer it: no token, no extra configuration.
 </details>
 
-**2. Mount it** — add to that profile's `package.json`, then restart DSH:
+**Mount it** — add to that profile's `package.json`, then restart DSH:
 
 ```jsonc
 {
-  "dependencies": { "dsh-tinyfish": "^0.3.0" },
+  "dependencies": { "dsh-tinyfish": "^0.5.0" },
   "dsh": {
     "profile": {
       "bundles": [
@@ -63,7 +77,7 @@ then `npm install @viztor/dsh-tinyfish` resolves from the mirror. Unless npmjs i
 
 > Bundles resolve at boot, so a restart picks it up — reloading the patch alone won't.
 
-**3. Add a key** — pick a channel below, save the key, and ask your agent to search for something. That's the whole install.
+**Add a key** — pick a channel below, save the key, and ask your agent to search for something. That's the whole install.
 
 ## 🔑 Two channels, one plugin
 
