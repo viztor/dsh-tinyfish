@@ -43,7 +43,7 @@ interface TestState {
     failed: boolean;
   };
   fields: Record<string, TestField>;
-  keys: Record<string, { text: string; named: boolean }>;
+  keys: Record<string, { text: string; named: boolean; ref: string }>;
 }
 
 /** One staged edit the card records. */
@@ -308,8 +308,8 @@ function state(
     },
     fields,
     keys: {
-      direct: { text: "", named: false },
-      monid: { text: "", named: false },
+      direct: { text: "", named: false, ref: "TINYFISH_API_KEY" },
+      monid: { text: "", named: false, ref: "MONID_API_KEY" },
     },
   };
 }
@@ -621,4 +621,14 @@ test("a parseable boolean draft saves", async () => {
   injected.edit("fetch", "FALSE");
   assert.equal(await injected.save(), true);
   assert.deepEqual(Object.keys(written), [], "a boolean writes no credential");
+});
+
+test("both keys' status shows regardless of the selected channel", () => {
+  // A user on direct cannot otherwise tell whether their monid key is saved
+  // without switching channels and looking. The status names each reference,
+  // so an operator can also verify where a key lives.
+  const { tree } = render({});
+  const all = texts(tree).join(" ");
+  assert.ok(all.includes("TINYFISH_API_KEY"), "names the direct reference");
+  assert.ok(all.includes("MONID_API_KEY"), "and the monid reference");
 });

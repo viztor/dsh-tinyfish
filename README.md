@@ -114,9 +114,9 @@ The patch file is still the honest place for the first edit — it is where a se
 | `monidKeyEnv` | `MONID_API_KEY` | credential reference, or env var, for `monid` |
 | `purpose` | _(unset)_ | goal statement; TinyFish ranks on it |
 | `attempts` | `3` | retries for a transient failure or an empty search (1–5) |
-| `filters.domainType` | _(unset)_ | `web` \| `news` \| `research_paper` |
-| `filters.language` / `.location` | _(unset)_ | geo targeting |
-| `filters.includeDomains` / `.excludeDomains` | _(unset)_ | comma-separated |
+| `filters.domainType` | _(unset)_ | `web` \| `news` \| `research_paper` — patch file only, see below |
+| `filters.language` / `.location` | _(unset)_ | geo targeting — patch file only |
+| `filters.includeDomains` / `.excludeDomains` | _(unset)_ | comma-separated — patch file only |
 | `monidBase` / `searchBase` / `fetchBase` | upstream | endpoint override, for staging |
 | `search` / `fetch` | `true` | offer this kind at all; `false` declines without unregistering |
 
@@ -127,6 +127,20 @@ Search and fetch are switched independently. Both always register, so turning on
   config:
     search: true
     fetch: false # keep TinyFish for search, let dsh-web use another fetch
+```
+
+### Filters live in the patch file, not the settings page
+
+`filters` is a nested object (`domainType`, `language`, `location`, `includeDomains`, `excludeDomains`), and the settings form can only address top-level keys — one field, one path, no dotted traversal. Flattening the schema would make them editable but would break every existing `filters:` block, and the official search page keeps tuning out of the UI for the same reason. So search tuning stays operator-level:
+
+```yaml
+- id: web-tinyfish
+  config:
+    channel: monid
+    filters:
+      domainType: research_paper
+      language: zh
+      includeDomains: arxiv.org,openreview.net
 ```
 
 ### Where a value comes from

@@ -170,7 +170,7 @@ interface CardState {
    * will actually send. Both are published: switching channels must not lose
    * the draft for the other one.
    */
-  keys: Record<string, { text: string; named: boolean }>;
+  keys: Record<string, { text: string; named: boolean; ref: string }>;
 }
 
 /** What the slot hands the card: the view asked for, copy, state, and actions. Exported so tests stay in sync by construction. */
@@ -392,6 +392,15 @@ function TinyfishCard(props: CardProps) {
           state.fields[FIELD.channel]?.overridden ?? false
         )}
       </div>
+      <p>
+        {t("apiKey")}:{" "}
+        {(state.keys.direct?.named ?? false)
+          ? t("apiKeySet")
+          : t("apiKeyUnset")}{" "}
+        ({state.keys.direct?.ref ?? DEFAULT_API_KEY_REF}) · {t("monidApiKey")}:{" "}
+        {(state.keys.monid?.named ?? false) ? t("apiKeySet") : t("apiKeyUnset")}{" "}
+        ({state.keys.monid?.ref ?? DEFAULT_MONID_KEY_REF})
+      </p>
       <SettingsSecretField
         id={`plugin-config-tinyfish-${keyChannel}`}
         label={channel === "monid" ? t("monidApiKey") : t("apiKey")}
@@ -520,10 +529,12 @@ export function apply(ctx: ClientContext) {
         text: model.field(FIELD.apiKey).text,
         // Synchronous: does the accepted section name a reference of its own?
         named: refOf(scope.getSnapshot(), "direct") !== DEFAULT_API_KEY_REF,
+        ref: refOf(scope.getSnapshot(), "direct"),
       },
       monid: {
         text: model.field(FIELD.monidApiKey).text,
         named: refOf(scope.getSnapshot(), "monid") !== DEFAULT_MONID_KEY_REF,
+        ref: refOf(scope.getSnapshot(), "monid"),
       },
     },
   }));

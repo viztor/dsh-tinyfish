@@ -91,8 +91,8 @@ interface ModelCall {
 
 /** One key entry per channel, as the store publishes it. */
 interface CardKeys {
-  direct: { text: string; named: boolean };
-  monid: { text: string; named: boolean };
+  direct: { text: string; named: boolean; ref: string };
+  monid: { text: string; named: boolean; ref: string };
 }
 
 /**
@@ -619,8 +619,8 @@ function renderCard(sectionValue: Record<string, unknown> = {}): unknown {
     },
     fields,
     keys: {
-      direct: { text: "", named: false },
-      monid: { text: "", named: false },
+      direct: { text: "", named: false, ref: "TINYFISH_API_KEY" },
+      monid: { text: "", named: false, ref: "MONID_API_KEY" },
     },
   };
   // Patch the fields the card reads so unset keys resolve like the real model:
