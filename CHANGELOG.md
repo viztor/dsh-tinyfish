@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.5.0](https://github.com/viztor/dsh-tinyfish/compare/v0.4.1...v0.5.0) (2026-10-01)
+
+
+### Features
+
+* declare the package icon the harness actually renders ([eb6ebcb](https://github.com/viztor/dsh-tinyfish/commit/eb6ebcb55e45d2bfa9145ef6cb76fdd3b085d798))
+
+
+### Bug Fixes
+
+* align locale.register return type with effect disposer signature ([2e64b29](https://github.com/viztor/dsh-tinyfish/commit/2e64b29c144fc6392a67bf45122942ece753daad))
+* align settings namespace and row ID from web-tinyfish to dsh-tinyfish ([6cfa4ca](https://github.com/viztor/dsh-tinyfish/commit/6cfa4caf6b9bdcace99917d78b472a068a7e55f0))
+
 ## [0.4.1](https://github.com/viztor/dsh-tinyfish/compare/v0.4.0...v0.4.1) (2026-10-01)
 
 
