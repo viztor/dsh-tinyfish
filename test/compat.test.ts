@@ -1,11 +1,13 @@
 import assert from "node:assert/strict";
 
+import type { Context } from "@deepseek-ai/cordis";
 import { test } from "vitest";
 
 import * as plugin from "../src/index.ts";
 import {
   TinyfishFetchProvider,
   TinyfishSearchProvider,
+  type TinyfishProviderOptions,
 } from "../src/provider.ts";
 
 /**
@@ -24,7 +26,7 @@ import {
  */
 
 /** A stand-in for another registered provider. */
-function foreignProvider(id) {
+function foreignProvider(id: string) {
   return {
     id,
     available: () => true,
@@ -38,28 +40,59 @@ function foreignProvider(id) {
   };
 }
 
+/** A provider as the seam sees it: an id plus the methods the test drives. */
+interface TestProvider {
+  id: string;
+  available: () => boolean;
+  [key: string]: unknown;
+}
+
+/** What `ctx.effect` accumulates: disposers to run in reverse on unload. */
+type Disposer = () => void;
+
 /** A `ctx.web` that enforces the seam's duplicate rule. */
-function registry() {
-  const search = new Map();
-  const fetch = new Map();
+function registry(): {
+  search: Map<string, TestProvider>;
+  fetch: Map<string, TestProvider>;
+  effects: Disposer[];
+  unload: () => void;
+  ctx: {
+    effect: (body: () => Generator<Disposer, void, void>) => Disposer;
+    web: {
+      registerSearchProvider: (provider: TestProvider) => void;
+      registerFetchProvider: (provider: TestProvider) => void;
+    };
+  };
+} {
+  const search = new Map<string, TestProvider>();
+  const fetch = new Map<string, TestProvider>();
   // Every `ctx.effect` the plugin's fiber accumulates. Unloading a Cordis plugin
   // runs these in reverse, which is how a registration is torn down.
-  const effects = [];
-  const effect = (body) => {
-    const disposers = [];
+  const effects: Disposer[] = [];
+  const effect = (body: () => Generator<Disposer, void, void>): Disposer => {
+    const disposers: Disposer[] = [];
     // The real registry passes a generator that yields its unregister
     // disposer: `ctx.effect(function* () { store.set(...); yield () => ... })`.
     for (const yielded of body()) disposers.push(yielded);
     effects.push(() => {
-      for (const dispose of disposers.toReversed()) dispose();
+      // oxlint-disable-next-line unicorn/no-array-reverse -- the type env lacks toReversed; spread-then-reverse is the same copy
+      for (const dispose of [...disposers].reverse()) dispose();
     });
     return () => {
-      for (const dispose of disposers.splice(0).toReversed()) dispose();
+      // oxlint-disable-next-line unicorn/no-array-reverse -- splice already copies; reverse runs on the copy
+      for (const dispose of disposers.splice(0).reverse()) dispose();
     };
   };
-  const register = (store, provider) => {
+  const register = (
+    store: Map<string, TestProvider>,
+    provider: TestProvider
+  ): void => {
     if (store.has(provider.id)) {
-      const error = new Error(`duplicate web provider ${provider.id}`);
+      const error = new Error(
+        `duplicate web provider ${provider.id}`
+      ) as Error & {
+        code?: string;
+      };
       error.code = "WEB_DUPLICATE_PROVIDER";
       throw error;
     }
@@ -82,7 +115,8 @@ function registry() {
      * destructured safely.
      */
     unload: () => {
-      for (const dispose of effects.splice(0).toReversed()) dispose();
+      // oxlint-disable-next-line unicorn/no-array-reverse -- splice already copies; reverse runs on the copy
+      for (const dispose of effects.splice(0).reverse()) dispose();
     },
     ctx: {
       effect,
@@ -104,19 +138,21 @@ function bootWithHarnessProviders() {
   // What dsh-web ships, always present in a real profile.
   ctx.web.registerSearchProvider(foreignProvider("deepseek-official"));
   ctx.web.registerFetchProvider(foreignProvider("http"));
-  plugin.apply(ctx, plugin.Config({}));
+  plugin.apply(ctx as unknown as Context, plugin.Config({}));
   return { search, fetch };
 }
 
 test("it registers alongside the providers DSH ships", () => {
   const { search, fetch } = bootWithHarnessProviders();
   assert.deepEqual(
-    [...search.keys()].toSorted((a, b) => a.localeCompare(b)),
+    // oxlint-disable-next-line unicorn/no-array-sort -- the type env lacks toSorted; sort runs on a spread copy
+    [...search.keys()].sort((a, b) => a.localeCompare(b)),
     ["deepseek-official", "tinyfish"],
     "both search providers coexist under distinct ids"
   );
   assert.deepEqual(
-    [...fetch.keys()].toSorted((a, b) => a.localeCompare(b)),
+    // oxlint-disable-next-line unicorn/no-array-sort -- the type env lacks toSorted; sort runs on a spread copy
+    [...fetch.keys()].sort((a, b) => a.localeCompare(b)),
     ["http", "tinyfish"],
     "both fetch providers coexist under distinct ids"
   );
@@ -138,12 +174,14 @@ test("registering the bundle twice is rejected by the registry, not silently", (
   // (two profiles, or a duplicate entry in `bundles`), the harness must say so
   // rather than quietly running whichever won.
   const { ctx } = registry();
-  plugin.apply(ctx, plugin.Config({}));
+  plugin.apply(ctx as unknown as Context, plugin.Config({}));
   assert.throws(
     () => {
-      plugin.apply(ctx, plugin.Config({}));
+      plugin.apply(ctx as unknown as Context, plugin.Config({}));
     },
-    (error) => error.code === "WEB_DUPLICATE_PROVIDER"
+    (error: unknown): boolean =>
+      error instanceof Error &&
+      (error as Error & { code?: unknown }).code === "WEB_DUPLICATE_PROVIDER"
   );
 });
 
@@ -153,7 +191,7 @@ test("unloading the plugin removes both registrations", () => {
   // asserting rather than trusting: a plugin that discarded a disposer it was
   // supposed to keep would leave its providers registered forever.
   const { ctx, search, fetch, unload } = registry();
-  plugin.apply(ctx, plugin.Config({}));
+  plugin.apply(ctx as unknown as Context, plugin.Config({}));
   assert.equal(search.size, 1);
   assert.equal(fetch.size, 1);
 
@@ -167,9 +205,9 @@ test("the plugin can be reloaded, which a leaked registration would prevent", ()
   // fiber, a second `apply` would hit WEB_DUPLICATE_PROVIDER — so reloading is
   // the observable consequence of a lifecycle bug, not just a tidy-up.
   const { ctx, search, fetch, unload } = registry();
-  plugin.apply(ctx, plugin.Config({}));
+  plugin.apply(ctx as unknown as Context, plugin.Config({}));
   unload();
-  plugin.apply(ctx, plugin.Config({}));
+  plugin.apply(ctx as unknown as Context, plugin.Config({}));
   assert.equal(search.size, 1, "reload re-registers rather than throwing");
   assert.equal(fetch.size, 1);
 });
@@ -195,19 +233,26 @@ test("the profile's selection resolves to this provider, and back again", () => 
 test("a provider it does not own is never consulted", () => {
   // The adapter is constructed directly here, so this asserts the class does
   // not reach for a foreign id: it only ever speaks to its own transport.
-  const provider = new TinyfishSearchProvider(() => ({
-    channel: "monid",
-    apiKey: "k",
-    apiKeyEnv: "TINYFISH_API_KEY",
-    filters: {},
-    attempts: 1,
-    monidBase: "https://api.monid.ai",
-    searchBase: "https://api.search.tinyfish.ai",
-    fetchBase: "https://api.fetch.tinyfish.ai",
-  }));
+  const provider = new TinyfishSearchProvider(
+    () =>
+      ({
+        channel: "monid",
+        apiKey: "k",
+        apiKeyEnv: "TINYFISH_API_KEY",
+        filters: {},
+        attempts: 1,
+        monidBase: "https://api.monid.ai",
+        searchBase: "https://api.search.tinyfish.ai",
+        fetchBase: "https://api.fetch.tinyfish.ai",
+      }) as unknown as TinyfishProviderOptions
+  );
   assert.equal(provider.id, "tinyfish");
   assert.equal(typeof provider.search, "function");
-  assert.equal(new TinyfishFetchProvider(() => ({})).id, "tinyfish");
+  assert.equal(
+    new TinyfishFetchProvider(() => ({}) as unknown as TinyfishProviderOptions)
+      .id,
+    "tinyfish"
+  );
 });
 
 test("a settings row from another patch layer still resolves", () => {
@@ -219,8 +264,7 @@ test("a settings row from another patch layer still resolves", () => {
   const validated = plugin.Config({ channel: "direct", attempts: 5 });
   const raw = { channel: "direct", attempts: 5 };
 
-  /** @type {Array<[string, unknown]>} */
-  const pairs = [
+  const pairs: [string, unknown][] = [
     ["validated", validated],
     ["raw", raw],
   ];
@@ -262,9 +306,9 @@ test("the shipped providers are untouched by loading this bundle", async () => {
   // A foreign provider's `available()` must still be reachable and stable —
   // loading the bundle must not mutate another provider's state.
   const { search } = bootWithHarnessProviders();
-  const shipped = search.get("deepseek-official");
+  const shipped = search.get("deepseek-official")!;
   const before = shipped.available();
-  const mine = search.get("tinyfish");
+  const mine = search.get("tinyfish")!;
   mine.available();
   assert.equal(
     shipped.available(),

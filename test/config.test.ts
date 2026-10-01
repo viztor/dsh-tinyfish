@@ -26,15 +26,28 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import type { Context } from "@deepseek-ai/cordis";
 import { afterAll, test } from "vitest";
 
-import { resolveApiKey, resolveApiKeyAsync } from "../src/client.ts";
-import { Config, apply, resolveOptions } from "../src/index.ts";
+import {
+  resolveApiKey,
+  resolveApiKeyAsync,
+  type CredentialResolver,
+} from "../src/client.ts";
+import {
+  Config,
+  WebError,
+  apply,
+  resolveOptions,
+  type TinyfishFetchProvider,
+  type TinyfishProviderOptions,
+  type TinyfishSearchProvider,
+} from "../src/index.ts";
 
 /* --------------------------------------------------------------- helpers */
 
 const scratch = mkdtempSync(join(tmpdir(), "dsh-config-"));
-const store = (name, body) => {
+const store = (name: string, body: string): string => {
   const path = join(scratch, name);
   writeFileSync(path, body);
   return path;
@@ -58,7 +71,19 @@ const tinyfishStore = store(
  * against the schema's own key list, so a field added to the schema without a
  * row here fails rather than passing quietly.
  */
-const FIELDS = [
+/**
+ * One row of the field contract: the option key under test, the value an
+ * unset row yields, a distinct valid value that must round-trip, and the
+ * value an unusable value degrades to.
+ */
+interface FieldFixture {
+  name: keyof TinyfishProviderOptions;
+  default: unknown;
+  set: unknown;
+  junk: unknown;
+}
+
+const FIELDS: FieldFixture[] = [
   { name: "channel", default: "direct", set: "monid", junk: "direct" },
   {
     name: "apiKeyEnv",
@@ -107,11 +132,13 @@ test("every schema field has a stated default and a stated junk behaviour", () =
   // Driven off the schema itself: `Config({})` is a validated section, and a
   // validated section carries a node for every key the schema declares.
   const validated = Config({});
-  const declared = Object.keys(validated).toSorted();
+  // oxlint-disable-next-line unicorn/no-array-sort -- `.toSorted()` is not in the lib this file is checked against (TS2550); `Object.keys` returns a fresh array, so in-place sort mutates nothing shared.
+  const declared = Object.keys(validated).sort();
 
   assert.deepEqual(
     declared.filter((k) => k !== "apiKey" && k !== "filters"),
-    FIELDS.map((f) => f.name).toSorted(),
+    // oxlint-disable-next-line unicorn/no-array-sort -- as above: `.map()` returns a fresh array, and `.toSorted()` is unavailable here.
+    FIELDS.map((f) => f.name).sort(),
     "the table covers the schema exactly — a new field must be given a default here"
   );
 
@@ -160,7 +187,14 @@ test("a validated row and a raw row resolve identically", () => {
   // The two shapes reach `resolveOptions` from different layers: the harness
   // validates a patch row before the plugin sees it, while a row this plugin
   // never validated arrives raw. They must not disagree about a default.
-  const cases = [{}, { channel: "monid" }, { attempts: 5 }, { apiKeyEnv: "X" }];
+  // Typed as the schema's own input so each row is checked where it is
+  // written; an untyped array would widen to a union the schema rejects.
+  const cases: Parameters<typeof Config>[0][] = [
+    {},
+    { channel: "monid" },
+    { attempts: 5 },
+    { apiKeyEnv: "X" },
+  ];
   for (const row of cases) {
     const label = JSON.stringify(row);
     assert.deepEqual(
@@ -193,7 +227,7 @@ test("1. a literal apiKey outranks every other source", async () => {
     apiKey: "  literal  ",
     env: { MONID_API_KEY: "env" },
     apiKeyEnv: "MY_KEY",
-    resolveCredential: async () => ({ value: "settings" }),
+    resolveCredential: async () => "settings",
     credentialsPath: monidStore,
   });
   assert.equal(key, "literal", "trimmed, and nothing below it is consulted");
@@ -229,7 +263,7 @@ test("the CLI store is the last resort, and is per-channel", async () => {
 });
 
 test("no source means no key, and no throw", () => {
-  for (const channel of ["monid", "direct"]) {
+  for (const channel of ["monid", "direct"] as const) {
     assert.equal(
       resolveApiKey(channel, {
         env: {},
@@ -291,10 +325,12 @@ test("an aborted caller never gets a key, even from a service that would answer"
       env: { MONID_API_KEY: "env" },
       signal: controller.signal,
       apiKeyEnv: "MY_KEY",
-      resolveCredential: async () => ({ value: "settings" }),
+      resolveCredential: async () => "settings",
       credentialsPath: monidStore,
     }),
-    (error) => error.code === "WEB_ABORTED" || error.name === "AbortError",
+    (error: unknown) =>
+      (error instanceof Error && error.name === "AbortError") ||
+      (error instanceof WebError && error.code === "WEB_ABORTED"),
     "the guard runs before the resolver is invoked, so a cancelled lookup never starts"
   );
 });
@@ -309,26 +345,50 @@ test("an aborted caller never gets a key, even from a service that would answer"
  * the registered provider.
  */
 
+/** Arguments for the harness-context stub; every service is optional. */
+interface CtxWithArgs {
+  credential?: string;
+  ambient?: string;
+  withCredentials?: boolean;
+  withLaunch?: boolean;
+}
+
+/** The slice of `Context` the plugin's `apply` actually touches. */
+interface CtxStub {
+  get: (name: string) => unknown;
+}
+
+/** The slice of `ctx.web` the plugin registers into, plus what was kept. */
+interface WebStub {
+  registerSearchProvider: (p: TinyfishSearchProvider) => void;
+  registerFetchProvider: (p: TinyfishFetchProvider) => void;
+  __search?: TinyfishSearchProvider;
+  __fetch?: TinyfishFetchProvider;
+}
+
 function ctxWith({
   credential,
   ambient,
   withCredentials = true,
   withLaunch = true,
-}) {
+}: CtxWithArgs): CtxStub {
   const services = {
     // `credentialRef(name)` returns the plain string, not a wrapper object — an
     // earlier version of this stub looked for `.name` and matched nothing, which
     // read as the launch environment winning when the service simply never fired.
     credentials: {
-      resolve: async (ref) =>
+      resolve: async (
+        ref: string
+      ): Promise<{ value: string | undefined } | undefined> =>
         ref === "MY_KEY" ? { value: credential } : undefined,
     },
     launchEnvironment: {
-      get: (ref) => (ref === "MY_KEY" ? { value: ambient } : undefined),
+      get: (ref: string): { value: string | undefined } | undefined =>
+        ref === "MY_KEY" ? { value: ambient } : undefined,
     },
   };
   return {
-    get: (name) => {
+    get: (name: string): unknown => {
       if (name === "credentials") {
         if (!withCredentials) throw new Error("service not mounted");
         return services.credentials;
@@ -342,18 +402,29 @@ function ctxWith({
   };
 }
 
-async function resolverFrom(base) {
-  const ctx = {
-    get: base.get,
-    web: {
-      registerSearchProvider: (p) => (ctx.web.__search = p),
-      registerFetchProvider: (p) => (ctx.web.__fetch = p),
+async function resolverFrom(base: CtxStub): Promise<CredentialResolver> {
+  const web: WebStub = {
+    registerSearchProvider: (p) => {
+      web.__search = p;
+    },
+    registerFetchProvider: (p) => {
+      web.__fetch = p;
     },
   };
-  const registered = {};
-  apply(ctx, {}); // `apply(ctx, config)` — the seam comes from the context.
+  const ctx = {
+    get: base.get,
+    web,
+  };
+  const registered: { search?: unknown } = {};
+  // A stub, not a `Context`: `as` is the alternative to redeclaring Cordis.
+  apply(ctx as unknown as Context, {}); // `apply(ctx, config)` — the seam comes from the context.
   registered.search = ctx.web.__search;
-  return registered.search.resolveOptions().resolveCredential;
+  // `resolveOptions` is private on the provider; read it through a structural
+  // cast rather than widening the class for the test.
+  const provider = registered.search as
+    | { resolveOptions: () => TinyfishProviderOptions }
+    | undefined;
+  return provider?.resolveOptions().resolveCredential as CredentialResolver;
 }
 
 test("2. the credentials service outranks the launch environment", async () => {
@@ -438,11 +509,14 @@ test("endpoints resolve config row, then environment, then built-in default", ()
     "https://api.search.tinyfish.ai",
     "and the built-in default stands when both are silent"
   );
-  for (const [field, variable] of [
+  // Typed as option keys so the indexing below stays checked; a typo'd
+  // field name fails here rather than reading `undefined` at runtime.
+  const endpointFields: [keyof TinyfishProviderOptions, string][] = [
     ["monidBase", "TINYFISH_MONID_BASE_URL"],
     ["searchBase", "TINYFISH_SEARCH_BASE_URL"],
     ["fetchBase", "TINYFISH_FETCH_BASE_URL"],
-  ]) {
+  ];
+  for (const [field, variable] of endpointFields) {
     assert.equal(
       resolveOptions({}, undefined, { [variable]: "https://env.example" })[
         field

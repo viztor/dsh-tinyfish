@@ -113,11 +113,11 @@ export default defineConfig({
     },
     overrides: [
       {
-        // Tests and validators are plain scripts with no type information, so
-        // the type-aware rules cannot resolve `node:test` or `node:assert` and
-        // report every call as an `error`-typed value. The fleet's script
-        // override turns the unsafe family off here for exactly this reason.
-        files: ["test/**/*.mjs", "scripts/**/*.mjs"],
+        // Tests and scripts stay small and direct rather than fully typed, so
+        // the unsafe family is relaxed here. The fleet's script override turns
+        // it off for exactly this reason; what it must not do is silence real
+        // mistakes, so the error tier still applies to `src/`.
+        files: ["test/**/*.ts", "test/**/*.tsx", "scripts/**/*.ts"],
         rules: {
           "no-console": "off",
           "no-process-exit": "off",
@@ -241,7 +241,7 @@ export default defineConfig({
     // `projects` entry looked like the tidier answer and was not: it inherited
     // this block's `include`, so `--project live` re-ran every unit test under
     // a second name. Two files say plainly what each run covers.
-    include: ["test/**/*.test.mjs"],
+    include: ["test/**/*.test.ts", "test/**/*.test.tsx"],
     exclude: ["test/integration/**"],
     // The UI primitives are external in the browser bundle — the host supplies
     // them — and outside the host they do not resolve: the package imports

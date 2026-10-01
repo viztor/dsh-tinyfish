@@ -1,11 +1,30 @@
 /**
  * Test helpers: a fetch stub and a couple of envelope builders.
  *
- * Every unit test drives the transport through `stubFetch` rather than the
- * network, so the suite is deterministic and free. The live suite in
- * `integration/live.test.mjs` is the one that talks to the real APIs, and it
+ * Every unit test drives the transport through `withStubbedFetch` rather than
+ * the network, so the suite is deterministic and free. The live suite in
+ * `integration/live.test.ts` is the one that talks to the real APIs, and it
  * is skipped unless `DSH_TINYFISH_LIVE=1`.
  */
+
+/** What a stubbed call records, and what a route can answer with. */
+export interface StubCall {
+  url: string;
+  init: RequestInit;
+  headers: Record<string, string>;
+}
+
+export interface StubResponse {
+  status?: number;
+  body?: unknown;
+  text?: string;
+  invalidJson?: boolean;
+}
+
+export interface StubRoute {
+  match?: RegExp | string;
+  respond: (call: StubCall) => StubResponse;
+}
 
 /**
  * Reduce `fetch`'s `RequestInfo` to the string a route is matched against.
@@ -14,7 +33,7 @@
  * "[object Request]" and a plain object to "[object Object]". Either would turn
  * a route mismatch into something that looks like a transport bug.
  */
-function requestInfoToUrl(url) {
+function requestInfoToUrl(url: string | URL | Request): string {
   if (typeof url === "string") return url;
   if (url instanceof URL) return url.href;
   return url.url;
@@ -23,23 +42,24 @@ function requestInfoToUrl(url) {
 /**
  * Replace `globalThis.fetch` with a queue-driven stub for the duration of `fn`.
  *
- * @param {Array<{ match?: RegExp | string, respond: (req: {url: string, init: object}) => {status?: number, body?: unknown, text?: string} }>} routes
- *   Consumed in order. The last route repeats once exhausted, so a test that
- *   does not care about call count can supply exactly one.
- * @param {() => Promise<unknown>} fn
- * @returns {Promise<{ result: unknown, calls: object[] }>}
+ * Routes are consumed in order. The last route repeats once exhausted, so a
+ * test that does not care about call count can supply exactly one.
  */
-export async function withStubbedFetch(routes, fn) {
+export async function withStubbedFetch<T>(
+  routes: StubRoute[],
+  fn: () => Promise<T>
+): Promise<{ result: T; calls: StubCall[] }> {
   const original = globalThis.fetch;
-  const calls = [];
+  const calls: StubCall[] = [];
   let index = 0;
 
-  globalThis.fetch = async (url, init = {}) => {
-    // `RequestInfo` is `string | URL | Request`. Stringifying a `Request` gives
-    // "[object Request]" and a bare object gives "[object Object]", either of
-    // which would make a route mismatch look like a transport bug.
+  globalThis.fetch = (async (
+    url: string | URL | Request,
+    init: RequestInit = {}
+  ) => {
     const target = requestInfoToUrl(url);
-    const call = { url: target, init, headers: init.headers ?? {} };
+    const headers = (init.headers ?? {}) as Record<string, string>;
+    const call: StubCall = { url: target, init, headers };
     calls.push(call);
     const route = routes[Math.min(index, routes.length - 1)];
     index += 1;
@@ -50,15 +70,15 @@ export async function withStubbedFetch(routes, fn) {
     return {
       ok: status >= 200 && status < 300,
       status,
-      json: async () => {
+      json: async (): Promise<unknown> => {
         if (out.invalidJson) throw new SyntaxError("Unexpected token");
         return typeof out.body === "string"
-          ? JSON.parse(out.body)
+          ? (JSON.parse(out.body) as unknown)
           : (out.body ?? {});
       },
-      text: async () => body,
-    };
-  };
+      text: async (): Promise<string> => body,
+    } satisfies Pick<Response, "ok" | "status" | "json" | "text">;
+  }) as typeof fetch;
 
   try {
     const result = await fn();
@@ -68,8 +88,22 @@ export async function withStubbedFetch(routes, fn) {
   }
 }
 
+/** A search hit, with only the fields a test cares about. */
+export interface StubHit {
+  position: number;
+  site_name: string;
+  title: string;
+  snippet: string;
+  url: string;
+  date: string;
+  [key: string]: unknown;
+}
+
 /** A completed Monid run envelope carrying TinyFish's search payload. */
-export function searchEnvelope(results, extra = {}) {
+export function searchEnvelope(
+  results: StubHit[],
+  extra: Record<string, unknown> = {}
+): Record<string, unknown> {
   return {
     runId: "run_1",
     status: "COMPLETED",
@@ -79,7 +113,10 @@ export function searchEnvelope(results, extra = {}) {
 }
 
 /** A completed Monid run envelope carrying TinyFish's fetch payload. */
-export function fetchEnvelope(results = [], errors = []) {
+export function fetchEnvelope(
+  results: unknown[] = [],
+  errors: unknown[] = []
+): Record<string, unknown> {
   return {
     runId: "run_1",
     status: "COMPLETED",
@@ -88,7 +125,7 @@ export function fetchEnvelope(results = [], errors = []) {
 }
 
 /** One TinyFish search hit, with only the fields a test cares about. */
-export function hit(overrides = {}) {
+export function hit(overrides: Partial<StubHit> = {}): StubHit {
   return {
     position: 1,
     site_name: "example.com",
@@ -101,6 +138,6 @@ export function hit(overrides = {}) {
 }
 
 /** An abort signal that has already fired. */
-export function abortedSignal(reason = "caller cancelled") {
+export function abortedSignal(reason = "caller cancelled"): AbortSignal {
   return AbortSignal.abort(reason);
 }

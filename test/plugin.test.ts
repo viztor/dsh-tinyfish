@@ -9,25 +9,57 @@
 
 import assert from "node:assert/strict";
 
+import type { Context } from "@deepseek-ai/cordis";
 // Assertions stay on `node:assert` so that a failure here can only be the runner
 // swap, never an assertion-library rewrite.
 import { test } from "vitest";
 
 import * as plugin from "../src/index.ts";
+import type { TinyfishProviderOptions } from "../src/provider.ts";
 
 /** Read a validated schema node, or pass a plain value through. */
-const readNode = (node) =>
-  typeof node?.get === "function" ? node.get() : node;
+const readNode = (node: unknown): unknown =>
+  typeof node === "object" &&
+  node !== null &&
+  "get" in node &&
+  typeof (node as { get: unknown }).get === "function"
+    ? (node as { get: () => unknown }).get()
+    : node;
+
+/** A provider the stub registry records. */
+interface StubProvider {
+  readonly id: string;
+  resolveOptions: () => TinyfishProviderOptions;
+}
+
+/** What the stub registry records. */
+interface StubRegistry {
+  search: StubProvider;
+  fetch: StubProvider;
+}
+
+/** The stub context: just `web`, plus an optional `get` for service tests. */
+interface StubContext {
+  web: {
+    registerSearchProvider: (provider: StubProvider) => void;
+    registerFetchProvider: (provider: StubProvider) => void;
+  };
+  get?: (service: string) => unknown;
+}
 
 /** Minimal `ctx.web` stub that records what gets registered. */
-function stubContext() {
-  const registered = {};
+function stubContext(): { registered: StubRegistry; ctx: StubContext } {
+  const registered = {} as StubRegistry;
   return {
     registered,
     ctx: {
       web: {
-        registerSearchProvider: (p) => (registered.search = p),
-        registerFetchProvider: (p) => (registered.fetch = p),
+        registerSearchProvider: (p: StubProvider): void => {
+          registered.search = p;
+        },
+        registerFetchProvider: (p: StubProvider): void => {
+          registered.fetch = p;
+        },
       },
     },
   };
@@ -78,7 +110,7 @@ test("the Config schema accepts both channels and rejects a third", () => {
     "unset falls back, never undefined"
   );
   assert.throws(
-    () => plugin.Config({ channel: "carrier-pigeon" }),
+    () => plugin.Config({ channel: "carrier-pigeon" as unknown as "direct" }),
     "rejects an unknown channel"
   );
 });
@@ -109,7 +141,7 @@ test("an unknown key is preserved rather than stripped, so a typo is visible", (
 
 test("apply registers both seam kinds under one id", () => {
   const { ctx, registered } = stubContext();
-  plugin.apply(ctx, {});
+  plugin.apply(ctx as unknown as Context, {});
   assert.ok(registered.search, "search provider registered");
   assert.ok(registered.fetch, "fetch provider registered");
   assert.equal(registered.search.id, "tinyfish");
@@ -118,7 +150,7 @@ test("apply registers both seam kinds under one id", () => {
 
 test("apply works with no config at all", () => {
   const { ctx, registered } = stubContext();
-  plugin.apply(ctx);
+  plugin.apply(ctx as unknown as Context);
   assert.equal(registered.search.id, "tinyfish");
 });
 
@@ -128,7 +160,7 @@ test("config: channel defaults to direct, and accepts monid explicitly", () => {
   // account at a different service. A host that prefers the Monid envelope
   // pins it in its own patch layer, which is why the "unset" cases below land
   // on `direct` and not on the channel a user might have preferred.
-  assert.equal(plugin.resolveOptions().channel, "direct");
+  assert.equal(plugin.resolveOptions(undefined).channel, "direct");
   assert.equal(plugin.resolveOptions({ channel: "monid" }).channel, "monid");
   assert.equal(plugin.resolveOptions({ channel: "direct" }).channel, "direct");
 
@@ -154,7 +186,7 @@ test("config: channel defaults to direct, and accepts monid explicitly", () => {
 });
 
 test("config: attempts is clamped to the range the retry loop honours", () => {
-  assert.equal(plugin.resolveOptions().attempts, 3);
+  assert.equal(plugin.resolveOptions(undefined).attempts, 3);
   assert.equal(plugin.resolveOptions({ attempts: 0 }).attempts, 1);
   assert.equal(plugin.resolveOptions({ attempts: 1 }).attempts, 1);
   assert.equal(plugin.resolveOptions({ attempts: 5 }).attempts, 5);
@@ -164,7 +196,7 @@ test("config: attempts is clamped to the range the retry loop honours", () => {
 });
 
 test("config: base URLs have defaults and accept overrides", () => {
-  const d = plugin.resolveOptions();
+  const d = plugin.resolveOptions(undefined);
   assert.equal(d.monidBase, "https://api.monid.ai");
   assert.equal(d.searchBase, "https://api.search.tinyfish.ai");
   assert.equal(d.fetchBase, "https://api.fetch.tinyfish.ai");
@@ -197,7 +229,7 @@ test("config: harness camelCase filters become upstream snake_case", () => {
 });
 
 test("config: empty and absent filters contribute nothing", () => {
-  assert.deepEqual(plugin.resolveOptions().filters, {});
+  assert.deepEqual(plugin.resolveOptions(undefined).filters, {});
   assert.deepEqual(plugin.resolveOptions({ filters: {} }).filters, {});
   assert.deepEqual(
     plugin.resolveOptions({ filters: { language: "", location: undefined } })
@@ -221,7 +253,7 @@ test("the options thunk re-reads config on each call, so a settings change takes
   const originalApply = plugin.apply;
   // Re-apply with a mutable config object to observe the thunk's behaviour.
   assert.equal(typeof originalApply, "function");
-  originalApply(ctx, config);
+  originalApply(ctx as unknown as Context, config);
   const before = registered.search.resolveOptions().channel;
   config.channel = "direct";
   const after = registered.search.resolveOptions().channel;
@@ -234,32 +266,38 @@ test("the credentials service is wired, not merely accepted", async () => {
   // option that nothing in `apply` ever supplied, so the documented
   // integration with the harness credentials service did not exist at all.
   // The plugin must build the lookup from `ctx` and hand it to the providers.
-  const asked = [];
-  let provider;
+  const asked: string[] = [];
+  let provider: StubProvider | undefined;
   const ctx = {
-    get: (service) =>
+    get: (
+      service: string
+    ):
+      | {
+          resolve: (ref: string) => Promise<{ value: string; source: string }>;
+        }
+      | undefined =>
       service === "credentials"
         ? {
-            resolve: async (ref) => {
+            resolve: async (ref: string) => {
               asked.push(ref);
               return { value: "stored-key", source: "file" };
             },
           }
         : undefined,
     web: {
-      registerSearchProvider: (p) => {
+      registerSearchProvider: (p: StubProvider): void => {
         provider = p;
       },
-      registerFetchProvider: () => {},
+      registerFetchProvider: (): void => {},
     },
   };
 
-  plugin.apply(ctx, { apiKeyEnv: "TINYFISH_API_KEY" });
+  plugin.apply(ctx as unknown as Context, { apiKeyEnv: "TINYFISH_API_KEY" });
   assert.ok(provider, "a search provider was registered");
 
   const resolver = provider.resolveOptions().resolveCredential;
   assert.equal(typeof resolver, "function", "the lookup was built from ctx");
-  assert.equal(await resolver("TINYFISH_API_KEY"), "stored-key");
+  assert.equal(await resolver?.("TINYFISH_API_KEY"), "stored-key");
   assert.equal(asked.length, 1, "the host service was actually called");
 });
 
@@ -269,20 +307,20 @@ test("a ctx with no credentials service still loads", () => {
   const { ctx } = stubContext();
   ctx.get = () => {};
   assert.doesNotThrow(() => {
-    plugin.apply(ctx, {});
+    plugin.apply(ctx as unknown as Context, {});
   });
 });
 
 test("a ctx with no get at all still loads", () => {
   const { ctx } = stubContext();
   assert.doesNotThrow(() => {
-    plugin.apply(ctx, {});
+    plugin.apply(ctx as unknown as Context, {});
   });
 });
 
 test("both providers share one config view", () => {
   const { ctx, registered } = stubContext();
-  plugin.apply(ctx, { channel: "direct", attempts: 2 });
+  plugin.apply(ctx as unknown as Context, { channel: "direct", attempts: 2 });
   assert.equal(registered.search.resolveOptions().channel, "direct");
   assert.equal(registered.fetch.resolveOptions().channel, "direct");
   assert.equal(registered.fetch.resolveOptions().attempts, 2);
@@ -301,7 +339,7 @@ test("the client surface is re-exported for consumers and tests", () => {
     "TinyfishFetchProvider",
     "toIsoDate",
     "resolveOptions",
-  ]) {
+  ] as const) {
     assert.ok(plugin[name] !== undefined, `${name} is exported`);
   }
 });

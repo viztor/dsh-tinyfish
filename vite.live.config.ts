@@ -16,7 +16,7 @@ import { defineConfig } from "vite-plus";
 export default defineConfig({
   test: {
     name: "live",
-    include: ["test/integration/**/*.test.mjs"],
+    include: ["test/integration/**/*.test.ts"],
     // A generous ceiling: the upstream occasionally answers a valid search
     // with nothing, which the client retries by design.
     testTimeout: 30_000,

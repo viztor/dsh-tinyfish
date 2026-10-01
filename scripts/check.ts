@@ -29,6 +29,7 @@
  *   node scripts/check.mjs
  */
 
+import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import {
   existsSync,
@@ -43,11 +44,15 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const failures = [];
-const notes = [];
+const failures: string[] = [];
+const notes: string[] = [];
 
-const fail = (message) => failures.push(message);
-const ok = (message) => notes.push(message);
+const fail = (message: string): void => {
+  failures.push(message);
+};
+const ok = (message: string): void => {
+  notes.push(message);
+};
 
 const pkg = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8"));
 
@@ -63,7 +68,7 @@ const pkg = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8"));
  * step of every flow this runs in, and comparing against it would be comparing
  * a build to itself.
  */
-function newestMtime(dir) {
+function newestMtime(dir: string): number {
   let newest = 0;
   for (const name of readdirSync(dir, { recursive: true })) {
     const full = join(dir, String(name));
@@ -98,7 +103,9 @@ if (!existsSync(lib)) {
  * An exact pin is the other failure: it satisfies npm and orphans the plugin
  * on every DSH prerelease, with a per-machine exemption as the only remedy.
  */
-for (const [name, range] of Object.entries(pkg.peerDependencies ?? {})) {
+for (const [name, range] of Object.entries(
+  (pkg.peerDependencies ?? {}) as Record<string, unknown>
+)) {
   if (typeof range !== "string" || range.trim() === "") {
     fail(`peer ${name} has no usable range`);
     continue;
@@ -149,7 +156,7 @@ const SURFACES = [
   "@deepseek-ai/dsh-launch-environment",
 ];
 
-const REQUIRED = {
+const REQUIRED: Record<string, [RegExp, string][] | undefined> = {
   "@deepseek-ai/dsh-web": [
     [
       /export declare class WebError/,
@@ -220,7 +227,9 @@ for (const name of SURFACES) {
   }
 
   const dts = files.map((f) => readFileSync(f, "utf8")).join("\n");
-  for (const [pattern, what] of REQUIRED[name]) {
+  const required = REQUIRED[name];
+  assert.ok(required, `no surface contract for ${name}`);
+  for (const [pattern, what] of required) {
     if (!pattern.test(dts)) fail(`${name} no longer exposes ${what}`);
   }
 }
@@ -269,9 +278,9 @@ try {
     ok(`lint config is live (${ruleCount} rules, typeAware on)`);
   }
 } catch (error) {
-  fail(
-    `could not read the effective lint config: ${String(error.message).split("\n")[0]}`
-  );
+  const detail =
+    error instanceof Error ? error.message.split("\n")[0] : String(error);
+  fail(`could not read the effective lint config: ${detail}`);
 }
 
 /* --------------------------------------------------- 6. no credentials in the tree */
@@ -282,7 +291,7 @@ try {
  * exactly like a scanner that works, and this one is assembled from fragments
  * so it cannot trip over its own samples.
  */
-const SECRETS = [
+const SECRETS: [RegExp, string][] = [
   [/\bmonid_live_[A-Za-z0-9]{10,}/, "a Monid platform key"],
   [/\bsk-tinyfish-[A-Za-z0-9_-]{10,}/, "a TinyFish key"],
   [/\bgh[pousr]_[A-Za-z0-9]{20,}/, "a GitHub token"],
@@ -300,7 +309,7 @@ const CANARIES = [
   ["$MONID_API_KEY", false],
   ["Authorization: Bearer <key>", false],
 ];
-for (const [sample, shouldMatch] of CANARIES) {
+for (const [sample, shouldMatch] of CANARIES as [string, boolean][]) {
   if (SECRETS.some(([re]) => re.test(sample)) !== shouldMatch) {
     fail(
       `the secret scanner is ${shouldMatch ? "missing" : "over-matching"} on a sample`
@@ -310,7 +319,7 @@ for (const [sample, shouldMatch] of CANARIES) {
 
 const SKIP = new Set(["node_modules", ".git", "lib"]);
 let scanned = 0;
-const walk = (dir) => {
+const walk = (dir: string): void => {
   for (const name of readdirSync(dir)) {
     if (
       SKIP.has(name) ||
@@ -380,9 +389,9 @@ try {
 
   const project = join(scratch, "consumer");
   execFileSync("mkdir", ["-p", project]);
-  const peers = Object.entries(pkg.peerDependencies ?? {}).map(
-    ([n, r]) => `${n}@${r}`
-  );
+  const peers = Object.entries(
+    (pkg.peerDependencies ?? {}) as Record<string, unknown>
+  ).map(([n, r]) => `${n}@${String(r)}`);
   execFileSync(
     "npm",
     [
@@ -436,8 +445,9 @@ try {
   ok(
     `installed the packed tarball with plain npm (${packed.entryCount} entries) and loaded the host + client halves`
   );
-} catch (error) {
-  const detail = [error.stderr, error.message]
+} catch (error: unknown) {
+  const err = error as { stderr?: string; message?: string };
+  const detail = [err.stderr, err.message]
     .filter(Boolean)
     .join("\n")
     .split("\n")
@@ -536,10 +546,10 @@ for (const name of TOOLCHAIN) {
     // `vp check` covers types too, so a bare `tsc` alongside it is redundant
     // rather than wrong — but a bare oxlint/oxfmt/vitest is a bypass.
     const bare = script.match(new RegExp(UNBYPASSED, "g")) ?? [];
-    const real = bare.filter((tool) => tool.trim() !== "tsc");
+    const real = bare.filter((tool: string) => tool.trim() !== "tsc");
     if (real.length > 0) {
       fail(
-        `the ${name} script reaches past vp for ${real.map((t) => t.trim()).join(", ")}; ` +
+        `the ${name} script reaches past vp for ${real.map((t: string) => t.trim()).join(", ")}; ` +
           "that bypasses the entry point that reads the config"
       );
     }

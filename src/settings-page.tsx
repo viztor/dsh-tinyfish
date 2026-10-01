@@ -173,8 +173,8 @@ interface CardState {
   keys: Record<string, { text: string; named: boolean }>;
 }
 
-/** What the slot hands the card: the view asked for, copy, state, and actions. */
-interface CardProps {
+/** What the slot hands the card: the view asked for, copy, state, and actions. Exported so tests stay in sync by construction. */
+export interface CardProps {
   view?: "summary" | "page";
   t: Translate;
   useTinyfishCard: <S>(select: (state: CardState) => S) => S;
@@ -184,8 +184,8 @@ interface CardProps {
   discard: () => void;
 }
 
-/** The client services this page reaches for, by shape. */
-interface ClientContext {
+/** The client services this page reaches for, by shape. Exported so tests stay in sync by construction. */
+export interface ClientContext {
   effect: (body: () => (() => void) | undefined, label: string) => void;
   locale: {
     bind: (ns: string) => Translate;

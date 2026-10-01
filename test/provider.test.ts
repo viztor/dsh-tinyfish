@@ -19,15 +19,20 @@ import {
   TinyfishFetchProvider,
   TinyfishSearchProvider,
   toIsoDate,
+  type TinyfishProviderOptions,
 } from "../src/provider.ts";
 import {
   fetchEnvelope,
   hit,
   searchEnvelope,
   withStubbedFetch,
-} from "./helpers.mjs";
+  type StubHit,
+} from "./helpers.ts";
 
-const OPTIONS = {
+// Typed as the provider's options: `channel` must be a channel, not any
+// string, or the thunk is not a valid options source. `delayMs` rides along
+// as fixture-only ballast the provider never reads.
+const OPTIONS: TinyfishProviderOptions & { delayMs: number } = {
   channel: "monid",
   apiKey: "k",
   apiKeyEnv: "TINYFISH_API_KEY",
@@ -68,8 +73,12 @@ test("toIsoDate: relative and unparseable values are dropped, not guessed", () =
   assert.equal(toIsoDate("yesterday"), undefined);
   assert.equal(toIsoDate(""), undefined);
   assert.equal(toIsoDate("   "), undefined);
-  assert.equal(toIsoDate(), undefined);
-  assert.equal(toIsoDate(12_345), undefined, "a non-string is not a date");
+  assert.equal(toIsoDate(undefined), undefined);
+  assert.equal(
+    toIsoDate(12_345 as unknown as string),
+    undefined,
+    "a non-string is not a date"
+  );
 });
 
 /* ------------------------------------------------------------------ search */
@@ -104,7 +113,8 @@ test("search omits fields the payload did not supply", async () => {
       {
         respond: () => ({
           body: searchEnvelope([
-            { url: "https://x", title: "T", date: "1 year ago" },
+            // Deliberately partial: the point is that absent fields are omitted.
+            { url: "https://x", title: "T", date: "1 year ago" } as StubHit,
           ]),
         }),
       },
@@ -121,7 +131,8 @@ test("search drops hits with no url rather than emitting an uncitable source", a
         respond: () => ({
           body: searchEnvelope([
             hit(),
-            { title: "orphan" },
+            // A hit with no url: dropped, never emitted as a source.
+            { title: "orphan" } as StubHit,
             hit({ url: "https://b" }),
           ]),
         }),
@@ -141,7 +152,14 @@ test("search accepts `description` as an alias for `snippet`", async () => {
       {
         respond: () => ({
           body: searchEnvelope([
-            { url: "https://x", title: "T", description: "D" },
+            // `description` is accepted as a `snippet` alias. Cast through
+            // `unknown`: `description` is not a `StubHit` field, so a direct
+            // assertion does not overlap enough to satisfy the checker.
+            {
+              url: "https://x",
+              title: "T",
+              description: "D",
+            } as unknown as StubHit,
           ]),
         }),
       },
@@ -181,10 +199,17 @@ test("available() is always a strict boolean, even from a malformed row", () => 
   // `available()` return `undefined` from a method the seam declares as boolean.
   // The seam uses it to choose between providers, so the declared type has to
   // hold at runtime, not just in the type checker.
-  const partial = { channel: "monid", apiKey: "k", filters: {}, attempts: 1 };
+  // A row missing its flags: deliberately malformed, cast at the boundary so
+  // the test still proves `available()` returns a strict boolean for one.
+  const partial: Partial<TinyfishProviderOptions> = {
+    channel: "monid",
+    apiKey: "k",
+    filters: {},
+    attempts: 1,
+  };
   for (const provider of [
-    new TinyfishSearchProvider(() => partial),
-    new TinyfishFetchProvider(() => partial),
+    new TinyfishSearchProvider(() => partial as TinyfishProviderOptions),
+    new TinyfishFetchProvider(() => partial as TinyfishProviderOptions),
   ]) {
     const value = provider.available();
     assert.equal(
@@ -316,7 +341,8 @@ test("neither a result nor an error is a provider fault, and throws", async () =
       [{ respond: () => ({ body: fetchEnvelope([], []) }) }],
       async () => fetchp().fetch({ url: "https://x" })
     ).then((r) => r.result),
-    (error) => /returned no content/.test(error.message)
+    (error: unknown) =>
+      error instanceof Error && error.message.includes("returned no content")
   );
 });
 
@@ -358,7 +384,7 @@ test("a search sends the key the Settings store holds, not the CLI one", async (
   const options = {
     ...OPTIONS,
     apiKey: undefined,
-    resolveCredential: async (name) =>
+    resolveCredential: async (name: string) =>
       name === "MONID_API_KEY" ? "stored-monid" : undefined,
   };
   const { calls } = await withStubbedFetch(
@@ -373,7 +399,7 @@ test("a search sends the key the Settings store holds, not the CLI one", async (
 });
 
 test("the direct channel reads its own ref, never the monid one", async () => {
-  const store = {
+  const store: Record<string, string> = {
     TINYFISH_API_KEY: "stored-tinyfish",
     MONID_API_KEY: "stored-monid",
   };
@@ -384,7 +410,7 @@ test("the direct channel reads its own ref, never the monid one", async () => {
         ...OPTIONS,
         channel: "direct",
         apiKey: undefined,
-        resolveCredential: async (name) => store[name],
+        resolveCredential: async (name: string) => store[name],
       })).search({ query: "q" })
   );
   assert.equal(calls[0].headers["X-API-Key"], "stored-tinyfish");
@@ -397,7 +423,7 @@ test("a fetch also uses the stored credential", async () => {
       new TinyfishFetchProvider(() => ({
         ...OPTIONS,
         apiKey: undefined,
-        resolveCredential: async (name) =>
+        resolveCredential: async (name: string) =>
           name === "MONID_API_KEY" ? "stored-monid" : undefined,
       })).fetch({ url: "https://x" })
   );

@@ -24,7 +24,7 @@ jobs:
       - run: pnpm run build
       - run: pnpm exec vp check
       - run: pnpm exec vp test --coverage
-      - run: node scripts/check.mjs
+      - run: node scripts/check.ts
 
   publish:
     needs: verify

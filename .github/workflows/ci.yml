@@ -50,7 +50,7 @@ jobs:
       # under the Vite+ entry point, reading the `lint` / `fmt` blocks of
       # vite.config.ts. They must live there: Vite+ disables nested
       # oxlint.config / .oxfmtrc files, so a config in its own file is silently
-      # inert, and `scripts/check.mjs` asserts the live rule count so that
+      # inert, and `scripts/check.ts` asserts the live rule count so that
       # cannot come back unnoticed.
       - name: Check (format, lint, types)
         run: pnpm exec vp check
@@ -68,4 +68,4 @@ jobs:
       # Everything else runs against the working tree; that is the only check
       # that sees what a consumer receives.
       - name: Package checks
-        run: node scripts/check.mjs
+        run: node scripts/check.ts

@@ -17,7 +17,7 @@ import assert from "node:assert/strict";
 // swap, never an assertion-library rewrite.
 import { test } from "vitest";
 
-import { resolveApiKey } from "../../src/client.ts";
+import { resolveApiKey, type TinyfishChannel } from "../../src/client.ts";
 import { resolveOptions } from "../../src/index.ts";
 import {
   TinyfishFetchProvider,
@@ -36,7 +36,7 @@ const LIVE = process.env.DSH_TINYFISH_LIVE === "1";
  * reason that had nothing to do with either API. `resolveOptions` is the same
  * path the harness uses, so a new field cannot be forgotten here.
  */
-const opts = (channel) => () => ({
+const opts = (channel: TinyfishChannel) => () => ({
   ...resolveOptions({ channel }),
   apiKey: resolveApiKey(channel),
   delayMs: 1000,
@@ -92,7 +92,7 @@ test(
   "fetch returns markdown text on both channels",
   { skip: !LIVE },
   async () => {
-    for (const channel of ["monid", "direct"]) {
+    for (const channel of ["monid", "direct"] as const) {
       const provider = new TinyfishFetchProvider(opts(channel));
       const page = await provider.fetch({ url: "https://example.com" });
       assert.equal(page.statusCode, 200, `${channel}: example.com is 200`);
@@ -111,7 +111,7 @@ test(
   "a 404 comes back as a result on both channels",
   { skip: !LIVE },
   async () => {
-    for (const channel of ["monid", "direct"]) {
+    for (const channel of ["monid", "direct"] as const) {
       const provider = new TinyfishFetchProvider(opts(channel));
       const page = await provider.fetch({
         url: "https://example.com/definitely-not-a-real-404",
@@ -133,7 +133,9 @@ test(
       `https://api.search.tinyfish.ai?${new URLSearchParams({ query: QUERY }).toString()}`,
       { headers: { "X-API-Key": resolveApiKey("direct") } }
     ).then(async (r) => r.json());
-    const dated = (raw.results ?? []).find((r) => typeof r.date === "string");
+    const dated = (raw.results ?? []).find(
+      (r: { date?: unknown }) => typeof r.date === "string"
+    );
     assert.ok(dated, "the response carries at least one date string");
     const iso = toIsoDate(dated.date);
     if (iso) assert.ok(!Number.isNaN(Date.parse(iso)), "coerced dates parse");

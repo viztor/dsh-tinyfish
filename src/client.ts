@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -487,8 +488,16 @@ async function call(
   }
 
   if (response.status === 401 || response.status === 403) {
+    // Which key was rejected, identified without revealing it. When several
+    // sources can supply the credential — a literal, the harness store, the
+    // environment, the CLI file — "your key is wrong" is unactionable unless
+    // the user can tell which one was sent. A hash prefix does that safely.
+    const fingerprint = createHash("sha256")
+      .update(key, "utf8")
+      .digest("hex")
+      .slice(0, 12);
     throw new WebError(
-      `TinyFish rejected the ${channel} API key (HTTP ${response.status}). ` +
+      `TinyFish rejected the ${channel} API key (HTTP ${response.status}, key sha256:${fingerprint}). ` +
         "Refresh it, or switch the provider's channel.",
       WEB_PROVIDER_ERROR
     );

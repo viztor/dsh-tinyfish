@@ -30,7 +30,7 @@ import {
   hit,
   searchEnvelope,
   withStubbedFetch,
-} from "./helpers.mjs";
+} from "./helpers.ts";
 
 const NO_ENV = {};
 
@@ -217,11 +217,12 @@ test("each channel reads its own credential ref, never the other's", async () =>
   // A user who stores both keys must not have the TinyFish key sent to Monid
   // as its bearer token. That fails upstream as a 401, which reads as "your
   // Monid key is wrong" rather than as "the wrong slot was consulted".
-  const store = {
+  const store: Record<string, string> = {
     TINYFISH_API_KEY: "tinyfish-key",
     MONID_API_KEY: "monid-key",
   };
-  const resolveCredential = async (name) => store[name];
+  const resolveCredential = async (name: string): Promise<string | undefined> =>
+    store[name];
 
   assert.equal(
     await resolveApiKeyAsync("direct", {
@@ -293,7 +294,7 @@ test("monid search posts the provider, endpoint and queryParams", async () => {
         filters: { domain_type: "news", include_domains: "a.com" },
       })
   );
-  const body = JSON.parse(calls[0].init.body);
+  const body = JSON.parse(calls[0].init.body as string);
   assert.equal(body.provider, "tinyfish");
   assert.equal(body.endpoint, "/search");
   assert.deepEqual(body.input.queryParams, {
@@ -315,7 +316,8 @@ test("direct search GETs the upstream with only non-empty params", async () => {
         query: "a b",
         filters: {
           language: "",
-          location: undefined,
+          // Deliberately untyped: the client must drop an `undefined` filter.
+          location: undefined as unknown as string,
           after_date: "2026-01-01",
         },
       })
@@ -359,7 +361,7 @@ test("monid fetch posts markdown format and the url list", async () => {
         purpose: "why we are here",
       })
   );
-  const body = JSON.parse(calls[0].init.body);
+  const body = JSON.parse(calls[0].init.body as string);
   assert.equal(body.endpoint, "/fetch");
   assert.deepEqual(body.input.body, {
     urls: ["https://x"],
@@ -403,8 +405,8 @@ test("a RUNNING envelope is polled until it settles", async () => {
       })
   );
   assert.equal(calls.length, 3);
-  assert.deepEqual(JSON.parse(calls[1].init.body), { runId: "r1" });
-  assert.equal(result.results.length, 1);
+  assert.deepEqual(JSON.parse(calls[1].init.body as string), { runId: "r1" });
+  assert.equal(result.results?.length, 1);
 });
 
 /* ------------------------------------------------------------- retry policy */
@@ -426,7 +428,7 @@ test("an empty search is retried, because a blank result set is usually the flak
       })
   );
   assert.equal(calls.length, 3, "two empties then a real answer");
-  assert.equal(result.results.length, 1);
+  assert.equal(result.results?.length, 1);
 });
 
 test("retries are bounded, and a genuinely empty result still resolves", async () => {
@@ -469,7 +471,7 @@ test("a COMPLETED run with null output and a 5xx is treated as transient", async
       })
   );
   assert.equal(calls.length, 2, "the SERVICE_BUSY shape is retried");
-  assert.equal(result.results.length, 1);
+  assert.equal(result.results?.length, 1);
 });
 
 test("exhausting retries on a persistent 5xx surfaces the last failure", async () => {
@@ -517,7 +519,7 @@ test("HTTP 429 from the direct API is retried", async () => {
       })
   );
   assert.equal(calls.length, 2);
-  assert.equal(result.results.length, 1);
+  assert.equal(result.results?.length, 1);
 });
 
 /* ---------------------------------------------------------------- failures */
@@ -596,6 +598,25 @@ test("a rejected credential is terminal and names both channels' fixes", async (
   );
 });
 
+test("a rejection identifies which key was sent, without revealing it", async () => {
+  // Several sources can supply the credential, so "your key is wrong" needs to
+  // say which one. The fingerprint is a hash prefix: comparable against known
+  // keys, useless to anyone who should not have them.
+  const { createHash } = await import("node:crypto");
+  const expected = createHash("sha256")
+    .update("bad", "utf8")
+    .digest("hex")
+    .slice(0, 12);
+  await assert.rejects(
+    withStubbedFetch(
+      [{ respond: () => ({ status: 403, text: "nope" }) }],
+      async () =>
+        tinyfishSearch({ channel: "monid", apiKey: "bad", query: "q" })
+    ).then((r) => r.result),
+    new RegExp(`key sha256:${expected}`)
+  );
+});
+
 test("a non-JSON body is reported rather than swallowed", async () => {
   await assert.rejects(
     withStubbedFetch(
@@ -620,7 +641,8 @@ test("a missing credential fails with a routable code and a real fix", async () 
       tinyfishConfigPath: "/nope/absent",
       env: {},
     }),
-    (error) => {
+    (error: unknown) => {
+      assert.ok(error instanceof WebError);
       assert.equal(
         error.code,
         WEB_PROVIDER_CREDENTIAL_MISSING,
@@ -639,7 +661,8 @@ test("a missing credential fails with a routable code and a real fix", async () 
       credentialsPath: "/nope/absent",
       env: {},
     }),
-    (error) => {
+    (error: unknown) => {
+      assert.ok(error instanceof WebError);
       assert.equal(error.code, WEB_PROVIDER_CREDENTIAL_MISSING);
       assert.match(error.message, /monid keys add/);
       assert.doesNotMatch(
@@ -662,4 +685,27 @@ test("an aborted signal surfaces as WEB_ABORTED", async () => {
     }),
     (error) => error instanceof WebError && error.code === "WEB_ABORTED"
   );
+});
+
+test("the credential service is consulted on every search, never cached", async () => {
+  // This is the property a future OAuth-backed ref depends on. A resolver that
+  // returns a fresh token per call only works if the client actually calls it
+  // per call. Pinning a key at module load or memoizing the first answer would
+  // silently turn rotation — and any refresh flow — into a stale credential.
+  let calls = 0;
+  const keys = ["first-key", "rotated-key"];
+  const options = {
+    channel: "monid" as const,
+    apiKeyEnv: "TINYFISH_API_KEY",
+    monidKeyEnv: "MONID_API_KEY",
+    resolveCredential: async (): Promise<string | undefined> => {
+      const key = keys[Math.min(calls, 1)];
+      calls += 1;
+      return key;
+    },
+    credentialsPath: "/nope/absent",
+  };
+  assert.equal(await resolveApiKeyAsync("monid", options), "first-key");
+  assert.equal(await resolveApiKeyAsync("monid", options), "rotated-key");
+  assert.equal(calls, 2, "one service call per resolution");
 });

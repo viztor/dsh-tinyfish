@@ -19,35 +19,159 @@ import { test } from "vitest";
 import { resolveOptions } from "../src/index.ts";
 import { apply } from "../src/settings-page.tsx";
 
+/** An element node, as React's `jsx()` and the stub kit produce it. */
+interface TestElement {
+  type: unknown;
+  props: { children?: unknown; [key: string]: unknown };
+}
+
+/** One field as the card's store publishes it. */
+interface TestField {
+  text: string;
+  overridden: boolean;
+  invalid: boolean;
+}
+
+/** The store snapshot the card selects from. */
+interface TestState {
+  shell: {
+    available: boolean;
+    writable: boolean;
+    dirty: boolean;
+    invalid: boolean;
+    saving: boolean;
+    failed: boolean;
+  };
+  fields: Record<string, TestField>;
+  keys: Record<string, { text: string; named: boolean }>;
+}
+
+/** One staged edit the card records. */
+interface TestEdit {
+  name: string;
+  value: string | undefined;
+}
+
+/** What the slot entry hands the card: the model's own actions. */
+interface SlotEntry {
+  inject: () => {
+    edit: (name: string, value: string) => void;
+    resetField: (name: string) => void;
+    save: () => Promise<boolean>;
+    discard: () => void;
+  };
+}
+
+/** One credential the page wrote. */
+interface TestWrite {
+  ref: string;
+  value: string;
+}
+
+/** Props of the controls the card renders, as the tests read them. */
+interface SegmentedProps {
+  options: { value: string; label: string }[];
+  value: string;
+  onChange: (next: string) => void;
+}
+
+interface SwitchProps {
+  checked: boolean;
+  onChange: (next: boolean) => void;
+}
+
+interface FieldProps {
+  id: string;
+  overridden: boolean;
+  onReset: () => void;
+}
+
+interface ButtonProps {
+  onClick: () => void;
+}
+
+interface SecretProps {
+  id: string;
+  label: string;
+  onEdit: (text: string) => void;
+}
+
+/** First match, asserting the test actually found the control it names. */
+function firstOf(tree: unknown, type: string): TestElement {
+  const [found] = findAll(tree, type);
+  assert.ok(found, `expected a ${type} in the tree`);
+  return found;
+}
+
+/** Read a control's props with the shape the test asserts on. */
+function seg(el: TestElement): SegmentedProps {
+  return el.props as unknown as SegmentedProps;
+}
+
+function sw(el: TestElement): SwitchProps {
+  return el.props as unknown as SwitchProps;
+}
+
+function fld(el: TestElement): FieldProps {
+  return el.props as unknown as FieldProps;
+}
+
+function btn(el: TestElement): ButtonProps {
+  return el.props as unknown as ButtonProps;
+}
+
+function sec(el: TestElement): SecretProps {
+  return el.props as unknown as SecretProps;
+}
+
 /** Element type as a comparable name. */
-function nameOf(type) {
+function nameOf(type: unknown): string {
   if (typeof type === "string") return type;
   if (typeof type === "function") return type.name || "fn";
   return String(type);
 }
 
+/** Narrows an unknown tree node to the element shape the walkers read. */
+function isElement(node: unknown): node is TestElement {
+  return (
+    typeof node === "object" &&
+    node !== null &&
+    "type" in node &&
+    "props" in node &&
+    typeof (node as { props: unknown }).props === "object"
+  );
+}
+
 /** Every element of `type` in the tree, depth-first through props.children. */
-function findAll(node, type, acc = []) {
-  if (!node || typeof node !== "object") return acc;
+function findAll(
+  node: unknown,
+  type: string,
+  acc: TestElement[] = []
+): TestElement[] {
+  if (!isElement(node)) return acc;
   if (nameOf(node.type) === type) acc.push(node);
-  const { children } = node.props ?? {};
+  const { children } = node.props;
   if (Array.isArray(children)) {
     for (const child of children) findAll(child, type, acc);
-  } else if (children !== undefined) findAll(children, type, acc);
+  } else if (children !== undefined) {
+    findAll(children, type, acc);
+  }
   return acc;
 }
 
 /** The text of every string child anywhere in the tree. */
-function texts(node, acc = []) {
+function texts(node: unknown, acc: string[] = []): string[] {
   if (typeof node === "string") {
     acc.push(node);
     return acc;
   }
-  if (!node || typeof node !== "object") return acc;
-  const { children } = node.props ?? {};
+  if (!isElement(node)) return acc;
+  const { children } = node.props;
   if (Array.isArray(children)) {
     for (const child of children) texts(child, acc);
-  } else if (children !== undefined) texts(children, acc);
+  } else if (children !== undefined) {
+    texts(children, acc);
+  }
   return acc;
 }
 
@@ -57,10 +181,39 @@ function texts(node, acc = []) {
  * @param section - the accepted section, as the Host would publish it.
  * @returns the registered component, plus the credential refs it writes to.
  */
-function mount(section = {}) {
-  const written = [];
-  const registrations = [];
-  const snapshot = {
+function mount(section: Record<string, unknown> = {}): {
+  entry: SlotEntry;
+  component: (props: Record<string, unknown>) => unknown;
+  written: TestWrite[];
+  snapshot: unknown;
+} {
+  // Typed as the page's own context: a drift between what the test provides
+  // and what the page consumes is a type error here, not a silent mismatch.
+
+  const written: TestWrite[] = [];
+  const registrations: {
+    entry: SlotEntry;
+    component: (props: Record<string, unknown>) => unknown;
+  }[] = [];
+  // The page's register takes a broad entry; narrow on store so the tests
+  // below can call inject() without casting at every site.
+  const store = (
+    entry: SlotEntry,
+    component: (props: Record<string, unknown>) => unknown
+  ): void => {
+    registrations.push({
+      entry: entry as unknown as SlotEntry,
+      component,
+    });
+  };
+  const snapshot: {
+    status: string;
+    value: Record<string, unknown>;
+    base: Record<string, unknown>;
+    user: Record<string, unknown>;
+    writable: boolean;
+    revision: number;
+  } = {
     status: "ready",
     value: section,
     base: {},
@@ -69,48 +222,77 @@ function mount(section = {}) {
     revision: 1,
   };
   const ctx = {
-    effect: (body) => {
+    effect: (body: () => (() => void) | undefined, _label: string): void => {
       const disposer = body();
       if (typeof disposer === "function") disposer();
     },
-    locale: { bind: () => (key) => key, register: () => {} },
-    configForms: {
-      get: () => ({
-        getSnapshot: () => snapshot,
-        subscribe: () => () => {},
-        mutate: async () => true,
-      }),
-      whileServed: (namespaces, register) => register(new Set(namespaces)),
+    locale: {
+      bind:
+        (_ns: string) =>
+        (key: string): string =>
+          key,
+      register: (
+        _ns: string,
+        _dictionaries: { en: unknown; zh: unknown }
+      ): void => {},
     },
-    slots: {
-      inject: (slot, register) => register(),
-      register: (entry, component) => {
-        registrations.push({ entry, component });
+    configForms: {
+      get: (_ns: string) => ({
+        getSnapshot: () => snapshot,
+        subscribe: () => (): void => {},
+        mutate: async (_ops: unknown, _rev?: number): Promise<boolean> => true,
+      }),
+      whileServed: (
+        namespaces: string[],
+        register: (served: Set<string>) => void
+      ): void => {
+        register(new Set(namespaces));
       },
     },
+    slots: {
+      inject: (_slot: string, register: () => void): void => {
+        register();
+      },
+      register: store,
+    },
     remote: {
-      $on: () => () => {},
+      $on: (): (() => void) => () => {},
       credentials: {
-        set: async (ref, value) => {
+        set: async (ref: string, value: string): Promise<boolean> => {
           written.push({ ref, value });
           return true;
         },
       },
     },
   };
-  apply(ctx);
+  // A test double, not the full host context. The double cast is honest about
+  // that: behavior is asserted by the tests below, not by type overlap.
+  apply(ctx as unknown as Parameters<typeof apply>[0]);
   assert.equal(registrations.length, 1, "one slot entry");
-  return { ...registrations[0], written, snapshot };
+  const [first] = registrations;
+  assert.ok(first, "the card was registered");
+  return { ...first, written, snapshot };
 }
 
 /** A store snapshot shaped like the one `SettingsFormModel.bind` publishes. */
-function state(section, { writable = true } = {}) {
-  const field = (value) => ({
-    text: value === undefined ? "" : String(value),
-    overridden: value !== undefined,
-    invalid: false,
-  });
-  const fields = {};
+function state(
+  section: Record<string, unknown>,
+  { writable = true }: { writable?: boolean } = {}
+): TestState {
+  const field = (value: unknown): TestField => {
+    const text =
+      typeof value === "string" ||
+      typeof value === "number" ||
+      typeof value === "boolean"
+        ? String(value)
+        : "";
+    return {
+      text,
+      overridden: value !== undefined,
+      invalid: false,
+    };
+  };
+  const fields: Record<string, TestField> = {};
   for (const [name, value] of Object.entries(section)) {
     if (name !== "apiKeyEnv" && name !== "monidKeyEnv")
       fields[name] = field(value);
@@ -133,26 +315,37 @@ function state(section, { writable = true } = {}) {
 }
 
 /** Render the card's page view. */
-function render(section, options = {}) {
+function render(
+  section: Record<string, unknown>,
+  options: { writable?: boolean } = {}
+): { edits: TestEdit[]; tree: unknown } {
   const { component } = mount(section);
-  const edits = [];
+  const edits: TestEdit[] = [];
   return {
     edits,
     tree: component({
       view: "page",
-      t: (key) => key,
-      useTinyfishCard: (select) => select(state(section, options)),
-      edit: (name, value) => edits.push({ name, value }),
-      resetField: (name) => edits.push({ name, value: undefined }),
-      save: () => {},
-      discard: () => {},
+      t: (key: string): string => key,
+      useTinyfishCard: (select: (state: TestState) => TestState) =>
+        select(state(section, options)),
+      edit: (name: string, value: string): void => {
+        edits.push({ name, value });
+      },
+      resetField: (name: string): void => {
+        edits.push({ name, value: undefined });
+      },
+      save: (): void => {},
+      discard: (): void => {},
     }),
   };
 }
 
 test("the summary view is the one-line description", () => {
   const { component } = mount({});
-  assert.equal(component({ view: "summary", t: (k) => k }), "description");
+  assert.equal(
+    component({ view: "summary", t: (k: string): string => k }),
+    "description"
+  );
 });
 
 test("the page renders a form frame, not the summary", () => {
@@ -161,16 +354,15 @@ test("the page renders a form frame, not the summary", () => {
 });
 
 test("the channel is a segmented control carrying both options", () => {
-  const control = findAll(render({}).tree, "SegmentedControl")[0];
+  const control = firstOf(render({}).tree, "SegmentedControl");
   assert.ok(control, "a segmented control for the channel");
   assert.deepEqual(
-    control.props.options.map((option) => option.value),
+    seg(control).options.map((option: { value: string }) => option.value),
     ["direct", "monid"]
   );
-  assert.equal(control.props.value, "direct", "the default");
+  assert.equal(seg(control).value, "direct", "the default");
   assert.equal(
-    findAll(render({ channel: "monid" }).tree, "SegmentedControl")[0].props
-      .value,
+    seg(firstOf(render({ channel: "monid" }).tree, "SegmentedControl")).value,
     "monid",
     "and the drafted value"
   );
@@ -178,34 +370,34 @@ test("the channel is a segmented control carrying both options", () => {
 
 test("choosing a channel stages that channel", () => {
   const { tree, edits } = render({});
-  findAll(tree, "SegmentedControl")[0].props.onChange("monid");
+  seg(firstOf(tree, "SegmentedControl")).onChange("monid");
   assert.deepEqual(edits, [{ name: "channel", value: "monid" }]);
 });
 
 test("search and fetch are switches, on by default", () => {
   const switches = findAll(render({}).tree, "Switch");
   assert.equal(switches.length, 2);
-  for (const control of switches) assert.equal(control.props.checked, true);
+  for (const control of switches) assert.equal(sw(control).checked, true);
 });
 
 test("a switch stages the literal the schema parses", () => {
   const { tree, edits } = render({});
   const [search] = findAll(tree, "Switch");
-  search.props.onChange(false);
+  sw(search).onChange(false);
   assert.deepEqual(edits, [{ name: "search", value: "false" }]);
 });
 
 test("switching a channel back off stages the same", () => {
   const { tree, edits } = render({ search: "false" });
   const [search] = findAll(tree, "Switch");
-  assert.equal(search.props.checked, false, "reads the drafted value");
-  search.props.onChange(true);
+  assert.equal(sw(search).checked, false, "reads the drafted value");
+  sw(search).onChange(true);
   assert.deepEqual(edits, [{ name: "search", value: "true" }]);
 });
 
 test("purpose is a search-only field and hides when search is off", () => {
-  const idsOf = (tree) =>
-    findAll(tree, "SettingsValueField").map((field) => field.props.id);
+  const idsOf = (tree: unknown): string[] =>
+    findAll(tree, "SettingsValueField").map((field) => fld(field).id);
   assert.ok(
     idsOf(render({ search: "true" }).tree).includes(
       "plugin-config-tinyfish-purpose"
@@ -219,8 +411,8 @@ test("purpose is a search-only field and hides when search is off", () => {
 });
 
 test("attempts stay visible regardless of the switches", () => {
-  const idsOf = (tree) =>
-    findAll(tree, "SettingsValueField").map((field) => field.props.id);
+  const idsOf = (tree: unknown): string[] =>
+    findAll(tree, "SettingsValueField").map((field) => fld(field).id);
   assert.ok(
     idsOf(render({ search: "false", fetch: "false" }).tree).includes(
       "plugin-config-tinyfish-attempts"
@@ -229,7 +421,8 @@ test("attempts stay visible regardless of the switches", () => {
 });
 
 test("the both-off warning appears only when both are off", () => {
-  const has = (section) => texts(render(section).tree).includes("bothOff");
+  const has = (section: Record<string, unknown>): boolean =>
+    texts(render(section).tree).includes("bothOff");
   assert.equal(has({}), false, "not on by default");
   assert.equal(has({ search: "false" }), false, "not with one off");
   assert.equal(has({ search: "false", fetch: "false" }), true, "with both off");
@@ -257,10 +450,11 @@ test("an overridden text field offers its reset through the field itself", () =>
   // action rather than rendering a button of its own.
   const { tree, edits } = render({ attempts: 5 });
   const field = findAll(tree, "SettingsValueField").find(
-    (one) => one.props.id === "plugin-config-tinyfish-attempts"
+    (one) => fld(one).id === "plugin-config-tinyfish-attempts"
   );
-  assert.equal(field.props.overridden, true, "and it says it is overridden");
-  field.props.onReset();
+  assert.ok(field, "the attempts field rendered");
+  assert.equal(fld(field).overridden, true, "and it says it is overridden");
+  fld(field).onReset();
   assert.deepEqual(edits, [{ name: "attempts", value: undefined }]);
 });
 
@@ -270,7 +464,7 @@ test("an overridden custom control offers a reset button", () => {
   const { tree, edits } = render({ channel: "monid" });
   const [button] = findAll(tree, "button");
   assert.ok(button, "a reset control next to the segmented control");
-  button.props.onClick();
+  btn(button).onClick();
   assert.deepEqual(edits, [{ name: "channel", value: undefined }]);
 });
 
@@ -279,9 +473,9 @@ test("an untouched control offers no reset", () => {
 });
 
 test("the direct channel shows the TinyFish key field", () => {
-  const secret = findAll(render({}).tree, "SettingsSecretField")[0];
-  assert.equal(secret.props.id, "plugin-config-tinyfish-apiKey");
-  assert.equal(secret.props.label, "apiKey");
+  const secret = firstOf(render({}).tree, "SettingsSecretField");
+  assert.equal(sec(secret).id, "plugin-config-tinyfish-apiKey");
+  assert.equal(sec(secret).label, "apiKey");
 });
 
 test("the monid channel shows the platform key field", () => {
@@ -289,8 +483,8 @@ test("the monid channel shows the platform key field", () => {
     render({ channel: "monid" }).tree,
     "SettingsSecretField"
   )[0];
-  assert.equal(secret.props.id, "plugin-config-tinyfish-monidApiKey");
-  assert.equal(secret.props.label, "monidApiKey");
+  assert.equal(sec(secret).id, "plugin-config-tinyfish-monidApiKey");
+  assert.equal(sec(secret).label, "monidApiKey");
 });
 
 test("exactly one key field renders, never both", () => {
@@ -311,14 +505,15 @@ test("the direct key writes to the reference the section names", async () => {
   const { edit, save } = entry.inject();
   const tree = component({
     view: "page",
-    t: (k) => k,
-    useTinyfishCard: (select) => select(state({})),
+    t: (k: string): string => k,
+    useTinyfishCard: (select: (state: TestState) => TestState) =>
+      select(state({})),
     edit,
     resetField: entry.inject().resetField,
     save,
     discard: entry.inject().discard,
   });
-  findAll(tree, "SettingsSecretField")[0].props.onEdit("typed-key");
+  sec(firstOf(tree, "SettingsSecretField")).onEdit("typed-key");
   assert.deepEqual(written, [], "staging is not writing");
   await save();
   assert.deepEqual(
@@ -337,14 +532,15 @@ test("the monid key writes to its own reference, not the direct one", async () =
   const { edit, save } = entry.inject();
   const tree = component({
     view: "page",
-    t: (k) => k,
-    useTinyfishCard: (select) => select(state({ channel: "monid" })),
+    t: (k: string): string => k,
+    useTinyfishCard: (select: (state: TestState) => TestState) =>
+      select(state({ channel: "monid" })),
     edit,
     resetField: entry.inject().resetField,
     save,
     discard: entry.inject().discard,
   });
-  findAll(tree, "SettingsSecretField")[0].props.onEdit("platform-key");
+  sec(firstOf(tree, "SettingsSecretField")).onEdit("platform-key");
   await save();
   assert.deepEqual(
     written,
@@ -361,14 +557,15 @@ test("an unconfigured section still writes to a resolvable default", async () =>
   const { edit, save } = entry.inject();
   const tree = component({
     view: "page",
-    t: (k) => k,
-    useTinyfishCard: (select) => select(state({})),
+    t: (k: string): string => k,
+    useTinyfishCard: (select: (state: TestState) => TestState) =>
+      select(state({})),
     edit,
     resetField: entry.inject().resetField,
     save,
     discard: entry.inject().discard,
   });
-  findAll(tree, "SettingsSecretField")[0].props.onEdit("k");
+  sec(firstOf(tree, "SettingsSecretField")).onEdit("k");
   await save();
   // And the reference it wrote to is the one the provider will read back,
   // read from the provider itself rather than from a second copy of the name.
@@ -388,8 +585,9 @@ test("a draft the field cannot parse blocks the save instead of vanishing", asyn
   const injected = entry.inject();
   const tree = component({
     view: "page",
-    t: (k) => k,
-    useTinyfishCard: (select) => select(state({})),
+    t: (k: string): string => k,
+    useTinyfishCard: (select: (state: TestState) => TestState) =>
+      select(state({})),
     edit: injected.edit,
     resetField: injected.resetField,
     save: injected.save,
@@ -398,14 +596,15 @@ test("a draft the field cannot parse blocks the save instead of vanishing", asyn
   injected.edit("search", "yes");
   const reread = component({
     view: "page",
-    t: (k) => k,
-    useTinyfishCard: (select) => select(state({ search: "yes" })),
+    t: (k: string): string => k,
+    useTinyfishCard: (select: (state: TestState) => TestState) =>
+      select(state({ search: "yes" })),
     edit: injected.edit,
     resetField: injected.resetField,
     save: injected.save,
     discard: injected.discard,
   });
-  const switchNode = findAll(reread, "Switch")[0];
+  const switchNode = firstOf(reread, "Switch");
   assert.equal(
     switchNode.props.checked,
     true,

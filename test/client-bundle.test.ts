@@ -37,16 +37,182 @@ if (!existsSync(BUNDLE)) {
 const SOURCE = readFileSync(BUNDLE, "utf8");
 
 /**
+ * Types for the VM fixtures in this file.
+ *
+ * The bundle is evaluated with `node:vm`, so everything crossing that
+ * boundary arrives without static types: the registration spec the bundle
+ * hands `window.__ModuleLoader__.load`, the module the factory returns, the
+ * element tree the stubbed jsx records, and the store projection the bundle
+ * hands the stub model. The interfaces below re-state the shapes the tests
+ * assert on, so the test code itself is fully typed while each boundary
+ * crossing is recovered with a documented `as` at the crossing point.
+ */
+
+/** What the bundle passes to `window.__ModuleLoader__.load`. */
+interface RegistrationSpec {
+  id: string;
+  factory: (require: RequireStub) => BundleExports;
+}
+
+/** The `require` the loader hands the factory: answered by the stub below. */
+type RequireStub = (name: string) => unknown;
+
+/** The module shape every client bundle must export. */
+interface BundleExports {
+  NS: string;
+  inject: string[];
+  apply: (ctx: TestCtx) => void;
+}
+
+/** The stub host's `window`: only the module loader exists in the VM. */
+interface WindowStub {
+  __ModuleLoader__: {
+    load: (spec: RegistrationSpec) => void;
+  };
+}
+
+/** A field or secret reference the stub model records. */
+interface FieldRef {
+  field: string;
+}
+
+/** What the stub model's `field()` reports. */
+interface FieldState {
+  text: string;
+  overridden: boolean;
+  invalid: boolean;
+}
+
+/** One `new SettingsFormModel(scope, specs, secrets)` construction. */
+interface ModelCall {
+  specs: FieldRef[];
+  secrets: FieldRef[];
+}
+
+/** One key entry per channel, as the store publishes it. */
+interface CardKeys {
+  direct: { text: string; named: boolean };
+  monid: { text: string; named: boolean };
+}
+
+/**
+ * The store projection the bundle hands the stub model's `bind`.
+ *
+ * It is created inside the evaluated bundle, so it is a cross-realm function;
+ * the signature states what the published-state test reads back off it.
+ */
+type Projection = () => { keys: CardKeys };
+
+/** What `loadBundle` hands back: the boundary values with their types. */
+interface LoadedBundle {
+  registration: RegistrationSpec;
+  loaded: string[];
+  modelCalls: ModelCall[];
+  bindings: Projection[];
+  exports: BundleExports;
+}
+
+/** One node the stubbed jsx records instead of rendering. */
+interface StubElement {
+  type: string;
+  props: Record<string, unknown>;
+  children: unknown[];
+}
+
+/** One field as the card reads it. */
+interface CardFieldState {
+  text: string;
+  overridden: boolean;
+  invalid: boolean;
+}
+
+/** The card's published state, as the stub store builds it. */
+interface CardState {
+  shell: {
+    available: boolean;
+    writable: boolean;
+    dirty: boolean;
+    invalid: boolean;
+    saving: boolean;
+    failed: boolean;
+  };
+  fields: Record<string, CardFieldState>;
+  keys: CardKeys;
+}
+
+/** What the slot hands the card. */
+interface CardProps {
+  view: "page" | "summary";
+  t: (key: string) => string;
+  useTinyfishCard: (select: (state: CardState) => CardState) => CardState;
+  edit: (field: string, text: string) => void;
+  resetField: (field: string) => void;
+  save: () => void;
+  discard: () => void;
+}
+
+/** The card component the bundle registers. */
+type CardComponent = (props: CardProps) => StubElement;
+
+/** The slot entry the bundle registers: only what the tests read. */
+interface SlotEntry {
+  name: string;
+  key: string;
+  inject: () => unknown;
+}
+
+/** A form scope the stub config-forms domain hands out. */
+interface FormScope {
+  getSnapshot: () => {
+    status: string;
+    value: Record<string, unknown>;
+    base: Record<string, unknown>;
+    user: Record<string, unknown>;
+    writable: boolean;
+    revision: number;
+  };
+  subscribe: () => () => void;
+  mutate: () => Promise<boolean>;
+}
+
+/** The stub host context the bundle's `apply` runs against. */
+interface TestCtx {
+  effect: (body: () => (() => void) | undefined, label: string) => void;
+  locale: {
+    bind: (ns: string) => (key: string) => string;
+    register: (ns: string, dictionaries: { en: unknown; zh: unknown }) => void;
+  };
+  configForms: {
+    get: (ns: string) => FormScope;
+    whileServed: (
+      namespaces: string[],
+      register: (served: Set<string>) => void
+    ) => void;
+  };
+  slots: {
+    inject: (slot: string, register: () => void) => void;
+    register: (entry: SlotEntry, component: CardComponent) => void;
+  };
+  remote: {
+    $on: (...args: unknown[]) => () => void;
+    credentials: {
+      set: (ref: string, value: string) => Promise<boolean>;
+      describe?: (ref: string) => Promise<unknown[]>;
+    };
+  };
+}
+
+/**
  * Load the bundle under a stub of the host's module loader.
  *
  * @returns the module the factory produced, and what it asked `require` for.
  */
-function loadBundle() {
-  const loaded = [];
-  const modelCalls = [];
-  const bindings = [];
-  let registration;
-  const window = {
+function loadBundle(): LoadedBundle {
+  const loaded: string[] = [];
+  const modelCalls: ModelCall[] = [];
+  const bindings: Projection[] = [];
+  let registration: RegistrationSpec | undefined;
+  const window: WindowStub = {
     __ModuleLoader__: {
       load(spec) {
         registration = spec;
@@ -56,13 +222,17 @@ function loadBundle() {
 
   // A `require` that answers only for what the manifest declares, so a bundle
   // reaching for something undeclared fails here rather than in the browser.
-  const require = (name) => {
+  const require: RequireStub = (name) => {
     loaded.push(name);
     if (name === "react/jsx-runtime" || name === "react") {
       // A minimal element tree: enough to assert *what* the card renders
       // (which components, with which props) without a DOM.
-      const el = (type, props, ...rest) => {
-        let fromProps = [];
+      const el = (
+        type: string | ((...args: never[]) => unknown),
+        props: { children?: unknown } & Record<string, unknown>,
+        ...rest: unknown[]
+      ): StubElement => {
+        let fromProps: unknown[] = [];
         if (props?.children !== undefined) {
           fromProps = Array.isArray(props.children)
             ? props.children
@@ -71,7 +241,7 @@ function loadBundle() {
         return {
           type: typeof type === "function" ? type.name || "fn" : type,
           props: props ?? {},
-          children: [...rest, ...fromProps].flat(Infinity),
+          children: [...rest, ...fromProps].flat(Infinity) as unknown[],
         };
       };
       return { jsx: el, jsxs: el, Fragment: "Fragment" };
@@ -84,12 +254,16 @@ function loadBundle() {
         // object hands that object back — which sidesteps
         // `class-methods-use-this` honestly: this stub has no state, so a method
         // that ignores `this` is exactly what the rule would be pointing at.
-        SettingsFormModel: function SettingsFormModel(scope, specs, secrets) {
+        SettingsFormModel: function SettingsFormModel(
+          scope: unknown,
+          specs: { field: string }[],
+          secrets: { field: string }[]
+        ): unknown {
           // Record the arguments: these are the fields the page renders, and a
           // card that forgets one is a control the user cannot reach.
           modelCalls.push({ specs, secrets });
           return {
-            bind: (project) => {
+            bind: (project: Projection): unknown => {
               bindings.push(project);
               return {};
             },
@@ -101,7 +275,11 @@ function loadBundle() {
               saving: false,
               failed: false,
             }),
-            field: () => ({ text: "", overridden: false, invalid: false }),
+            field: (_field: string): FieldState => ({
+              text: "",
+              overridden: false,
+              invalid: false,
+            }),
             actions: () => ({
               edit: () => {},
               resetField: () => {},
@@ -115,12 +293,12 @@ function loadBundle() {
         SettingsValueField: () => null,
         Switch: () => null,
         SegmentedControl: () => null,
-        settingsNumberField: (field) => ({
+        settingsNumberField: (field: string) => ({
           field,
           format: String,
           parse: () => {},
         }),
-        settingsTextField: (field) => ({
+        settingsTextField: (field: string) => ({
           field,
           format: String,
           parse: () => {},
@@ -234,12 +412,13 @@ test("it asks the host for React and the primitives instead of bundling them", (
 
 test("apply registers the bundle config form, gated on the namespace being served", () => {
   const { exports, modelCalls } = loadBundle();
-  const effects = [];
-  const served = [];
-  const registered = [];
+  const effects: string[] = [];
+  const served: string[] = [];
+  const registered: { entry: Record<string, unknown>; component: unknown }[] =
+    [];
 
   const ctx = {
-    effect: (body, label) => {
+    effect: (body: () => unknown, label: string): void => {
       effects.push(label);
       // Run it now: these are registration effects, and running them is what a
       // mounted plugin does.
@@ -247,8 +426,14 @@ test("apply registers the bundle config form, gated on the namespace being serve
       if (typeof disposer === "function") disposer();
     },
     locale: {
-      bind: () => (key) => key,
-      register: (ns, dictionaries) => {
+      bind:
+        () =>
+        (key: string): string =>
+          key,
+      register: (
+        ns: string,
+        dictionaries: { en: unknown; zh: unknown }
+      ): void => {
         assert.equal(ns, "web-tinyfish");
         assert.ok(
           dictionaries.en && dictionaries.zh,
@@ -257,7 +442,7 @@ test("apply registers the bundle config form, gated on the namespace being serve
       },
     },
     configForms: {
-      get: (ns) => {
+      get: (ns: string) => {
         assert.equal(ns, "web-tinyfish");
         return {
           getSnapshot: () => ({
@@ -272,20 +457,23 @@ test("apply registers the bundle config form, gated on the namespace being serve
           mutate: async () => true,
         };
       },
-      whileServed: (namespaces, register) => {
+      whileServed: (
+        namespaces: string[],
+        register: (served: Set<string>) => void
+      ): void => {
         served.push(...namespaces);
         register(new Set(namespaces));
       },
     },
     slots: {
-      inject: (slot, register) => {
+      inject: (slot: string, register: () => void): void => {
         // `plugins.bundle.config` is the keyed slot a bundle's own detail page
         // renders; `plugins.item` is the official-plugins list, which is not
         // where a third-party form belongs.
         assert.equal(slot, "plugins.bundle.config");
         register();
       },
-      register: (entry, component) => {
+      register: (entry: Record<string, unknown>, component: unknown): void => {
         registered.push({ entry, component });
       },
     },
@@ -295,7 +483,7 @@ test("apply registers the bundle config form, gated on the namespace being serve
     },
   };
 
-  exports.apply(ctx);
+  exports.apply(ctx as unknown as Parameters<typeof exports.apply>[0]);
 
   assert.deepEqual(
     served,
@@ -344,15 +532,21 @@ test("apply registers the bundle config form, gated on the namespace being serve
  * assertions read the structure the card *would* render: which components, in
  * which order, with which props — including what conditional rendering hides.
  */
-function renderCard(sectionValue = {}) {
+function renderCard(sectionValue: Record<string, unknown> = {}): unknown {
   const { exports } = loadBundle();
-  let card = null;
+  let card: CardComponent | null = null;
   const ctx = {
-    effect: (body) => {
+    effect: (body: () => unknown): void => {
       const disposer = body();
-      if (typeof disposer === "function") disposer();
+      if (typeof disposer === "function") (disposer as () => void)();
     },
-    locale: { bind: () => (key) => key, register: () => {} },
+    locale: {
+      bind:
+        () =>
+        (key: string): string =>
+          key,
+      register: (): void => {},
+    },
     configForms: {
       get: () => ({
         getSnapshot: () => ({
@@ -366,12 +560,19 @@ function renderCard(sectionValue = {}) {
         subscribe: () => () => {},
         mutate: async () => true,
       }),
-      whileServed: (namespaces, register) => register(new Set(namespaces)),
+      whileServed: (
+        namespaces: string[],
+        register: (served: Set<string>) => void
+      ): void => {
+        register(new Set(namespaces));
+      },
     },
     slots: {
-      inject: (slot, register) => register(),
-      register: (entry, component) => {
-        card = component;
+      inject: (_slot: string, register: () => void): void => {
+        register();
+      },
+      register: (entry: Record<string, unknown>, component: unknown): void => {
+        card = component as CardComponent;
       },
     },
     remote: {
@@ -379,7 +580,9 @@ function renderCard(sectionValue = {}) {
       credentials: { set: async () => true, describe: async () => [] },
     },
   };
-  exports.apply(ctx);
+  // A test double for the host context. The double cast is honest about that:
+  // behavior is asserted below, not type overlap.
+  exports.apply(ctx as unknown as Parameters<typeof exports.apply>[0]);
   assert.ok(card, "the card component was registered");
 
   // The injected actions the slot entry provides, mirroring model.actions().
@@ -392,10 +595,15 @@ function renderCard(sectionValue = {}) {
   // The store projection the real SettingsFormModel builds: shell, per-field
   // { text, overridden, invalid }, and the key state. Draft text mirrors the
   // section value the way spec.format would render it.
-  const fields = {};
+  const fields: Record<string, CardFieldState> = {};
   for (const [name, value] of Object.entries(sectionValue)) {
     fields[name] = {
-      text: value === undefined ? "" : String(value),
+      text:
+        typeof value === "string" ||
+        typeof value === "number" ||
+        typeof value === "boolean"
+          ? String(value)
+          : "",
       overridden: true,
       invalid: false,
     };
@@ -418,46 +626,77 @@ function renderCard(sectionValue = {}) {
   // Patch the fields the card reads so unset keys resolve like the real model:
   // schema defaults for the switches and channel, blank for the rest.
   const withDefaults = new Proxy(state.fields, {
-    get: (target, name) => {
-      if (name in target) return target[name];
+    get: (
+      target: Record<string, CardFieldState>,
+      name: string
+    ): CardFieldState => {
+      if (name in target) return target[name] as CardFieldState;
       if (name === "search" || name === "fetch" || name === "channel") {
         return { text: "", overridden: false, invalid: false };
       }
       return { text: "", overridden: false, invalid: false };
     },
   });
-  const tree = card({
+  if (!card) throw new Error("the card component was not registered");
+  const render: CardComponent = card;
+  const tree = render({
     view: "page",
-    t: (key) => key,
-    useTinyfishCard: (select) => select({ ...state, fields: withDefaults }),
+    t: (key: string): string => key,
+    useTinyfishCard: (select: (state: CardState) => CardState) =>
+      select({ ...state, fields: withDefaults }),
     ...actions,
-    edit: (f, v) => {
+    edit: (f: string, v: string): void => {
       fields[f] = { text: v, overridden: true, invalid: false };
     },
-    resetField: (f) => {
+    resetField: (f: string): void => {
       fields[f] = { text: "", overridden: false, invalid: false };
     },
   });
   return tree;
 }
 
+/** Narrows an unknown tree node to the stub element shape. */
+function isStubElement(node: unknown): node is StubElement {
+  return (
+    typeof node === "object" &&
+    node !== null &&
+    "type" in node &&
+    "props" in node &&
+    "children" in node
+  );
+}
+
 /** Find elements by type in a tree. */
-function findByType(node, type, acc = []) {
-  if (!node || typeof node !== "object") return acc;
+function findByType(
+  node: unknown,
+  type: string,
+  acc: StubElement[] = []
+): StubElement[] {
+  if (!isStubElement(node)) return acc;
   if (node.type === type) acc.push(node);
-  for (const child of node.children ?? []) findByType(child, type, acc);
+  for (const child of node.children) findByType(child, type, acc);
   return acc;
+}
+
+/** Read a control's props with the shape the test asserts on. */
+function segProps(el: StubElement): {
+  options: { value: string }[];
+  value: string;
+} {
+  return el.props as unknown as { options: { value: string }[]; value: string };
 }
 
 test("channel renders as a segmented control, not a text field", () => {
   const tree = renderCard({});
   const segmented = findByType(tree, "SegmentedControl");
   assert.equal(segmented.length, 1, "exactly one segmented control");
-  const got = segmented[0].props.options.map((o) => o.value);
+  const got = segProps(segmented[0]).options.map(
+    (o: { value: string }) => o.value
+  );
   assert.equal(got.length, 2, "two channel options");
   assert.equal(got[0], "direct");
   assert.equal(got[1], "monid");
-  assert.equal(segmented[0].props.value, "direct", "defaulting to direct");
+  assert.equal(segProps(segmented[0]).value, "direct", "defaulting to direct");
 });
 
 test("search and fetch render as switches, not text fields", () => {
@@ -476,7 +715,7 @@ test("search and fetch render as switches, not text fields", () => {
 test("purpose hides when search is off", () => {
   const on = renderCard({ search: true });
   const off = renderCard({ search: false });
-  const hasPurpose = (tree) =>
+  const hasPurpose = (tree: unknown): boolean =>
     findByType(tree, "SettingsValueField").some(
       (f) => f.props.id === "plugin-config-tinyfish-purpose"
     );
@@ -485,7 +724,7 @@ test("purpose hides when search is off", () => {
 });
 
 test("a warning shows only when both providers are off", () => {
-  const texts = (tree) =>
+  const texts = (tree: unknown): string[] =>
     findByType(tree, "p").map((p) =>
       (p.children ?? []).filter((c) => typeof c === "string").join("")
     );
@@ -569,9 +808,19 @@ test("the published state carries a key entry for both channels", () => {
         subscribe: () => () => {},
         mutate: async () => true,
       }),
-      whileServed: (namespaces, register) => register(new Set(namespaces)),
+      whileServed: (
+        namespaces: string[],
+        register: (served: Set<string>) => void
+      ): void => {
+        register(new Set(namespaces));
+      },
     },
-    slots: { inject: (slot, register) => register(), register: () => {} },
+    slots: {
+      inject: (_slot: string, register: () => void): void => {
+        register();
+      },
+      register: (): void => {},
+    },
     remote: { $on: () => () => {}, credentials: { set: async () => true } },
   });
   assert.equal(bindings.length, 1, "the card binds one projection");

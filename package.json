@@ -44,9 +44,9 @@
     }
   },
   "scripts": {
-    "build": "vp pack && node scripts/name-client-bundle.mjs",
+    "build": "vp pack && node scripts/name-client-bundle.ts",
     "check": "vp check",
-    "ci": "vp check && vp test && node scripts/check.mjs",
+    "ci": "vp check && vp test && node scripts/check.ts",
     "clean": "rm -rf lib",
     "format": "vp fmt --check",
     "format:fix": "vp fmt --write",
@@ -74,7 +74,8 @@
     "react": "^18.3.1",
     "typescript": "^7.0.2",
     "ultracite": "^7.12.1",
-    "vite-plus": "catalog:"
+    "vite-plus": "catalog:",
+    "vitest": "5.0.1"
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "~4.0.4",
