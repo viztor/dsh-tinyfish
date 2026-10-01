@@ -192,7 +192,7 @@ export interface ClientContext {
     register: (
       ns: string,
       dictionaries: { en: unknown; zh: unknown }
-    ) => (() => void) | void;
+    ) => (() => void) | undefined;
   };
   configForms: {
     get: (ns: string) => SettingsFormScope<unknown>;
@@ -485,7 +485,7 @@ export function apply(ctx: ClientContext) {
     try {
       return ctx.locale.register(NS, { zh, en });
     } catch {
-      return () => {};
+      return undefined;
     }
   }, "dsh-tinyfish: dictionaries");
 
