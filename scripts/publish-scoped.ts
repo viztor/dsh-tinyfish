@@ -37,18 +37,26 @@ const pkg = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8")) as {
 };
 const version: string = pkg.version;
 
-// Skip, don't fail, when the scoped copy is already out. npm refuses to
-// republish a version, so without this a retried tag — a failed first attempt,
-// a re-pushed tag — fails the whole release instead of resuming. Same rule as
-// the unscoped step in release.yml.
+// The registry being written to. The release workflow calls bare for npmjs
+// and with `PUBLISH_REGISTRY=https://npm.pkg.github.com` for the mirror;
+// provenance is npmjs-only, and the auth line below names this host.
+const registry =
+  process.env.PUBLISH_REGISTRY?.trim() || "https://registry.npmjs.org";
+const host = new URL(registry).host;
+
+// Skip, don't fail, when this version is already out on the registry being
+// written to. npm refuses to republish a version, so without this a retried
+// tag fails the whole release instead of resuming. The check reads from the
+// target registry — consulting npmjs about a version that lives only on the
+// mirror would republish it every time.
 try {
   const published = execFileSync(
     "npm",
-    ["view", `${SCOPED}@${version}`, "version"],
+    ["view", `${SCOPED}@${version}`, "version", `--registry=${registry}`],
     { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }
   ).trim();
   if (published === version) {
-    console.log(`${SCOPED}@${version} is already on npmjs, skipping`);
+    console.log(`${SCOPED}@${version} is already on ${host}, skipping`);
     process.exit(0);
   }
 } catch {
@@ -98,22 +106,39 @@ try {
   // a clearer failure than a stale cached secret.
   const token = process.env.NPM_TOKEN?.trim();
   const otp = process.env.NPM_OTP?.trim();
-  const npmrc =
-    token !== undefined && token !== ""
-      ? (() => {
-          const file = join(scratch, ".npmrc");
-          writeFileSync(file, `//registry.npmjs.org/:_authToken=${token}\n`, {
-            mode: 0o600,
-          });
-          return ["--userconfig", file];
-        })()
-      : [];
+  // The mirror authenticates with the workflow token, not OIDC: GitHub
+  // Packages has no trusted-publisher concept, so this is the only route.
+  const mirrorToken =
+    registry === "https://registry.npmjs.org"
+      ? undefined
+      : process.env.NODE_AUTH_TOKEN?.trim();
+  // Exactly one auth route ever applies: an explicitly pasted token wins,
+  // then the mirror's workflow token, then nothing and npm says what it needs.
+  // Written as early returns rather than a nested ternary, which reads as a
+  // decision instead of a puzzle.
+  const npmrc = ((): string[] => {
+    if (token !== undefined && token !== "") {
+      const file = join(scratch, ".npmrc");
+      writeFileSync(file, `//${host}/:_authToken=${token}\n`, { mode: 0o600 });
+      return ["--userconfig", file];
+    }
+    if (mirrorToken !== undefined && mirrorToken !== "") {
+      return [`--//${host}/:_authToken=${mirrorToken}`];
+    }
+    return [];
+  })();
+  // Provenance attests to npmjs via the workflow's OIDC identity. The mirror
+  // gets none: GitHub Packages accepts no attestation, and asserting one for
+  // the wrong registry would fail the publish it is meant to protect.
+  const attest =
+    inCI && registry === "https://registry.npmjs.org" ? ["--provenance"] : [];
   execFileSync(
     "npm",
     [
       "publish",
       scratch,
-      ...(inCI ? ["--provenance"] : []),
+      `--registry=${registry}`,
+      ...attest,
       ...(otp ? ["--otp", otp] : []),
       ...npmrc,
       "--access",
