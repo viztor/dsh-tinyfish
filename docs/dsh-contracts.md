@@ -142,6 +142,18 @@ Slot declarations are `declare module` augmentations of `SlotMap`, and declaring
 
 `packageText` resolves a title from `pkg.meta?.title` through the locale service, falling back to the raw package name — which is why this plugin shows as `dsh-tinyfish` while built-in rows show Chinese names. But **no manifest in the entire harness store carries a `meta` field**, official packages included, and the host inventory builds `pkg` objects without one. The `meta` path exists in code and is unreachable in practice; the official Chinese titles come from built-in locale dictionaries, not from a per-package mechanism. There is no verified way for a third-party bundle to localize its list name. What _is_ localizable is everything inside the bundle's own surfaces — the settings card ships en and zh dictionaries — so the form reads natively even though the list row does not.
 
+### Package artwork _is_ reachable: declare `icon` in the manifest
+
+The correction to the blanket claim above. The Plugins page renders
+`pkg.meta?.icon` through `PackageArtwork` on cards, rows, and detail headers,
+with a default fallback when absent — and the manifest `icon` field
+(`"icon": "./icon.svg"`, shipped in `files`) is how a third-party package
+populates it. `dsh-opencode` has done this all along; `dsh-tinyfish` did not
+until the fish moved from `assets/` to root `icon.svg`. So: names stay raw,
+artwork renders. The two `meta` sub-paths really are independent — one dead,
+one live — and any future claim about "no third-party mechanism" needs to
+name which one.
+
 ### The form API
 
 ```ts
