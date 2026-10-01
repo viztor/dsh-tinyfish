@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="assets/tinyfish.svg" alt="TinyFish logo" width="120" />
+  <img src="icon.svg" alt="TinyFish logo" width="120" />
   <h1>dsh-tinyfish</h1>
   <p><strong>Free web search and fetch for the DeepSeek Harness.</strong><br />Give your agent the live web — at $0 per call.</p>
 
@@ -187,7 +187,7 @@ pnpm run release:gate   # build, then the full gate incl. 11 package checks
 pnpm run test:live      # the real APIs, still $0, needs credentials
 ```
 
-Requires **DSH 0.2.0+** and **Node 26+**. Full process and invariants: [`AGENTS.md`](./AGENTS.md). Contributing: [`CONTRIBUTING.md`](./CONTRIBUTING.md).
+Requires **DSH 0.2.0+** and **Node 24+**. Full process and invariants: [`AGENTS.md`](./AGENTS.md). Contributing: [`CONTRIBUTING.md`](./CONTRIBUTING.md).
 
 </details>
 

@@ -27,7 +27,7 @@
     "cordis.patch.yml",
     "README.md",
     "LICENSE",
-    "assets/tinyfish.svg"
+    "icon.svg"
   ],
   "type": "module",
   "main": "lib/index.mjs",
@@ -84,8 +84,9 @@
     "@deepseek-ai/dsh-launch-environment": "^0.2.0-rc.1",
     "@deepseek-ai/dsh-web": "^0.2.0-rc.1"
   },
+  "icon": "./icon.svg",
   "engines": {
-    "node": ">=26"
+    "node": ">=24"
   },
   "packageManager": "pnpm@12.6.0",
   "dsh": {
