@@ -85,7 +85,7 @@ It never reads a plugin's `Config`. **A page exists only because a package contr
 The verified shape, read out of `dsh-client-ui-settings-web-search/lib/client.js`:
 
 ```js
-const NS = "web-tinyfish"; // spelled here: a client package must not import a Host package
+const NS = "dsh-tinyfish"; // spelled here: a client package must not import a Host package
 
 export const inject = [
   "slots",

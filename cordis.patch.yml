@@ -23,14 +23,14 @@
 # where the preference belongs and where it can be changed without a new
 # release:
 #
-#   - id: web-tinyfish
+#   - id: dsh-tinyfish
 #     config:
 #       channel: monid
 #
 # `apiKey` is not set here either — a secret belongs in the environment, the
 # CLI's own store, or the harness credentials service, never in a patch file.
 - insert:
-    - id: web-tinyfish
+    - id: dsh-tinyfish
       name: "dsh-tinyfish"
       config:
         attempts: 3

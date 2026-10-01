@@ -38,7 +38,7 @@ import {
  * duplicated on purpose. It must equal the exported `name` of `src/index.ts`:
  * that is what the Plugins page keys the row by.
  */
-export const NS = "web-tinyfish";
+export const NS = "dsh-tinyfish";
 
 /**
  * Client-side services this page needs.
@@ -189,7 +189,10 @@ export interface ClientContext {
   effect: (body: () => (() => void) | undefined, label: string) => void;
   locale: {
     bind: (ns: string) => Translate;
-    register: (ns: string, dictionaries: { en: unknown; zh: unknown }) => void;
+    register: (
+      ns: string,
+      dictionaries: { en: unknown; zh: unknown }
+    ) => (() => void) | void;
   };
   configForms: {
     get: (ns: string) => SettingsFormScope<unknown>;
@@ -479,7 +482,11 @@ function TinyfishCard(props: CardProps) {
  */
 export function apply(ctx: ClientContext) {
   ctx.effect(() => {
-    ctx.locale.register(NS, { zh, en });
+    try {
+      return ctx.locale.register(NS, { zh, en });
+    } catch {
+      return () => {};
+    }
   }, "dsh-tinyfish: dictionaries");
 
   // `configForms.get(namespace)` returns exactly the scope `SettingsFormModel`

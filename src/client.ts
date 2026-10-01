@@ -431,14 +431,14 @@ function requireKey(channel: TinyfishChannel, key: string): void {
     throw new WebError(
       "The tinyfish provider has no Monid API key. Run `monid keys add` to " +
         "store one in the local credential file, or export MONID_API_KEY, or " +
-        "set the web-tinyfish `apiKeyEnv` row in the profile's cordis.patch.yml.",
+        "set the dsh-tinyfish `apiKeyEnv` row in the profile's cordis.patch.yml.",
       WEB_PROVIDER_CREDENTIAL_MISSING
     );
   }
   throw new WebError(
     "The tinyfish provider has no TinyFish API key. Run `tinyfish auth " +
       "login` to save one, or export TINYFISH_API_KEY, or set the " +
-      "web-tinyfish `apiKeyEnv` row in the profile's cordis.patch.yml — or " +
+      "dsh-tinyfish `apiKeyEnv` row in the profile's cordis.patch.yml — or " +
       "switch the provider's channel to 'monid' to use a Monid key instead.",
     WEB_PROVIDER_CREDENTIAL_MISSING
   );

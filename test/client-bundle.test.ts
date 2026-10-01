@@ -379,7 +379,7 @@ test("the factory exports the shape a client bundle must have", () => {
   const { exports } = loadBundle();
   assert.equal(
     exports.NS,
-    "web-tinyfish",
+    "dsh-tinyfish",
     "the namespace equals the plugin's exported name"
   );
   assert.equal(typeof exports.apply, "function");
@@ -434,7 +434,7 @@ test("apply registers the bundle config form, gated on the namespace being serve
         ns: string,
         dictionaries: { en: unknown; zh: unknown }
       ): void => {
-        assert.equal(ns, "web-tinyfish");
+        assert.equal(ns, "dsh-tinyfish");
         assert.ok(
           dictionaries.en && dictionaries.zh,
           "both dictionaries are registered"
@@ -443,7 +443,7 @@ test("apply registers the bundle config form, gated on the namespace being serve
     },
     configForms: {
       get: (ns: string) => {
-        assert.equal(ns, "web-tinyfish");
+        assert.equal(ns, "dsh-tinyfish");
         return {
           getSnapshot: () => ({
             status: "ready",
@@ -487,7 +487,7 @@ test("apply registers the bundle config form, gated on the namespace being serve
 
   assert.deepEqual(
     served,
-    ["web-tinyfish"],
+    ["dsh-tinyfish"],
     "the page is gated on the Host serving its namespace"
   );
   assert.equal(registered.length, 1, "exactly one slot entry");

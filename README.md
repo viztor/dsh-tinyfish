@@ -26,11 +26,7 @@ cd ~/.dsh/profiles/web
 npm install dsh-tinyfish   # or: npm install @viztor/dsh-tinyfish — same thing
 ```
 
-Pick **one** name and install it once. Both tarballs carry byte-identical code
-and read the same settings (providers register as `tinyfish`, configuration
-lives under the row id `web-tinyfish`, credentials under the same two refs) —
-so switching names later loses nothing, but mounting both loads the bundle
-twice. `dsh-tinyfish` is the name DSH convention and these docs use.
+Pick **one** name and install it once. Both tarballs carry byte-identical code and read the same settings (providers register as `tinyfish`, configuration lives under the row id `dsh-tinyfish`, credentials under the same two refs) — so switching names later loses nothing, but mounting both loads the bundle twice. `dsh-tinyfish` is the name DSH convention and these docs use.
 
 <details>
 <summary><strong>📦 Installing from GitHub Packages instead</strong></summary>
@@ -81,7 +77,7 @@ then `npm install @viztor/dsh-tinyfish` resolves from the mirror. Unless npmjs i
 The default is `direct`, because the package is named for TinyFish — a fresh install asks for the credential its own name implies. Prefer Monid (it reuses a platform key your Monid MCP mount may already hold)? Pin it in your profile patch:
 
 ```yaml
-- id: web-tinyfish
+- id: dsh-tinyfish
   config:
     channel: monid
 ```
@@ -101,7 +97,7 @@ The page shows the key for the **selected** channel, plus the saved-or-not statu
 
 <br />
 
-Everything lives in one row, `web-tinyfish`. The row is validated, so an out-of-range value is rejected with a message rather than silently clamped.
+Everything lives in one row, `dsh-tinyfish`. The row is validated, so an out-of-range value is rejected with a message rather than silently clamped.
 
 | key | default | meaning |
 | --- | --- | --- |
@@ -120,7 +116,7 @@ Everything lives in one row, `web-tinyfish`. The row is validated, so an out-of-
 Turning one off reports _unavailable_ rather than _missing_ — the harness tells those apart, and only the second means "the install is broken".
 
 ```yaml
-- id: web-tinyfish
+- id: dsh-tinyfish
   config:
     search: true
     fetch: false # keep TinyFish for search, let dsh-web use another fetch
@@ -131,7 +127,7 @@ Turning one off reports _unavailable_ rather than _missing_ — the harness tell
 `filters` is a nested object, and the settings form addresses one flat key per field — so search tuning stays operator-level:
 
 ```yaml
-- id: web-tinyfish
+- id: dsh-tinyfish
   config:
     channel: monid
     filters:

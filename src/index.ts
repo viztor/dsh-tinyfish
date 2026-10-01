@@ -34,8 +34,9 @@ import {
  * @module dsh-tinyfish
  */
 
-/** Settings namespace, matching the `<kind>-<provider>` convention. */
-export const WEB_TINYFISH_SETTINGS_NAMESPACE = "web-tinyfish";
+/** Settings namespace, matching the plugin identity. */
+export const TINYFISH_SETTINGS_NAMESPACE = "dsh-tinyfish";
+export const WEB_TINYFISH_SETTINGS_NAMESPACE = TINYFISH_SETTINGS_NAMESPACE;
 
 /**
  * The plugin's settings schema.
@@ -164,7 +165,7 @@ export const inject = ["web"];
  * `@viztor/dsh-opencode` while exporting `dsh-opencode`, and mounts fine.
  * Package identity is the install path (`node_modules/dsh-tinyfish` vs
  * `node_modules/@viztor/dsh-tinyfish`); the providers register as `tinyfish`
- * and the settings live under the row id `web-tinyfish`, so either install
+ * and the settings live under the row id `dsh-tinyfish`, so either install
  * name reads and writes the same settings. Install exactly one — mounting
  * both loads the bundle twice.
  */
