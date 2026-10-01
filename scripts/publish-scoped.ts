@@ -83,11 +83,33 @@ try {
   const inCI =
     process.env.CI === "true" || process.env.GITHUB_ACTIONS === "true";
   // A web-login token requires a one-time password for publishing; an
-  // automation token does not. Rather than demanding either, accept the code
-  // the authenticator shows right now: `NPM_OTP=123456 node
-  // scripts/publish-scoped.ts`. Absent, the command runs as-is and npm says
-  // what it needs, which is a clearer failure than a stale cached code.
+  // automation token does not. Two ways through, in order of preference:
+  //
+  //   NPM_TOKEN=npm_xxx node scripts/publish-scoped.ts
+  //     An automation (or granular, publish-scoped) token, pasted once. No
+  //     code, no browser round-trip. Create one at npmjs.com → Access Tokens.
+  //     It is used for this publish only and never written to disk — the temp
+  //     npmrc below is deleted with the scratch dir.
+  //
+  //   NPM_OTP=123456 node scripts/publish-scoped.ts
+  //     The code the authenticator shows right now, for a web-login token.
+  //
+  // Absent both, the command runs as-is and npm says what it needs, which is
+  // a clearer failure than a stale cached secret.
+  const token = process.env.NPM_TOKEN?.trim();
   const otp = process.env.NPM_OTP?.trim();
+  const npmrc =
+    token !== undefined && token !== ""
+      ? (() => {
+          const file = join(scratch, ".npmrc");
+          writeFileSync(
+            file,
+            `//registry.npmjs.org/:_authToken=${token}\n`,
+            { mode: 0o600 }
+          );
+          return ["--userconfig", file];
+        })()
+      : [];
   execFileSync(
     "npm",
     [
@@ -95,6 +117,7 @@ try {
       scratch,
       ...(inCI ? ["--provenance"] : []),
       ...(otp ? ["--otp", otp] : []),
+      ...npmrc,
       "--access",
       "public",
       "--ignore-scripts",
