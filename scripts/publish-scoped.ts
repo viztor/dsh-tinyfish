@@ -75,12 +75,19 @@ try {
     JSON.stringify(manifest, null, 2) + "\n"
   );
 
+  // Provenance needs OIDC, which exists only in CI. Locally there is no
+  // identity provider, so npm errors with "Automatic provenance generation
+  // not supported" — which is accurate and useless. Detect the environment
+  // rather than adding a flag, because a flag would be forgotten exactly when
+  // it matters and the failure would return.
+  const inCI =
+    process.env["CI"] === "true" || process.env["GITHUB_ACTIONS"] === "true";
   execFileSync(
     "npm",
     [
       "publish",
       scratch,
-      "--provenance",
+      ...(inCI ? ["--provenance"] : []),
       "--access",
       "public",
       "--ignore-scripts",
