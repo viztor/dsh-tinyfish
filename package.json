@@ -24,6 +24,7 @@
     "lib/index.mjs",
     "lib/index.d.mts",
     "lib/client.js",
+    "locale/*.json",
     "cordis.patch.yml",
     "README.md",
     "LICENSE",
@@ -40,6 +41,8 @@
     },
     "./src/*": "./src/*",
     "./package.json": "./package.json",
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./locale/*.json": "./locale/*.json",
     "./client": {
       "default": "./lib/client.js"
     }
@@ -47,7 +50,7 @@
   "scripts": {
     "build": "vp pack && node scripts/name-client-bundle.ts",
     "check": "vp check",
-    "ci": "vp check && vp test && node scripts/check.ts",
+    "ci": "vp check && vp test --coverage && node scripts/check.ts",
     "clean": "rm -rf lib",
     "format": "vp fmt --check",
     "format:fix": "vp fmt --write",
@@ -65,7 +68,7 @@
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "~4.0.4",
-    "@deepseek-ai/dsh-client-ui-primitives": "0.2.0-rc.1",
+    "@deepseek-ai/dsh-client-ui-primitives": "^0.2.0-rc.2",
     "@deepseek-ai/dsh-credentials": "0.2.0-rc.1",
     "@deepseek-ai/dsh-launch-environment": "0.2.0-rc.1",
     "@deepseek-ai/dsh-web": "0.2.0-rc.1",

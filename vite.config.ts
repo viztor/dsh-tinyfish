@@ -234,9 +234,25 @@ export default defineConfig({
       // The loader contract. A client bundle is not a module the page imports;
       // it is a factory the page hands a `require` to, and it must call this
       // before anything else runs.
-      banner:
-        'window.__ModuleLoader__.load({\n  id: "dsh-tinyfish",\n  factory: (require) => {\n    var module = { exports: {} };\n    var exports = module.exports;',
-      footer: "    return module.exports;\n  },\n});",
+      //
+      // The registration id must equal the package name the graph row executes,
+      // so every published name needs its own call: this package ships as both
+      // `dsh-tinyfish` and the GitHub Packages mirror `@viztor/dsh-tinyfish`,
+      // and a scoped install that found no matching id would silently lose its
+      // settings page. One factory serves all of them.
+      banner: [
+        "(function () {",
+        "  var factory = function (require) {",
+        "    var module = { exports: {} };",
+        "    var exports = module.exports;",
+      ].join("\n"),
+      footer: [
+        "    return module.exports;",
+        "  };",
+        '  window.__ModuleLoader__.load({ id: "dsh-tinyfish", factory: factory });',
+        '  try { window.__ModuleLoader__.load({ id: "@viztor/dsh-tinyfish", factory: factory }); } catch (e) {}',
+        "})();",
+      ].join("\n"),
     },
   ],
 

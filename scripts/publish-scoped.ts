@@ -45,12 +45,18 @@ const registry =
   process.env.PUBLISH_REGISTRY?.trim() || "https://registry.npmjs.org";
 const host = new URL(registry).host;
 
+// `PUBLISH_DRY_RUN=1` inspects the scratch tree without touching the network,
+// so it must not consult the registry either — otherwise a version that is
+// already published short-circuits before the transform is ever shown.
+const dryRun = process.env.PUBLISH_DRY_RUN === "1";
+
 // Skip, don't fail, when this version is already out on the registry being
 // written to. npm refuses to republish a version, so without this a retried
 // tag fails the whole release instead of resuming. The check reads from the
 // target registry — consulting npmjs about a version that lives only on the
 // mirror would republish it every time.
 try {
+  if (dryRun) throw new Error("dry run");
   const published = execFileSync(
     "npm",
     ["view", `${SCOPED}@${version}`, "version", `--registry=${registry}`],
@@ -72,7 +78,18 @@ try {
   // `files` lists what ships, but `package.json` itself is implied by npm
   // rather than listed — so it is copied explicitly, or there is nothing to
   // rename below.
-  for (const file of [...pkg.files, "package.json"]) {
+  //
+  // `files` may also hold glob patterns, such as `locale/*.json`. `cpSync`
+  // copies a path, not a pattern, so a pattern is reduced to the directory it
+  // selects from: the whole directory lands in the scratch tree and npm applies
+  // the pattern again when it packs. Naming a pattern here used to abort the
+  // release with ENOENT on a literal `locale/*.json`.
+  const copyRoot = (entry: string): string => {
+    if (!entry.includes("*")) return entry;
+    const slash = entry.indexOf("/");
+    return slash === -1 ? "." : entry.slice(0, slash);
+  };
+  for (const file of new Set([...pkg.files, "package.json"].map(copyRoot))) {
     cpSync(join(ROOT, file), join(scratch, file), { recursive: true });
   }
   const manifest = JSON.parse(
@@ -91,6 +108,25 @@ try {
       patchPath,
       patchContent.replaceAll('name: "dsh-tinyfish"', `name: "${SCOPED}"`)
     );
+  }
+
+  // `PUBLISH_DRY_RUN=1` builds the scratch tree, prints what this alias would
+  // publish, and stops before the first network call. The per-alias
+  // transformation is otherwise only observable after a real release.
+  if (dryRun) {
+    console.log(`--- ${SCOPED}@${version} (dry run) ---`);
+    console.log(readFileSync(join(scratch, "package.json"), "utf8"));
+    console.log(
+      `${
+        existsSync(join(scratch, "lib", "client.js"))
+          ? "ships"
+          : "does not ship"
+      } lib/client.js`
+    );
+    console.log(
+      `${existsSync(join(scratch, "locale", "en.json")) ? "ships" : "does not ship"} locale/en.json`
+    );
+    process.exit(0);
   }
 
   // Provenance needs OIDC, which exists only in CI. Locally there is no
@@ -128,8 +164,21 @@ try {
   // the wrong registry would fail the publish it is meant to protect.
   const attest =
     inCI && registry === "https://registry.npmjs.org" ? ["--provenance"] : [];
+  // Capture the output instead of inheriting stdio: a failure has to be
+  // *classified*, because npm reports the one benign case only in its text.
+  //
+  // The benign case is a re-pushed tag. The `npm view` guard above still says
+  // "no such version" while the registry has the tarball staged but not yet
+  // indexed, so the PUT returns 409 "Cannot publish over previously staged
+  // version". That version is on its way; it must not fail the rerun.
+  //
+  // Everything else — a missing Trusted Publisher (404), an expired token, a
+  // network failure — is a release that did NOT happen, and it is thrown so the
+  // workflow stops reporting a publish that never landed. The release
+  // workflow's final verification step then names every target that is
+  // actually absent from the registry.
   try {
-    execFileSync(
+    const output = execFileSync(
       "npm",
       [
         "publish",
@@ -141,18 +190,29 @@ try {
         "public",
         "--ignore-scripts",
       ],
-      { cwd: ROOT, stdio: "inherit" }
+      { cwd: ROOT, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }
     );
+    if (output.trim() !== "") console.log(output.trim());
     console.log(`published ${SCOPED}@${version}`);
   } catch (error: unknown) {
-    if (registry === "https://registry.npmjs.org") {
-      console.warn(
-        `[WARN] Could not publish ${SCOPED}@${version} to npmjs.org: ${error instanceof Error ? error.message : String(error)}`
-      );
-      console.warn(
-        `       Please ensure a Trusted Publisher is configured for ${SCOPED} at https://www.npmjs.com/package/${encodeURIComponent(SCOPED)}/access`
+    const failure = error as {
+      message?: string;
+      stderr?: string;
+      stdout?: string;
+    };
+    const output = `${failure.stdout ?? ""}${failure.stderr ?? ""}${
+      failure.message ?? ""
+    }`;
+    if (
+      /previously published|previously staged|EPUBLISHCONFLICT|E409/u.test(
+        output
+      )
+    ) {
+      console.log(
+        `${SCOPED}@${version} was already staged on ${host}; continuing`
       );
     } else {
+      console.error(output.trim());
       throw error;
     }
   }

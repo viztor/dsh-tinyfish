@@ -69,16 +69,17 @@ jobs:
       # viztor/dsh-tinyfish + `release.yml` to the package's Trusted Publisher
       # settings on npmjs.com and allow the `npm publish` action.
       #
-      # The guard keeps a re-run idempotent. npm refuses to republish a version,
-      # so without it a retried tag — a failed mirror, a re-pushed tag — fails
-      # the whole release instead of resuming.
+      # The `npm view` guard is the only place idempotency belongs: npm refuses
+      # to republish a version, so a retried tag has to skip rather than fail.
+      # The publish itself is NOT guarded — a swallowed error here once produced
+      # a green release for a version that never reached the registry.
       - name: Publish to npmjs (OIDC, provenance)
         run: |
           version=$(node -p "require('./package.json').version")
           if npm view "dsh-tinyfish@$version" version 2>/dev/null; then
             echo "$version is already on npmjs, skipping"
           else
-            npm publish --provenance --access public --ignore-scripts || echo "publish attempted or already staged"
+            npm publish --provenance --access public --ignore-scripts
           fi
 
       # The same content under the organisation scope. `dsh-tinyfish` is the
@@ -90,7 +91,11 @@ jobs:
       # Needs its own Trusted Publisher entry on npmjs.com: a scoped package is
       # a separate package as far as the registry is concerned, so add
       # `@viztor/dsh-tinyfish` with this same workflow file and action.
+      #
+      # Allowed to fail so the mirror below still runs; the verification step at
+      # the end turns any gap into a failed release that names the target.
       - name: Publish the scoped alias (OIDC, provenance)
+        continue-on-error: true
         run: node scripts/publish-scoped.ts
 
       # Mirror the scoped name to GitHub Packages, so the repository sidebar
@@ -103,12 +108,29 @@ jobs:
       #
       # Auth rides on the command line: file appends proved unreliable across
       # setup-node's temp userconfig, and the inline form is what dsh-opencode
-      # settled on after three attempts. Guarded like every other publish
-      # step, so a retried tag resumes instead of failing on a republish.
+      # settled on after three attempts.
       - name: Mirror the scoped name to GitHub Packages
         run: |
-          version=$(node -p "require('./package.json').version")
           export NODE_AUTH_TOKEN=${{ secrets.GITHUB_TOKEN }}
           PUBLISH_REGISTRY=https://npm.pkg.github.com node scripts/publish-scoped.ts
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # The release claim, checked instead of assumed. Both names are advertised
+      # as equivalent in README.md, so a mirror that silently lags the canonical
+      # package is a broken promise the run has to surface.
+      - name: Verify every published target
+        run: |
+          version=$(node -p "require('./package.json').version")
+          missing=""
+          for spec in "dsh-tinyfish@$version" "@viztor/dsh-tinyfish@$version"; do
+            if npm view "$spec" version --registry=https://registry.npmjs.org >/dev/null 2>&1; then
+              echo "ok      $spec  (npmjs.org)"
+            else
+              echo "MISSING $spec  (npmjs.org)"
+              missing="$missing $spec"
+            fi
+          done
+          if [ -n "$missing" ]; then
+            echo "::error::these targets did not publish:$missing — register a Trusted Publisher for each at https://www.npmjs.com/package/<name>/access (repository viztor/dsh-tinyfish, workflow release.yml)"
+            exit 1
+          fi
+          echo "every published target is live on npmjs.org"

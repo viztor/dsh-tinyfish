@@ -106,6 +106,7 @@ type Projection = () => { keys: CardKeys };
 /** What `loadBundle` hands back: the boundary values with their types. */
 interface LoadedBundle {
   registration: RegistrationSpec;
+  registrations: RegistrationSpec[];
   loaded: string[];
   modelCalls: ModelCall[];
   bindings: Projection[];
@@ -211,11 +212,16 @@ function loadBundle(): LoadedBundle {
   const loaded: string[] = [];
   const modelCalls: ModelCall[] = [];
   const bindings: Projection[] = [];
+  const registrations: RegistrationSpec[] = [];
   let registration: RegistrationSpec | undefined;
   const window: WindowStub = {
     __ModuleLoader__: {
       load(spec) {
-        registration = spec;
+        // Every call is kept, not just the last: the bundle registers one id
+        // per published package name, and a missing one is exactly the defect
+        // that used to hide here.
+        registrations.push(spec);
+        registration ??= spec;
       },
     },
   };
@@ -322,6 +328,7 @@ function loadBundle(): LoadedBundle {
   assert.ok(registration, "the bundle called window.__ModuleLoader__.load");
   return {
     registration,
+    registrations,
     loaded,
     modelCalls,
     bindings,
@@ -373,6 +380,26 @@ test("the built bundle registers itself with the loader", () => {
     "function",
     "and it is a factory, not a module"
   );
+});
+
+test("the bundle registers every name this package publishes", () => {
+  // The registration key must match the package name the boot row executes. A
+  // scoped install whose id nothing registered loses its settings page with no
+  // error at all, so the scoped name is asserted, not assumed.
+  const { registrations } = loadBundle();
+  const ids = registrations.map((spec) => spec.id);
+  assert.deepEqual(
+    ids,
+    ["dsh-tinyfish", "@viztor/dsh-tinyfish"],
+    "one registration per published name"
+  );
+  for (const spec of registrations) {
+    assert.equal(
+      typeof spec.factory,
+      "function",
+      `and ${spec.id} carries the factory`
+    );
+  }
 });
 
 test("the factory exports the shape a client bundle must have", () => {

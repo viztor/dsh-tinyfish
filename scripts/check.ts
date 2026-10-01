@@ -592,14 +592,22 @@ if (!releaseYml.includes("scripts/publish-scoped.ts")) {
  * reason — which is the point.
  */
 const CLIENT_BUDGET = 25 * 1024;
-const clientStat = statSync(join(ROOT, "lib/client.js"));
-if (clientStat.size > CLIENT_BUDGET) {
-  fail(
-    `lib/client.js is ${clientStat.size} bytes, over the ${CLIENT_BUDGET} budget — ` +
-      "a dependency was likely bundled instead of left external"
-  );
+// Guarded, not assumed. Unguarded, a missing `lib/` threw ENOENT from here
+// right after §1 recorded it, so the report below never printed and the
+// operator got a stack trace instead of "run `pnpm run build`".
+const clientPath = join(ROOT, "lib/client.js");
+if (!existsSync(clientPath)) {
+  fail("lib/client.js is missing — run `pnpm run build`");
 } else {
-  ok(`lib/client.js is ${clientStat.size} bytes, under budget`);
+  const clientStat = statSync(clientPath);
+  if (clientStat.size > CLIENT_BUDGET) {
+    fail(
+      `lib/client.js is ${clientStat.size} bytes, over the ${CLIENT_BUDGET} budget — ` +
+        "a dependency was likely bundled instead of left external"
+    );
+  } else {
+    ok(`lib/client.js is ${clientStat.size} bytes, under budget`);
+  }
 }
 
 /* ------------------------------------------------------------------- report */

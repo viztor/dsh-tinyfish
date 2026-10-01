@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "TinyFish web access",
+    "description": "Free web search and page fetch for the agent through TinyFish, directly or through a Monid wallet."
+  }
+}
