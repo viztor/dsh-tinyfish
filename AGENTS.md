@@ -2,7 +2,7 @@
 
 ## Project identity
 
-- Local source: `~/dev/dsh-tinyfish` · npm package: **`dsh-tinyfish`** (unscoped) · GitHub: `viztor/dsh-tinyfish` `scripts/check.mjs` enforces both against the _built_ entry.
+- Local source: `~/dev/dsh-tinyfish` · npm package: **`dsh-tinyfish`** (unscoped) · GitHub: `viztor/dsh-tinyfish` `scripts/check.ts` enforces both against the _built_ entry.
 - **Registering a provider is not selecting it.** This plugin only _offers_ `tinyfish`; `dsh-web`'s `searchProvider` / `fetchProvider` decide. Reverting is two words in the profile — change them back to `deepseek-official` / `http` and the plugin stays mounted and idle. Do not "fix" selection by editing the plugin.
 
 ## Stack
@@ -93,13 +93,13 @@ Trusted publishing is the better end state — nothing to store, nothing to rota
 - **minor** — a new config key, provider behaviour, or harness surface
 - **major** — a change to what a config row means, or to the error codes the seam routes on
 
-Every version bump goes with the gate passing, because the harness-surface check inside `scripts/check.mjs` is what will tell you a harness upgrade landed underneath the code.
+Every version bump goes with the gate passing, because the harness-surface check inside `scripts/check.ts` is what will tell you a harness upgrade landed underneath the code.
 
 ## Runtime compatibility
 
 The loader checks `@deepseek-ai/dsh` and `@deepseek-ai/dsh-*` peers against the running version and nothing else, so a peer must be a **range npm can parse** — `^0.2.0-rc.1`, never an exact version and never a workspace protocol. Both wrong answers have shipped here: an exact pin orphaned the plugin the moment DSH shipped 0.2.0, and `workspace:^` satisfies the loader while making `npm install` answer EUNSUPPORTEDPROTOCOL. The mechanics are in [`docs/dsh-contracts.md`](docs/dsh-contracts.md#runtime-compatibility).
 
-That choice gives up _automatic_ detection of a genuine break, so detection is bought back explicitly by `scripts/check.mjs`: the harness-surface check asserts every surface `src/` uses still exists, the peer-range check rejects both wrong shapes, and the install check packs the tarball and loads it under plain npm. Each is proved by planting the regression it guards.
+That choice gives up _automatic_ detection of a genuine break, so detection is bought back explicitly by `scripts/check.ts`: the harness-surface check asserts every surface `src/` uses still exists, the peer-range check rejects both wrong shapes, and the install check packs the tarball and loads it under plain npm. Each is proved by planting the regression it guards.
 
 When DSH moves: `pnpm add -D` the new `@deepseek-ai/dsh-*` versions, run `release:gate`, and read what the surface check says. If it passes, nothing in `src/` needs to change.
 
@@ -113,7 +113,7 @@ The page is `src/settings-page.tsx`, and its source of truth is the contract doc
 
 ## Safety
 
-- **Never read, log, echo, or commit a credential.** The package holds no secret of its own by design: each channel reads the store its CLI already writes. `scripts/check.mjs` scans the tree for key-shaped strings and self-tests its own patterns, so a scanner that silently stopped working cannot pass.
+- **Never read, log, echo, or commit a credential.** The package holds no secret of its own by design: each channel reads the store its CLI already writes. `scripts/check.ts` scans the tree for key-shaped strings and self-tests its own patterns, so a scanner that silently stopped working cannot pass.
 - **`apiKey` belongs in the environment, never in a patch file.** The plugin's config accepts one for a test or a staging host, but a `cordis.patch.yml` is read on every boot.
 - **Retries spend money only on the metered surfaces.** Search and fetch are $0, so a blind retry is safe here and would not be on `agent` ($0.016/step) or `browser` ($0.002/min). Do not add an `agent_config` without checking entitlement — `max_steps` is beta-gated and answers 403.
 - **A `BLOCKED` run is terminal.** It means a workspace control stopped it (budget or run cap). Surface the reason and the top-up link; never retry it.

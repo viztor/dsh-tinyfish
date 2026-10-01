@@ -5,7 +5,7 @@
 ```sh
 pnpm install
 pnpm run build        # produces lib/, which the tests read
-pnpm run ci           # vp check && vp test && node scripts/check.mjs
+pnpm run ci           # vp check && vp test --coverage && node scripts/check.ts
 ```
 
 The build is not optional before testing: `test/client-bundle.test.mjs` evaluates the built `lib/client.js` under `node:vm`, because proving the shipped artifact registers itself correctly is worth more than proving the source compiles.
@@ -23,7 +23,7 @@ One entry point for the whole toolchain — Vite, Rolldown, Vitest, tsdown, Oxli
 | test             | `vp test`        |
 | all of the above | `vp check`       |
 
-**Lint and format configuration lives in the `lint` and `fmt` blocks of `vite.config.ts`, and nowhere else.** Vite+ disables nested `oxlint.config` and `.oxfmtrc` files, so a config in its own file is read by nobody and fails silently. That is not a style preference: during the migration the rules were off for a long stretch and CI was green the whole time. `scripts/check.mjs` asserts the live rule count and that the type-aware tier is on, so the configuration cannot quietly go inert again.
+**Lint and format configuration lives in the `lint` and `fmt` blocks of `vite.config.ts`, and nowhere else.** Vite+ disables nested `oxlint.config` and `.oxfmtrc` files, so a config in its own file is read by nobody and fails silently. That is not a style preference: during the migration the rules were off for a long stretch and CI was green the whole time. `scripts/check.ts` asserts the live rule count and that the type-aware tier is on, so the configuration cannot quietly go inert again.
 
 ## Tests
 
@@ -60,4 +60,4 @@ One-time setup, on npmjs.com for the `dsh-tinyfish` package:
 - **Trusted Publisher** → add `viztor/dsh-tinyfish` and the workflow filename `release.yml`, allowing the `npm publish` action.
 - In this repository, set `RELEASE_PLEASE_TOKEN` as a secret: a fine-grained PAT with Contents and Pull requests read/write. The built-in `GITHUB_TOKEN` cannot be used, because tags it creates do not trigger downstream workflows, so the release would produce a tag and never publish.
 
-`node scripts/check.mjs` asserts the release wiring is reachable, including that `ci.yml` ignores version tags. A publish job that cannot be reached reads as a working release process and only fails on the day it is needed.
+`node scripts/check.ts` asserts the release wiring is reachable, including that `ci.yml` ignores version tags. A publish job that cannot be reached reads as a working release process and only fails on the day it is needed.

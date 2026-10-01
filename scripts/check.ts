@@ -26,7 +26,7 @@
  * parse made this package uninstallable, and only installing it for real
  * catches that.
  *
- *   node scripts/check.mjs
+ *   node scripts/check.ts
  */
 
 import assert from "node:assert/strict";

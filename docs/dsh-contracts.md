@@ -2,7 +2,7 @@
 
 Every claim here was read out of the installed harness, not inferred from convention. Where a fact was checked by running something, the command is recorded. Read this before changing the manifest, the config row, or the provider registration — each section is a contract that a change can break.
 
-Installed runtime for all of it: **DSH 0.2.0-rc.1**, `@deepseek-ai/cordis` 4.0.4. The packages live in the pnpm store; `scripts/check.mjs` resolves them the same way the plugin does.
+Installed runtime for all of it: **DSH 0.2.0-rc.1**, `@deepseek-ai/cordis` 4.0.4. The packages live in the pnpm store; `scripts/check.ts` resolves them the same way the plugin does.
 
 ## The manifest is one object, two independent readers
 
@@ -24,7 +24,7 @@ and `dsh-client-modules` documents the second as "an optional string-array field
 
 The bundle contract itself:
 
-- The loader resolves a bundle by **bare name** from a profile's `node_modules`, so the package must stay unscoped and the exported `name` must equal the manifest `name`. `scripts/check.mjs` enforces both.
+- The loader resolves a bundle by **bare name** from a profile's `node_modules`, so the package must stay unscoped and the exported `name` must equal the manifest `name`. `scripts/check.ts` enforces both.
 - Bundles resolve at **boot**. `patchReload: live` covers a patch change, not a newly mounted bundle, so installing one needs a restart.
 - Patch lists apply in `dsh.profile.bundles` order over an empty entry list, then the profile's own patches, then any launch patch. **Later layers win**, which is what makes a host row able to override a bundle's default.
 
@@ -229,4 +229,4 @@ Client packages are bundled with **tsdown** (`scripts.bundle`), which is what `v
 
 The loader checks only peers named `@deepseek-ai/dsh` or `@deepseek-ai/dsh-*`; `@deepseek-ai/cordis` is not checked. `workspace:^`/`~`/`*` mean "current runtime" and always pass; any other range goes through `semver.satisfies(runtime, range, { includePrerelease: true })`.
 
-Both wrong answers have shipped here and both are guarded in `scripts/check.mjs`: an **exact pin** orphans the plugin on every DSH prerelease, and **`workspace:^`** satisfies the loader while making `npm install` answer EUNSUPPORTEDPROTOCOL.
+Both wrong answers have shipped here and both are guarded in `scripts/check.ts`: an **exact pin** orphans the plugin on every DSH prerelease, and **`workspace:^`** satisfies the loader while making `npm install` answer EUNSUPPORTEDPROTOCOL.

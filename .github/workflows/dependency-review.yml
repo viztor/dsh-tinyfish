@@ -5,6 +5,11 @@ on:
     paths:
       - "package.json"
       - "pnpm-lock.yaml"
+      # Action bumps carry the same invisible blast radius as package bumps —
+      # a compromised action runs with the workflow token — so they are
+      # reviewed here too rather than merged unreviewed.
+      - ".github/workflows/**"
+      - ".github/dependabot.yml"
 
 permissions:
   contents: read
@@ -18,15 +23,14 @@ jobs:
     # dependency introduces a known vulnerability or an incompatible license,
     # before it merges rather than after it ships.
     #
-    # Non-blocking until the repository enables Dependency graph
-    # (Settings → Security → Dependency graph). Without it the action fails
-    # with "not supported on this repository" on every PR — noise about a
-    # setting, not about the code. Once enabled, findings still report; only
-    # the hard failure waits for the feature to exist.
+    # This gates. It was `continue-on-error` while the repository had no
+    # Dependency graph — the action cannot run without one and failed with
+    # "not supported on this repository" on every PR, which is noise about a
+    # setting rather than about the code. The graph is enabled now, so a
+    # finding here fails the pull request.
     steps:
       - uses: actions/checkout@v7
       - uses: actions/dependency-review-action@v5
-        continue-on-error: true
         with:
           fail-on-severity: moderate
           deny-licenses: GPL-2.0, GPL-3.0, AGPL-1.0, AGPL-3.0
