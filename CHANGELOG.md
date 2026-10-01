@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.4.0](https://github.com/viztor/dsh-tinyfish/compare/v0.3.0...v0.4.0) (2026-10-01)
+
+
+### Features
+
+* mirror both names to GitHub Packages ([8efd747](https://github.com/viztor/dsh-tinyfish/commit/8efd7472fc98854931601d3244b5e69be0103ff0))
+* publish with a pasted token, no OTP round-trip ([5d21ab5](https://github.com/viztor/dsh-tinyfish/commit/5d21ab561da8ed1d83615d597ea61f14924cab5f))
+* show both keys' status, and say where filters live ([6d7778c](https://github.com/viztor/dsh-tinyfish/commit/6d7778c664a8df3dbe75c863de570dd201b67cbd))
+* social preview image for the repository ([4ce1064](https://github.com/viztor/dsh-tinyfish/commit/4ce1064c4e033ead53896d21cb6631e9a9270ba8))
+
+
+### Bug Fixes
+
+* accept a one-time password for the local scoped publish ([67a5016](https://github.com/viztor/dsh-tinyfish/commit/67a5016d699f24b0e688dc656962eb4382d2553d))
+* dot notation for environment reads in the publish script ([7bd9b65](https://github.com/viztor/dsh-tinyfish/commit/7bd9b656de9250aa11dc35d55d5db4b53ef60905))
+* provenance only where OIDC exists, and level the unscoped trust ([14f8905](https://github.com/viztor/dsh-tinyfish/commit/14f8905709171870f07ff4438280d0250e19420e))
+* the settings page survives a missing key entry instead of crashing ([7e6ac38](https://github.com/viztor/dsh-tinyfish/commit/7e6ac387d4998dca2f2e6f0b48988630afb30d0e))
+
 ## [0.3.0](https://github.com/viztor/dsh-tinyfish/compare/v0.2.0...v0.3.0) (2026-10-01)
 
 
