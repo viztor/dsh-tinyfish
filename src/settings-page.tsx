@@ -344,7 +344,16 @@ function TinyfishCard(props: CardProps) {
   // once would invite a user to paste the Monid platform key into the field
   // that TinyFish will authenticate with, which is exactly the mix-up the two
   // separate references exist to prevent.
-  const key = state.keys[channel];
+  //
+  // Falls back to an empty entry rather than crashing: the store always
+  // publishes both, so a missing one means the shapes drifted, and a settings
+  // page that throws on a shape drift takes down the whole Plugins page with
+  // it. An empty field that saves nowhere is the honest degradation.
+  const key = state.keys[channel] ?? {
+    text: "",
+    named: false,
+    ref: channel === "monid" ? DEFAULT_MONID_KEY_REF : DEFAULT_API_KEY_REF,
+  };
   const keyChannel = channel === "monid" ? FIELD.monidApiKey : FIELD.apiKey;
 
   // Effective switch states, driving both the controls and what renders below.

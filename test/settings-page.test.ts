@@ -623,6 +623,69 @@ test("a parseable boolean draft saves", async () => {
   assert.deepEqual(Object.keys(written), [], "a boolean writes no credential");
 });
 
+test("the status falls back to defaults when a key entry is missing", () => {
+  // The store always publishes both entries, so this guards the shape rather
+  // than a reachable state — but a shape the card assumes and the store stops
+  // providing would otherwise render "undefined" into the page.
+  const { component } = mount({});
+  const tree = component({
+    view: "page",
+    t: (key: string): string => key,
+    useTinyfishCard: (select: (state: TestState) => TestState) =>
+      select({
+        shell: {
+          available: true,
+          writable: true,
+          dirty: false,
+          invalid: false,
+          saving: false,
+          failed: false,
+        },
+        fields: {},
+        keys: {},
+      }),
+    edit: () => {},
+    resetField: () => {},
+    save: async () => true,
+    discard: () => {},
+  });
+  const all = texts(tree).join(" ");
+  assert.ok(all.includes("TINYFISH_API_KEY"), "direct falls back");
+  assert.ok(all.includes("MONID_API_KEY"), "monid falls back");
+});
+
+test("a configured monid key reads as set", () => {
+  const { component } = mount({ channel: "monid" });
+  const tree = component({
+    view: "page",
+    t: (key: string): string => key,
+    useTinyfishCard: (select: (state: TestState) => TestState) =>
+      select({
+        shell: {
+          available: true,
+          writable: true,
+          dirty: false,
+          invalid: false,
+          saving: false,
+          failed: false,
+        },
+        fields: {
+          channel: { text: "monid", overridden: false, invalid: false },
+        },
+        keys: {
+          direct: { text: "", named: false, ref: "TINYFISH_API_KEY" },
+          monid: { text: "", named: true, ref: "MY_PLATFORM" },
+        },
+      }),
+    edit: () => {},
+    resetField: () => {},
+    save: async () => true,
+    discard: () => {},
+  });
+  const all = texts(tree).join(" ");
+  assert.ok(all.includes("MY_PLATFORM"), "names the custom reference");
+});
+
 test("both keys' status shows regardless of the selected channel", () => {
   // A user on direct cannot otherwise tell whether their monid key is saved
   // without switching channels and looking. The status names each reference,
