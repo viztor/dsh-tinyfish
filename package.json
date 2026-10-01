@@ -26,7 +26,8 @@
     "lib/client.js",
     "cordis.patch.yml",
     "README.md",
-    "LICENSE"
+    "LICENSE",
+    "assets/tinyfish.svg"
   ],
   "type": "module",
   "main": "lib/index.mjs",

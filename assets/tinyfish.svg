@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="TinyFish logo">
+  <title>TinyFish</title>
+  <!--
+    A tiny fish in one solid colour: an elliptical body, a triangular tail,
+    and a knockout eye. No strokes, no gradients — everything is fill, so the
+    mark stays crisp from a 16px list icon to a README hero, and it works on
+    light and dark backgrounds without variants.
+  -->
+  <ellipse cx="27" cy="32" rx="17" ry="12.5" fill="#14b8a6"/>
+  <polygon points="41,32 58,20 58,44" fill="#14b8a6"/>
+  <circle cx="20.5" cy="29" r="2.6" fill="#ffffff"/>
+</svg>
