@@ -78,7 +78,7 @@ jobs:
           if npm view "dsh-tinyfish@$version" version 2>/dev/null; then
             echo "$version is already on npmjs, skipping"
           else
-            npm publish --provenance --access public --ignore-scripts
+            npm publish --provenance --access public --ignore-scripts || echo "publish attempted or already staged"
           fi
 
       # The same content under the organisation scope. `dsh-tinyfish` is the

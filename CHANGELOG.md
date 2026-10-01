@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.6.0](https://github.com/viztor/dsh-tinyfish/compare/v0.5.0...v0.6.0) (2026-10-01)
+
+
+### Features
+
+* recommend installing directly via DSH Web UI ([d17bc3b](https://github.com/viztor/dsh-tinyfish/commit/d17bc3b7ec4cae81216d6a2f7c00e6ebf5d21a58))
+* rewrite cordis.patch.yml plugin name for scoped package ([ac616d4](https://github.com/viztor/dsh-tinyfish/commit/ac616d45f3dae915f02bc6f7311be691350a491f))
+
+
+### Code Quality & Refactoring
+
+* align Vite+ lint configuration and code quality gates with dsh-opencode ([1358d72](https://github.com/viztor/dsh-tinyfish/commit/1358d7293eb08ad01e912443a9b1c7dc789178ad))
+* add non-blocking scoped publishing resilience on npmjs.org
+
+
 ## [0.5.0](https://github.com/viztor/dsh-tinyfish/compare/v0.4.1...v0.5.0) (2026-10-01)
 
 

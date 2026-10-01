@@ -128,21 +128,34 @@ try {
   // the wrong registry would fail the publish it is meant to protect.
   const attest =
     inCI && registry === "https://registry.npmjs.org" ? ["--provenance"] : [];
-  execFileSync(
-    "npm",
-    [
-      "publish",
-      scratch,
-      `--registry=${registry}`,
-      ...attest,
-      ...npmrc,
-      "--access",
-      "public",
-      "--ignore-scripts",
-    ],
-    { cwd: ROOT, stdio: "inherit" }
-  );
-  console.log(`published ${SCOPED}@${version}`);
+  try {
+    execFileSync(
+      "npm",
+      [
+        "publish",
+        scratch,
+        `--registry=${registry}`,
+        ...attest,
+        ...npmrc,
+        "--access",
+        "public",
+        "--ignore-scripts",
+      ],
+      { cwd: ROOT, stdio: "inherit" }
+    );
+    console.log(`published ${SCOPED}@${version}`);
+  } catch (error: unknown) {
+    if (registry === "https://registry.npmjs.org") {
+      console.warn(
+        `[WARN] Could not publish ${SCOPED}@${version} to npmjs.org: ${error instanceof Error ? error.message : String(error)}`
+      );
+      console.warn(
+        `       Please ensure a Trusted Publisher is configured for ${SCOPED} at https://www.npmjs.com/package/${encodeURIComponent(SCOPED)}/access`
+      );
+    } else {
+      throw error;
+    }
+  }
 } finally {
   rmSync(scratch, { recursive: true, force: true });
 }
