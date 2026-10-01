@@ -36,7 +36,7 @@ jobs:
           # The test runtime needs a newer Node than the library's public engine
           # contract promises. The library still supports `>=22.6`; only the
           # tooling here needs more.
-          node-version: 24
+          node-version: 26
           cache: pnpm
 
       # A lockfile that no longer matches the manifest is a gate in its own

@@ -187,7 +187,7 @@ pnpm run release:gate   # build, then the full gate incl. 11 package checks
 pnpm run test:live      # the real APIs, still $0, needs credentials
 ```
 
-Requires **DSH 0.2.0+** and **Node 22.14+**. Full process and invariants: [`AGENTS.md`](./AGENTS.md). Contributing: [`CONTRIBUTING.md`](./CONTRIBUTING.md).
+Requires **DSH 0.2.0+** and **Node 26+**. Full process and invariants: [`AGENTS.md`](./AGENTS.md). Contributing: [`CONTRIBUTING.md`](./CONTRIBUTING.md).
 
 </details>
 
