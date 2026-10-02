@@ -24,6 +24,7 @@ import {
 import {
   fetchEnvelope,
   hit,
+  nth,
   searchEnvelope,
   withStubbedFetch,
   type StubHit,
@@ -166,6 +167,7 @@ test("search accepts `description` as an alias for `snippet`", async () => {
     ],
     async () => search().search({ query: "q" })
   );
+  assert.ok(result.sources[0], "one hit came back");
   assert.equal(result.sources[0].snippet, "D");
 });
 
@@ -392,7 +394,7 @@ test("a search sends the key the Settings store holds, not the CLI one", async (
     async () => new TinyfishSearchProvider(() => options).search({ query: "q" })
   );
   assert.equal(
-    calls[0].headers.Authorization,
+    nth(calls, 0, "request").headers.Authorization,
     "Bearer stored-monid",
     "the monid channel reads the monid ref"
   );
@@ -413,7 +415,10 @@ test("the direct channel reads its own ref, never the monid one", async () => {
         resolveCredential: async (name: string) => store[name],
       })).search({ query: "q" })
   );
-  assert.equal(calls[0].headers["X-API-Key"], "stored-tinyfish");
+  assert.equal(
+    nth(calls, 0, "request").headers["X-API-Key"],
+    "stored-tinyfish"
+  );
 });
 
 test("a fetch also uses the stored credential", async () => {
@@ -427,5 +432,8 @@ test("a fetch also uses the stored credential", async () => {
           name === "MONID_API_KEY" ? "stored-monid" : undefined,
       })).fetch({ url: "https://x" })
   );
-  assert.equal(calls[0].headers.Authorization, "Bearer stored-monid");
+  assert.equal(
+    nth(calls, 0, "request").headers.Authorization,
+    "Bearer stored-monid"
+  );
 });

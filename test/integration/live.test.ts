@@ -84,6 +84,8 @@ test(
     const direct = await new TinyfishSearchProvider(opts("direct")).search({
       query: QUERY,
     });
+    assert.ok(monid.sources[0], "the monid channel answered with a hit");
+    assert.ok(direct.sources[0], "the direct channel answered with a hit");
     assert.equal(monid.sources[0].url, direct.sources[0].url);
   }
 );

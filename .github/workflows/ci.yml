@@ -34,7 +34,7 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           # The test runtime needs a newer Node than the library's public engine
-          # contract promises. The library still supports `>=22.6`; only the
+          # contract promises. The library still supports `>=24`; only the
           # tooling here needs more.
           node-version: 26
           cache: pnpm
@@ -45,6 +45,16 @@ jobs:
 
       - name: Build
         run: pnpm run build
+
+      # `vp check` type-checks through Oxlint, and Oxlint does not read
+      # `noUncheckedIndexedAccess` out of tsconfig — so `array[i]` in a test
+      # types as `T` here and `T | undefined` to `tsc`, and every other gate
+      # would stay green on the difference. This is the step that closes it:
+      # `tsconfig.typecheck.json` runs the real compiler over `src/`, `test/`
+      # and `scripts/` with the full option set. `src/settings-page.tsx` used
+      # to be outside `tsconfig.json`'s `*.ts` include for the same reason.
+      - name: Type-check (src, test, scripts)
+        run: pnpm run typecheck
 
       # `vp check` is format, lint and type-check in one pass — Oxlint and Oxfmt
       # under the Vite+ entry point, reading the `lint` / `fmt` blocks of

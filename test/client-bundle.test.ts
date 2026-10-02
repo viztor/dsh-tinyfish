@@ -532,6 +532,7 @@ test("apply registers the bundle config form, gated on the namespace being serve
     "the page is gated on the Host serving its namespace"
   );
   assert.equal(registered.length, 1, "exactly one slot entry");
+  assert.ok(registered[0], "exactly one slot entry");
   const { entry, component } = registered[0];
   assert.equal(entry.name, "plugins.bundle.config");
   // The detail page filters by `entryKey: pkg.name`, so the key must be the
@@ -553,6 +554,7 @@ test("apply registers the bundle config form, gated on the namespace being serve
   // editable key in the host schema should be reachable, and the credential is a
   // secret (written through the credentials domain, not the section).
   assert.equal(modelCalls.length, 1, "one form model is constructed");
+  assert.ok(modelCalls[0], "one form model is constructed");
   const { specs, secrets } = modelCalls[0];
   const fields = new Set(specs.map((spec) => spec.field));
   for (const key of ["channel", "purpose", "attempts", "search", "fetch"]) {
@@ -731,13 +733,19 @@ test("channel renders as a segmented control, not a text field", () => {
   const tree = renderCard({});
   const segmented = findByType(tree, "SegmentedControl");
   assert.equal(segmented.length, 1, "exactly one segmented control");
-  const got = segProps(segmented[0]).options.map(
+  const firstSegmented = segmented[0];
+  assert.ok(firstSegmented, "exactly one segmented control");
+  const got = segProps(firstSegmented).options.map(
     (o: { value: string }) => o.value
   );
   assert.equal(got.length, 2, "two channel options");
   assert.equal(got[0], "direct");
   assert.equal(got[1], "monid");
-  assert.equal(segProps(segmented[0]).value, "direct", "defaulting to direct");
+  assert.equal(
+    segProps(firstSegmented).value,
+    "direct",
+    "defaulting to direct"
+  );
 });
 
 test("search and fetch render as switches, not text fields", () => {
@@ -819,6 +827,8 @@ test("the key field shown follows the selected channel", () => {
   );
   assert.equal(direct.length, 1, "exactly one key field on each channel");
   assert.equal(monid.length, 1, "exactly one key field on each channel");
+  assert.ok(direct[0], "exactly one key field on each channel");
+  assert.ok(monid[0], "exactly one key field on each channel");
   assert.equal(direct[0].props.id, "plugin-config-tinyfish-apiKey");
   assert.equal(monid[0].props.id, "plugin-config-tinyfish-monidApiKey");
   assert.equal(direct[0].props.label, "apiKey");
@@ -865,6 +875,7 @@ test("the published state carries a key entry for both channels", () => {
     remote: { $on: () => () => {}, credentials: { set: async () => true } },
   });
   assert.equal(bindings.length, 1, "the card binds one projection");
+  assert.ok(bindings[0], "the card binds one projection");
   const state = bindings[0]();
   assert.ok(state.keys.direct, "a key entry for the direct channel");
   assert.ok(state.keys.monid, "a key entry for the monid channel");

@@ -18,6 +18,7 @@ import { test } from "vitest";
 
 import { resolveOptions } from "../src/index.ts";
 import { apply } from "../src/settings-page.tsx";
+import { nth } from "./helpers.ts";
 
 /** An element node, as React's `jsx()` and the stub kit produce it. */
 interface TestElement {
@@ -406,6 +407,7 @@ test("search and fetch are switches, on by default", () => {
 test("a switch stages the literal the schema parses", () => {
   const { tree, edits } = render({});
   const [search] = findAll(tree, "Switch");
+  assert.ok(search, "one switch rendered");
   sw(search).onChange(false);
   assert.deepEqual(edits, [{ name: "search", value: "false" }]);
 });
@@ -413,6 +415,7 @@ test("a switch stages the literal the schema parses", () => {
 test("switching a channel back off stages the same", () => {
   const { tree, edits } = render({ search: "false" });
   const [search] = findAll(tree, "Switch");
+  assert.ok(search, "one switch rendered");
   assert.equal(sw(search).checked, false, "reads the drafted value");
   sw(search).onChange(true);
   assert.deepEqual(edits, [{ name: "search", value: "true" }]);
@@ -502,10 +505,11 @@ test("the direct channel shows the TinyFish key field", () => {
 });
 
 test("the monid channel shows the platform key field", () => {
-  const secret = findAll(
+  const secrets = findAll(
     render({ channel: "monid" }).tree,
     "SettingsSecretField"
-  )[0];
+  );
+  const secret = nth(secrets, 0, "secret field");
   assert.equal(sec(secret).id, "plugin-config-tinyfish-monidApiKey");
   assert.equal(sec(secret).label, "monidApiKey");
 });
@@ -592,10 +596,10 @@ test("an unconfigured section still writes to a resolvable default", async () =>
   await save();
   // And the reference it wrote to is the one the provider will read back,
   // read from the provider itself rather than from a second copy of the name.
-  assert.equal(written[0].ref, "TINYFISH_API_KEY");
+  assert.equal(nth(written, 0, "write").ref, "TINYFISH_API_KEY");
   assert.equal(
     resolveOptions({ apiKeyEnv: "" }).apiKeyEnv,
-    written[0].ref,
+    nth(written, 0, "write").ref,
     "the form's fallback and the provider's fallback are the same reference"
   );
 });

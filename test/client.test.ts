@@ -29,6 +29,7 @@ import {
 import {
   fetchEnvelope,
   hit,
+  nth,
   searchEnvelope,
   withStubbedFetch,
 } from "./helpers.ts";
@@ -365,7 +366,7 @@ test("monid search posts the provider, endpoint and queryParams", async () => {
         filters: { domain_type: "news", include_domains: "a.com" },
       })
   );
-  const body = JSON.parse(calls[0].init.body as string);
+  const body = JSON.parse(nth(calls, 0, "request").init.body as string);
   assert.equal(body.provider, "tinyfish");
   assert.equal(body.endpoint, "/search");
   assert.deepEqual(body.input.queryParams, {
@@ -373,8 +374,8 @@ test("monid search posts the provider, endpoint and queryParams", async () => {
     domain_type: "news",
     include_domains: "a.com",
   });
-  assert.equal(calls[0].url, `${DEFAULT_MONID_BASE}/v1/run`);
-  assert.equal(calls[0].headers.Authorization, "Bearer k");
+  assert.equal(nth(calls, 0, "request").url, `${DEFAULT_MONID_BASE}/v1/run`);
+  assert.equal(nth(calls, 0, "request").headers.Authorization, "Bearer k");
 });
 
 test("direct search GETs the upstream with only non-empty params", async () => {
@@ -393,7 +394,7 @@ test("direct search GETs the upstream with only non-empty params", async () => {
         },
       })
   );
-  const url = new URL(calls[0].url);
+  const url = new URL(nth(calls, 0, "request").url);
   assert.equal(url.origin, DEFAULT_SEARCH_BASE);
   assert.equal(url.searchParams.get("query"), "a b");
   assert.equal(url.searchParams.get("after_date"), "2026-01-01");
@@ -403,8 +404,8 @@ test("direct search GETs the upstream with only non-empty params", async () => {
     "empty string is dropped"
   );
   assert.equal(url.searchParams.has("location"), false, "undefined is dropped");
-  assert.equal(calls[0].headers["X-API-Key"], "k");
-  assert.equal(calls[0].headers.Authorization, undefined);
+  assert.equal(nth(calls, 0, "request").headers["X-API-Key"], "k");
+  assert.equal(nth(calls, 0, "request").headers.Authorization, undefined);
 });
 
 test("both channels send a browser user-agent, which Monid's Cloudflare requires", async () => {
@@ -412,7 +413,9 @@ test("both channels send a browser user-agent, which Monid's Cloudflare requires
     [{ respond: () => ({ body: searchEnvelope([hit()]) }) }],
     async () => tinyfishSearch({ channel: "monid", apiKey: "k", query: "q" })
   );
-  assert.match(calls[0].headers["User-Agent"], /Mozilla\/5\.0/);
+  const userAgent = nth(calls, 0, "request").headers["User-Agent"];
+  assert.ok(userAgent, "the transport names its client");
+  assert.match(userAgent, /Mozilla\/5\.0/);
 });
 
 test("monid fetch posts markdown format and the url list", async () => {
@@ -432,7 +435,7 @@ test("monid fetch posts markdown format and the url list", async () => {
         purpose: "why we are here",
       })
   );
-  const body = JSON.parse(calls[0].init.body as string);
+  const body = JSON.parse(nth(calls, 0, "request").init.body as string);
   assert.equal(body.endpoint, "/fetch");
   assert.deepEqual(body.input.body, {
     urls: ["https://x"],
@@ -453,8 +456,8 @@ test("direct fetch hits the upstream base with an X-API-Key header", async () =>
     async () =>
       tinyfishFetch({ channel: "direct", apiKey: "k", urls: ["https://x"] })
   );
-  assert.equal(calls[0].url, DEFAULT_FETCH_BASE);
-  assert.equal(calls[0].headers["X-API-Key"], "k");
+  assert.equal(nth(calls, 0, "request").url, DEFAULT_FETCH_BASE);
+  assert.equal(nth(calls, 0, "request").headers["X-API-Key"], "k");
 });
 
 /* ------------------------------------------------------------- async polls */
@@ -476,7 +479,9 @@ test("a RUNNING envelope is polled until it settles", async () => {
       })
   );
   assert.equal(calls.length, 3);
-  assert.deepEqual(JSON.parse(calls[1].init.body as string), { runId: "r1" });
+  assert.deepEqual(JSON.parse(nth(calls, 1, "request").init.body as string), {
+    runId: "r1",
+  });
   assert.equal(result.results?.length, 1);
 });
 
@@ -497,7 +502,9 @@ test("a RUNNING fetch run is polled until it settles, like search", async () => 
       })
   );
   assert.equal(calls.length, 3, "one call per poll, then the one that settles");
-  assert.deepEqual(JSON.parse(calls[1].init.body as string), { runId: "r1" });
+  assert.deepEqual(JSON.parse(nth(calls, 1, "request").init.body as string), {
+    runId: "r1",
+  });
   assert.equal(result.results?.length, 1);
 });
 

@@ -29,7 +29,15 @@
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
 
+    // The client half is JSX. Without this the checker refuses to parse it at
+    // all, and `include` below (`*.ts` does not match `*.tsx`) quietly left
+    // `settings-page.tsx` — half the shipped artifact — outside every type
+    // check, so the option was never noticed being absent. `react-jsx` is the
+    // automatic runtime the bundle already builds with: no `React` import in
+    // the source, the JSX factory resolved by the transform.
+    "jsx": "react-jsx",
+
     "types": ["node"]
   },
-  "include": ["src/**/*.ts"]
+  "include": ["src/**/*.ts", "src/**/*.tsx"]
 }

@@ -157,6 +157,28 @@ interface CardField {
   invalid: boolean;
 }
 
+/**
+ * What to render when a field the card asks for has no published state.
+ *
+ * Only reachable if a field name and `SPECS` disagree, which the projection
+ * is built from the same `SPECS` to prevent — so this is a floor, not a
+ * fallback path. It exists because `Record<string, CardField>` read through
+ * `noUncheckedIndexedAccess` is `CardField | undefined`, and spreading that
+ * would quietly make `text` optional all the way into the primitive's props.
+ */
+const EMPTY_CARD_FIELD: CardField = {
+  text: "",
+  overridden: false,
+  invalid: false,
+};
+
+/** What `credentials.describe` reports about one channel's key. */
+interface ChannelCredentialState {
+  configured: boolean;
+  writable: boolean;
+  ref: string;
+}
+
 /** The card's published state. */
 interface CardState {
   shell: {
@@ -406,10 +428,12 @@ function TinyfishCard(props: CardProps) {
     disabled,
     overriddenLabel: t("overridden"),
     resetLabel: t("reset"),
-    // Every entry the card renders is one the projection published, so the
-    // lookup cannot miss; spreading the indexed read directly keeps that
-    // guarantee visible instead of restating the index signature as a cast.
-    ...state.fields[name],
+    // Every entry the card renders is one the projection published, so this
+    // misses only if a field name and `SPECS` have drifted apart — and the
+    // defaults below make that an empty control rather than an undefined
+    // spread. Reading the index with a fallback instead of asserting it also
+    // leaves the optionality where a reader can see it.
+    ...(state.fields[name] ?? EMPTY_CARD_FIELD),
     onEdit: (text: string) => {
       props.edit(name, text);
     },
@@ -608,10 +632,12 @@ export function apply(ctx: ClientContext) {
   // Asynchronously queries the host credentials service via `credentials.describe`
   // so the card badges whether a key is actually saved in ~/.dsh/.credentials.yaml
   // rather than checking reference strings.
-  const credentialsState: Record<
-    string,
-    { configured: boolean; writable: boolean; ref: string }
-  > = {
+  //
+  // Keyed by the two channel names rather than `Record<string, …>`: every
+  // access below is `.direct` or `.monid`, and a string index signature makes
+  // each of those reads `T | undefined` for no gain — the keys are fixed, so
+  // the compiler can prove all of them exist.
+  const credentialsState: Record<"direct" | "monid", ChannelCredentialState> = {
     direct: {
       configured: false,
       writable: true,

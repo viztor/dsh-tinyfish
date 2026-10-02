@@ -7,6 +7,27 @@
  * is skipped unless `DSH_TINYFISH_LIVE=1`.
  */
 
+import assert from "node:assert/strict";
+
+/**
+ * The `index`-th element of a list the test has just reasoned about.
+ *
+ * `noUncheckedIndexedAccess` types every array read `T | undefined`, and each
+ * call below already rests on an assumption about how many entries a list
+ * holds. Going through this lookup turns that assumption into a failure at the
+ * point of the assumption — naming the list, the index and the count — instead
+ * of a later `Cannot read properties of undefined` that names none of them.
+ *
+ * It lives here rather than in each file because the three suites read arrays
+ * for the same reason: a stub recorded N requests and the assertions that
+ * follow are about entry number i.
+ */
+export function nth<T>(items: readonly T[], index: number, what: string): T {
+  const item = items[index];
+  assert.ok(item, `expected ${what} #${index} of ${items.length}`);
+  return item;
+}
+
 /** What a stubbed call records, and what a route can answer with. */
 export interface StubCall {
   url: string;
