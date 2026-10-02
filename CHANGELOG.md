@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.5](https://github.com/viztor/dsh-tinyfish/compare/v0.6.4...v0.6.5) (2026-10-02)
+
+
+### Bug Fixes
+
+* name the plugin Tinyfish and collapse config when both kinds are off ([0dee8f7](https://github.com/viztor/dsh-tinyfish/commit/0dee8f77e3f4c003098cfd3f7cabe9b4bc49aefd))
+
 ## [0.6.4](https://github.com/viztor/dsh-tinyfish/compare/v0.6.3...v0.6.4) (2026-10-02)
 
 
