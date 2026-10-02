@@ -34,6 +34,7 @@ import { execFileSync } from "node:child_process";
 import {
   existsSync,
   mkdtempSync,
+  mkdirSync,
   readFileSync,
   readdirSync,
   rmSync,
@@ -52,6 +53,20 @@ const fail = (message: string): void => {
 };
 const ok = (message: string): void => {
   notes.push(message);
+};
+
+/**
+ * Report `message` only if the section that just ran added no failures.
+ *
+ * `fail()` does not stop the script — every section runs so one pass reports
+ * everything wrong at once — which means an unconditional `ok()` prints a
+ * green line right next to the red one it contradicts. That is what §9 did:
+ * it printed "N toolchain scripts route through vp" even when the loop above
+ * it had just failed one of those scripts. The failure count taken before the
+ * section is the only signal that the section actually passed.
+ */
+const okIfClean = (before: number, message: string): void => {
+  if (failures.length === before) ok(message);
 };
 
 const pkg = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8"));
@@ -241,7 +256,7 @@ if (!failures.some((f) => f.includes("no longer exposes"))) {
 
 /**
  * Vite+ **disables nested Oxlint and Oxfmt configs**. Standalone
- * `oxlint.config.ts` / `oxfmt.config.ts` beside a `vite.config.ts` are read by
+ * `oxlint.config.ts` / `.oxfmtrc` beside a `vite.config.ts` are read by
  * nobody, so the rule tiers look enforced and are not — and lint stays green
  * because it is running Oxlint's defaults. That happened here: the effective
  * config was 111 rules with `options: null`, and moving both blocks into
@@ -251,6 +266,47 @@ if (!failures.some((f) => f.includes("no longer exposes"))) {
  * A config that is present but inert is worse than a missing one, because
  * nothing says so. This asserts the loaded config is ours.
  */
+
+/**
+ * The defect classes this package decided are not acceptable in `src/`, which
+ * is the one thing a rule *count* cannot see.
+ *
+ * The rest of this section asks whether the config loaded. This one asks
+ * whether it still bites. Oxlint spells its severities `deny` / `warn` /
+ * `allow`, and a `deny` flipped to `warn` leaves `Object.keys(rules).length`
+ * exactly where it was, leaves `typeAware` on, and changes nothing about
+ * `vp check`'s exit code — so every guard above it passes while the gate it
+ * describes has quietly stopped gating. `warn` still prints, which reads like
+ * enforcement and is not; only a build that counts warnings would notice, and
+ * `vp check` does not.
+ *
+ * So each name is asserted at `deny`, and adding or removing one here has to
+ * be a decision made twice. The list is deliberately the narrow set whose
+ * absence would be a regression of a recorded commitment, not every `error`
+ * in `vite.config.ts` — a metric rule promoted for style does not belong next
+ * to `no-unsafe-type-assertion`.
+ */
+const GATES = [
+  "typescript/no-floating-promises",
+  "typescript/no-unsafe-type-assertion",
+  "typescript/no-unsafe-argument",
+  "typescript/no-unsafe-assignment",
+  "typescript/no-unsafe-call",
+  "typescript/no-unsafe-member-access",
+  "typescript/no-unsafe-return",
+  "typescript/no-unsafe-enum-comparison",
+  "typescript/no-explicit-any",
+  "typescript/no-non-null-assertion",
+  "typescript/no-unnecessary-type-assertion",
+  "typescript/strict-boolean-expressions",
+  "typescript/prefer-nullish-coalescing",
+  "typescript/return-await",
+] as const;
+
+/** A rule may be `"deny"` or `["deny", [options]]`; both mean denied. */
+const severityOf = (rule: unknown): unknown =>
+  Array.isArray(rule) ? rule[0] : rule;
+
 try {
   const printed = execFileSync(
     "pnpm",
@@ -272,10 +328,22 @@ try {
     );
   } else if (effective.options?.typeAware !== true) {
     fail("typeAware is off, so every typescript/* gate is listed but inert");
-  } else if (effective.rules["typescript/no-floating-promises"] === undefined) {
-    fail("the effective config is missing this package's own gates");
   } else {
-    ok(`lint config is live (${ruleCount} rules, typeAware on)`);
+    const before = failures.length;
+    for (const name of GATES) {
+      const rule = effective.rules[name];
+      if (rule === undefined) {
+        fail(`${name} is absent from the effective config`);
+      } else if (severityOf(rule) !== "deny") {
+        fail(
+          `${name} is ${String(severityOf(rule))}, not deny — a defect class is now a warning`
+        );
+      }
+    }
+    okIfClean(
+      before,
+      `lint config is live (${ruleCount} rules, typeAware on, ${GATES.length} gates at deny)`
+    );
   }
 } catch (error) {
   const detail =
@@ -317,22 +385,43 @@ for (const [sample, shouldMatch] of CANARIES as [string, boolean][]) {
   }
 }
 
-const SKIP = new Set(["node_modules", ".git", "lib"]);
+/**
+ * Directories that are not part of the tree this section is about.
+ *
+ * `node_modules` and `.git` are not ours. `coverage` is a report *about* the
+ * tree, so scanning it reads every file a second time through a second path.
+ *
+ * `lib` is deliberately absent. It is half of what `npm pack` ships, so a key
+ * inlined into the artifact would be published forever — which is the reason
+ * this section exists, and the file extension allow-list below it compounds
+ * the problem: `*.ts` does not match `*.tsx`, so `settings-page.tsx`, the
+ * source file a pasted key was most likely to end up in, was outside the scan
+ * while the comment above claimed the tarball was the point.
+ */
+const SKIP = new Set(["node_modules", ".git", "coverage"]);
+const BUILD_SCRATCH = ".build-check";
+/**
+ * The complement of "text we might not have thought of".
+ *
+ * An allow-list of extensions has to be kept in step with every text format
+ * this repository can hold, and the cost of forgetting one is a credential
+ * nobody ever scanned for — a silent miss, which for this check is the only
+ * failure mode that matters. A deny-list of the binary formats that would
+ * otherwise be read as mojibake fails safe: an unknown file gets scanned and
+ * wastes a millisecond.
+ */
+const BINARY =
+  /\.(png|jpe?g|gif|webp|avif|ico|svg|woff2?|ttf|otf|eot|pdf|zip|gz|tgz|tar|wasm|node|mp[34]|mov|webm)$/;
 let scanned = 0;
 const walk = (dir: string): void => {
   for (const name of readdirSync(dir)) {
-    if (
-      SKIP.has(name) ||
-      name.startsWith(".build-check") ||
-      name.endsWith(".tgz")
-    )
-      continue;
+    if (SKIP.has(name) || name.startsWith(BUILD_SCRATCH)) continue;
     const full = join(dir, name);
     if (statSync(full).isDirectory()) {
       walk(full);
       continue;
     }
-    if (!/\.(mjs|js|ts|json|yml|yaml|md)$/.test(name)) continue;
+    if (BINARY.test(name)) continue;
     scanned += 1;
     const text = readFileSync(full, "utf8");
     for (const [re, what] of SECRETS) {
@@ -341,8 +430,9 @@ const walk = (dir: string): void => {
     }
   }
 };
+const cleanest = failures.length;
 walk(ROOT);
-ok(`scanned ${scanned} files for credentials`);
+okIfClean(cleanest, `scanned ${scanned} files for credentials`);
 
 /* ------------------------------ 7. install it the way a consumer will, and load it */
 
@@ -388,7 +478,11 @@ try {
   )[0];
 
   const project = join(scratch, "consumer");
-  execFileSync("mkdir", ["-p", project]);
+  // `mkdirSync`, not a `mkdir -p` child process: this is a directory inside
+  // the scratch tree just made with `mkdtempSync`, and spawning a binary to
+  // ask the operating system to create one is a second thing that can fail
+  // for a reason (PATH, a stripped-down CI image) unrelated to the check.
+  mkdirSync(project, { recursive: true });
   const peers = Object.entries(
     (pkg.peerDependencies ?? {}) as Record<string, unknown>
   ).map(([n, r]) => `${n}@${String(r)}`);
@@ -536,6 +630,7 @@ if (!pkg.devDependencies?.["vite-plus"]) {
   ok(`the toolchain is vite-plus (${pkg.devDependencies["vite-plus"]})`);
 }
 
+const cleanestToolchain = failures.length;
 for (const name of TOOLCHAIN) {
   const script = pkg.scripts?.[name];
   if (!script) {
@@ -555,7 +650,10 @@ for (const name of TOOLCHAIN) {
     }
   }
 }
-ok(`${TOOLCHAIN.length} toolchain scripts route through vp`);
+okIfClean(
+  cleanestToolchain,
+  `${TOOLCHAIN.length} toolchain scripts route through vp`
+);
 
 /* -------------------------------------------- 10. the scoped alias ships too */
 

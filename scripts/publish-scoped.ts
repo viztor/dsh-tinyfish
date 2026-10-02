@@ -102,13 +102,30 @@ try {
   );
 
   const patchPath = join(scratch, "cordis.patch.yml");
-  if (existsSync(patchPath)) {
-    const patchContent = readFileSync(patchPath, "utf8");
-    writeFileSync(
-      patchPath,
-      patchContent.replaceAll('name: "dsh-tinyfish"', `name: "${SCOPED}"`)
+  if (!existsSync(patchPath)) {
+    // The patch is in `files`, so this can only mean the manifest dropped it.
+    // Publishing anyway would ship an alias whose plugin DSH installs and then
+    // ignores — the silent half of a release that looks successful.
+    throw new Error(
+      "cordis.patch.yml is missing from the scratch tree; the scoped alias would publish without the bundle patch"
     );
   }
+  const patchContent = readFileSync(patchPath, "utf8");
+  const unscoped = 'name: "dsh-tinyfish"';
+  const scopedPatch = patchContent.replaceAll(unscoped, `name: "${SCOPED}"`);
+  // `replaceAll` returns its input unchanged when it matches nothing, and the
+  // only sign of that would be a scoped package whose patch still names the
+  // unscoped one: an alias installing a plugin that points somewhere else,
+  // with no error on either end. The rewrite is asserted here because this is
+  // the only place it happens and `PUBLISH_DRY_RUN=1` the only place it is
+  // otherwise seen — and a dry run that prints the unrewritten value reads as
+  // a success either way.
+  if (scopedPatch === patchContent) {
+    throw new Error(
+      `cordis.patch.yml has no \`${unscoped}\` line to rewrite; the scoped alias would publish a patch still naming "dsh-tinyfish"`
+    );
+  }
+  writeFileSync(patchPath, scopedPatch);
 
   // `PUBLISH_DRY_RUN=1` builds the scratch tree, prints what this alias would
   // publish, and stops before the first network call. The per-alias
