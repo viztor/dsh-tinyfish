@@ -183,6 +183,9 @@ Row, then environment, then built-in default — so staging can retarget without
 - **`publishedAt` is honest.** TinyFish reports human dates (`"Apr 30, 2026"`, `"1 year ago"`). What parses becomes ISO-8601; what doesn't is dropped, never invented. Unzoned dates read as UTC, so the same page reports the same day everywhere.
 - **Empty searches retry.** The upstream answers a valid query with nothing about one run in three — a blank result is retried up to `attempts` before it is believed.
 - **A blocked run is terminal.** If a Monid workspace control stops a run, the error says why and links to top up. Never retried.
+- **Off means _unavailable_, not gone.** A switched-off kind stays registered and declines. If the profile still pins that tool to Tinyfish, the call fails loudly instead of silently rerouting — point the tool at another provider to use one. With nothing pinned, a withdrawn Tinyfish simply yields: auto-select picks whoever is left, and switching one kind off is how you resolve an "ambiguous provider" standoff down to a single candidate.
+- **_Unavailable_ has three causes and one message.** The seam only sees a boolean, so "switched off", "no credential", and "bad base URL" all read the same downstream. The card can tell them apart — check the switches, the key badges, and the endpoint overrides there.
+- **`purpose` is one sentence for every fetch.** The seam's fetch request carries a URL and nothing else — no goal slot, by design — so a per-call goal is impossible without a harness change. The configured sentence is attached to each fetch verbatim: a standing bias, not a per-task instruction.
 
 TinyFish's `agent` and `browser` surfaces are **not** exposed: metered, wallet-billed, and not a search or a fetch. Use the `tinyfish` CLI directly when a page genuinely needs a real browser.
 
