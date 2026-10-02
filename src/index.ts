@@ -144,16 +144,16 @@ export const Config = z.object({
   // `dsh-web` selects each separately, so search and fetch could always be
   // pointed at different providers — but only by editing `dsh-web`'s own row.
   // These make the choice settable in this row, where someone configuring
-  // TinyFish is already looking, and let a half-configured install register
-  // only the kind that works.
+  // TinyFish is already looking. Both providers always register; a switch
+  // that is off only reports that kind unavailable.
   search: z
     .boolean()
     .default(true)
-    .description("Offer TinyFish as the search provider."),
+    .description("Provide TinyFish search; off reports it unavailable."),
   fetch: z
     .boolean()
     .default(true)
-    .description("Offer TinyFish as the fetch provider."),
+    .description("Provide TinyFish fetch; off reports it unavailable."),
 });
 
 /** Cordis service dependencies. */

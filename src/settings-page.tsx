@@ -77,12 +77,13 @@ const en = {
   purposeHint: "Optional goal statement; TinyFish ranks results against it.",
   attempts: "Attempts",
   attemptsHint: "Retries for a transient failure or an empty result, 1 to 5.",
-  search: "Offer search",
-  fetch: "Offer fetch",
-  offer: "Offer",
+  search: "Provide search",
+  fetch: "Provide fetch",
+  provide: "Provide",
   searchName: "web_search",
   fetchName: "web_fetch",
-  offerHint: "When off, that tool falls through to another provider.",
+  provideHint:
+    "When off, TinyFish stays registered but reports itself unavailable for that tool. If searchProvider/fetchProvider still names TinyFish, requests fail instead of falling through.",
   channelDirect: "Direct",
   channelMonid: "Monid",
   bothOff:
@@ -119,10 +120,11 @@ const zh = {
   attemptsHint: "瞬时失败或结果为空时的重试次数，1 到 5。",
   search: "提供搜索",
   fetch: "提供抓取",
-  offer: "提供",
+  provide: "提供",
   searchName: "web_search",
   fetchName: "web_fetch",
-  offerHint: "关闭后，对应工具会转由其他提供方处理。",
+  provideHint:
+    "关闭后，TinyFish 仍保持注册，但会报告该工具不可用。如果 searchProvider/fetchProvider 仍指向 TinyFish，请求会失败，而不会转由其他提供方处理。",
   channelDirect: "直连",
   channelMonid: "Monid",
   bothOff:
@@ -152,10 +154,10 @@ const FIELD = {
 };
 
 /**
- * The id the offer row's heading carries, so its `role="group"` can point at
+ * The id the provide row's heading carries, so its `role="group"` can point at
  * the text a sighted reader already sees rather than repeating it.
  */
-const OFFER_LABEL_ID = "plugin-config-tinyfish-offer";
+const PROVIDE_LABEL_ID = "plugin-config-tinyfish-provide";
 
 /** Reads one key out of the page's dictionary. */
 type Translate = (key: keyof typeof en) => string;
@@ -541,10 +543,10 @@ function TinyfishCard(props: CardProps) {
   /**
    * One switch of the pair that shares a row.
    *
-   * The visible name is the tool's own identifier, not "Offer search": the
-   * group label to the left already says Offer, `web_search` is what the
+   * The visible name is the tool's own identifier, not "Provide search": the
+   * group label to the left already says Provide, `web_search` is what the
    * hint, the provider and the docs all call this thing, and two copies of
-   * the word "offer" on one line said nothing either way. `t("search")`
+   * the word "provide" on one line said nothing either way. `t("search")`
    * stays as the control's accessible name, where the full sentence is what
    * a screen reader should hear.
    */
@@ -571,6 +573,27 @@ function TinyfishCard(props: CardProps) {
       onDiscard={props.discard}
     >
       <style>{STYLES}</style>
+      {/* First: these are the kill switches for the whole card. Whether
+          TinyFish answers at all outranks which channel it would use, which
+          key it would send, and how it would tune the results — so the pair
+          sits above channel, keys, purpose and attempts. */}
+      <div className="dsh-tf-field">
+        <div className="dsh-tf-head">
+          <span className="dsh-tf-label" id={PROVIDE_LABEL_ID}>
+            {t("provide")}
+          </span>
+          <div
+            className="dsh-tf-toggles"
+            role="group"
+            aria-labelledby={PROVIDE_LABEL_ID}
+          >
+            {toggle(FIELD.search, t("searchName"), searchOn)}
+            {toggle(FIELD.fetch, t("fetchName"), fetchOn)}
+          </div>
+        </div>
+        <p className="dsh-tf-hint">{t("provideHint")}</p>
+      </div>
+      {!searchOn && !fetchOn && <p className="dsh-tf-hint">{t("bothOff")}</p>}
       <div className="dsh-tf-field">
         <div className="dsh-tf-head">
           <label
@@ -624,28 +647,6 @@ function TinyfishCard(props: CardProps) {
         invalidLabel={t("invalidNumber")}
         numeric
       />
-      {/* One row for both switches. They were two rows, each with its own
-          label, its own reset badge and a hint repeating the same sentence
-          with a different tool name in it — three lines of chrome per
-          boolean. The pair is never configured independently of its hint,
-          so one row states the rule once and names both tools it governs. */}
-      <div className="dsh-tf-field">
-        <div className="dsh-tf-head">
-          <span className="dsh-tf-label" id={OFFER_LABEL_ID}>
-            {t("offer")}
-          </span>
-          <div
-            className="dsh-tf-toggles"
-            role="group"
-            aria-labelledby={OFFER_LABEL_ID}
-          >
-            {toggle(FIELD.search, t("searchName"), searchOn)}
-            {toggle(FIELD.fetch, t("fetchName"), fetchOn)}
-          </div>
-        </div>
-        <p className="dsh-tf-hint">{t("offerHint")}</p>
-      </div>
-      {!searchOn && !fetchOn && <p className="dsh-tf-hint">{t("bothOff")}</p>}
     </SettingsForm>
   );
 }

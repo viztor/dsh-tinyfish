@@ -243,12 +243,18 @@ function mount(
   written: TestWrite[];
   snapshot: unknown;
   listeners: Record<string, (() => void)[]>;
+  dictionaries:
+    | { en: Record<string, string>; zh: Record<string, string> }
+    | undefined;
 } {
   // Typed as the page's own context: a drift between what the test provides
   // and what the page consumes is a type error here, not a silent mismatch.
 
   const written: TestWrite[] = [];
   const listeners: Record<string, (() => void)[]> = {};
+  let dictionaries:
+    | { en: Record<string, string>; zh: Record<string, string> }
+    | undefined;
   const registrations: {
     entry: SlotEntry;
     component: (props: Record<string, unknown>) => unknown;
@@ -293,7 +299,12 @@ function mount(
       register: (
         _ns: string,
         _dictionaries: { en: unknown; zh: unknown }
-      ): void => {},
+      ): void => {
+        dictionaries = _dictionaries as {
+          en: Record<string, string>;
+          zh: Record<string, string>;
+        };
+      },
     },
     configForms: {
       get: (_ns: string) => ({
@@ -340,7 +351,7 @@ function mount(
   assert.equal(registrations.length, 1, "one slot entry");
   const [first] = registrations;
   assert.ok(first, "the card was registered");
-  return { ...first, written, snapshot, listeners };
+  return { ...first, written, snapshot, listeners, dictionaries };
 }
 
 /** A store snapshot shaped like the one `SettingsFormModel.bind` publishes. */
@@ -470,20 +481,20 @@ test("switching a channel back off stages the same", () => {
 });
 
 test("search and fetch share one labelled row", () => {
-  // They used to be two full-width rows: a label, a reset badge, a switch
-  // and a hint each — three lines of chrome per boolean, and two hints
-  // saying the same sentence with a different tool name in it. The pair is
-  // never configured apart from its hint, so one row states the rule once.
+  // One row states the rule once and names both tools it governs, instead of
+  // two full-width rows repeating the same sentence with a different tool
+  // name in it. The heading says Provide — the switches decide whether
+  // TinyFish answers each tool, not whether the tool exists.
   const { tree } = render({});
   const groups = findAll(tree, "div").filter(
     (node) => node.props.role === "group"
   );
   assert.equal(groups.length, 1, "exactly one labelled group");
   const group = groups[0];
-  assert.ok(group, "the offer row rendered");
+  assert.ok(group, "the provide row rendered");
   assert.equal(
     group.props["aria-labelledby"],
-    "plugin-config-tinyfish-offer",
+    "plugin-config-tinyfish-provide",
     "pointed at the row's own heading, not a second copy of it"
   );
   const switches = findAll(group, "Switch");
@@ -500,13 +511,78 @@ test("search and fetch share one labelled row", () => {
   const copy = texts(group).join(" ");
   assert.ok(copy.includes("searchName"), "the row names web_search");
   assert.ok(copy.includes("fetchName"), "and names web_fetch");
+  assert.ok(
+    texts(tree).join(" ").includes("provideHint"),
+    "and the card states the rule under it"
+  );
   const heading = findAll(tree, "span").find(
     (node) => node.props.id === group.props["aria-labelledby"]
   );
   assert.ok(heading, "the heading the group points at rendered");
   assert.ok(
-    texts(heading).join(" ").includes("offer"),
-    "and it is the row's own Offer, not a copy inside it"
+    texts(heading).join(" ").includes("provide"),
+    "and it is the row's own Provide, not a copy inside it"
+  );
+});
+
+test("the provide row is the first row on the card", () => {
+  // Whether TinyFish answers at all outranks which channel it would use,
+  // which key it would send, and how it would tune the results — so the pair
+  // sits above channel, keys, purpose and attempts, not buried at the bottom.
+  const { tree } = render({});
+  const form = firstOf(tree, "SettingsForm");
+  const children: unknown = form.props.children;
+  assert.ok(Array.isArray(children), "the form renders its rows in order");
+  const rows = children as unknown[];
+  const indexOf = (type: string): number =>
+    rows.findIndex((row) => findAll(row, type).length > 0);
+  const switchesAt = indexOf("Switch");
+  const channelAt = indexOf("SegmentedControl");
+  assert.ok(switchesAt >= 0, "the provide row rendered");
+  assert.ok(channelAt >= 0, "the channel row rendered");
+  assert.ok(
+    switchesAt < channelAt,
+    "the switches come before the channel picker"
+  );
+});
+
+test("the provide hint does not promise a fallthrough", () => {
+  // A switch that is off reports the kind unavailable while the provider
+  // stays registered — and when the profile still points that tool at
+  // TinyFish, `dsh-web` fails the call instead of falling through. The old
+  // hint promised the fallthrough unconditionally, which is exactly wrong in
+  // the pinned case.
+  const { dictionaries } = mount({});
+  assert.ok(dictionaries, "the page registered its copy");
+  const en = dictionaries.en.provideHint;
+  const zh = dictionaries.zh.provideHint;
+  assert.ok(typeof en === "string", "English states the rule");
+  assert.ok(typeof zh === "string", "Chinese states the rule");
+  assert.ok(en.includes("TinyFish"), "English names who declines");
+  assert.ok(zh.includes("TinyFish"), "Chinese names who declines");
+  assert.ok(
+    en.includes("searchProvider"),
+    "English names the selection that decides the outcome"
+  );
+  assert.ok(
+    zh.includes("searchProvider"),
+    "Chinese names the selection that decides the outcome"
+  );
+  assert.ok(
+    !en.includes("that tool falls through"),
+    "English never promises the old silent fallthrough"
+  );
+  assert.ok(
+    !zh.includes("对应工具会转由"),
+    "Chinese never promises the old silent fallthrough"
+  );
+  assert.ok(
+    en.includes("instead of falling through"),
+    "the English copy says what happens instead"
+  );
+  assert.ok(
+    zh.includes("而不会转由其他提供方处理"),
+    "and so does the Chinese copy"
   );
 });
 

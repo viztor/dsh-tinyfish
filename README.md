@@ -100,7 +100,7 @@ Both keys can live side by side — saving one never overwrites the other, and s
 
 ## ⚙️ Settings page
 
-**Settings → Plugins → TinyFish.** Everything editable lives here: the channel picker, your keys, what the search ranks on, retries, and the search/fetch toggles. Changes stage and save together; a key you type is stored by the harness, never in your profile.
+**Settings → Plugins → TinyFish.** Everything editable lives here: whether TinyFish answers search and fetch, the channel picker, your keys, what the search ranks on, and retries. Changes stage and save together; a key you type is stored by the harness, never in your profile.
 
 Both key fields are on the page at once, each labelled with the service it authenticates and each hint naming the reference the save lands on — so you can set the Monid key while Direct is selected, and tell which of the two exists without switching back and forth.
 
@@ -125,15 +125,15 @@ Everything lives in one row, `dsh-tinyfish`. The row is validated, so an out-of-
 | `filters.language` / `.location` | _(unset)_ | geo targeting — patch file only |
 | `filters.includeDomains` / `.excludeDomains` | _(unset)_ | comma-separated — patch file only |
 | `monidBase` / `searchBase` / `fetchBase` | upstream | endpoint override, for staging |
-| `search` / `fetch` | `true` | offer this kind at all; `false` declines without unregistering |
+| `search` / `fetch` | `true` | provide this kind; `false` reports it unavailable without unregistering |
 
-Turning one off reports _unavailable_ rather than _missing_ — the harness tells those apart, and only the second means "the install is broken".
+Turning one off reports _unavailable_ rather than _missing_ — the harness tells those apart, and only the second means "the install is broken". But _unavailable_ is not a silent fall-through: if `searchProvider`/`fetchProvider` still names TinyFish, the call fails. Point that tool at another provider to use one.
 
 ```yaml
 - id: dsh-tinyfish
   config:
     search: true
-    fetch: false # keep TinyFish for search, let dsh-web use another fetch
+    fetch: false # TinyFish stays registered but unavailable for fetch; point fetchProvider elsewhere to use another fetch
 ```
 
 ### Filters live in the patch file
