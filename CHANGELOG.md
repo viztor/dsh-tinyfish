@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.6.3](https://github.com/viztor/dsh-tinyfish/compare/v0.6.2...v0.6.3) (2026-10-02)
+
+
+### Bug Fixes
+
+* **client:** poll async fetch runs, cleanup abort listeners, and test describe invalidations ([482f874](https://github.com/viztor/dsh-tinyfish/commit/482f8746ab81110ceec3ee15b42e91cb42053a62))
+* **settings:** persist and badge API key state via credentials.describe ([cf8ddc8](https://github.com/viztor/dsh-tinyfish/commit/cf8ddc84ec2022710bd130510574e8b98c690f00))
+
 ## [0.6.2](https://github.com/viztor/dsh-tinyfish/compare/v0.6.1...v0.6.2) (2026-10-02)
 
 
