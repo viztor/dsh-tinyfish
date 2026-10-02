@@ -27,7 +27,7 @@ DeepSeek Harness allows installing plugins directly through the Web interface wi
 2. Click **Install Plugin** (添加插件).
 3. Search or enter `dsh-tinyfish` (or `@viztor/dsh-tinyfish`).
 4. Click **Install** — DSH automatically fetches the package from npm, builds the bundle patch, and activates it live without restarting!
-5. In **Settings → Plugins → TinyFish**, select your channel (`direct` or `monid`), enter your API key, and hit **Save**!
+5. In **Settings → Plugins → TinyFish**, select your channel (`direct` or `monid`), enter the key for that channel, and hit **Save**!
 
 ---
 
@@ -102,7 +102,7 @@ Both keys can live side by side — saving one never overwrites the other, and s
 
 **Settings → Plugins → TinyFish.** Everything editable lives here: the channel picker, your keys, what the search ranks on, retries, and the search/fetch toggles. Changes stage and save together; a key you type is stored by the harness, never in your profile.
 
-The page shows the key for the **selected** channel, plus the saved-or-not status of both — so you always know where you stand without switching back and forth.
+Both key fields are on the page at once, each labelled with the service it authenticates and each hint naming the reference the save lands on — so you can set the Monid key while Direct is selected, and tell which of the two exists without switching back and forth.
 
 > Going back is two words: set `searchProvider`/`fetchProvider` to `deepseek-official` and `http`. The bundle stays mounted and idle.
 

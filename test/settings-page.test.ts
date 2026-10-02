@@ -77,6 +77,7 @@ interface SegmentedProps {
 }
 
 interface SwitchProps {
+  label: string;
   checked: boolean;
   onChange: (next: boolean) => void;
 }
@@ -180,6 +181,26 @@ function texts(node: unknown, acc: string[] = []): string[] {
 }
 
 /**
+ * The secret field for one channel's draft, found by the id the card gives it.
+ *
+ * `firstOf()` was enough while one field rendered — and became a trap when
+ * both did: it returns the TinyFish field for every query, so an assertion
+ * written against the Monid field would have been checked against the other
+ * one and passed.
+ *
+ * @param tree - the rendered card.
+ * @param name - the field name the card puts in the id.
+ * @returns that field's props, or a failure naming the one that is missing.
+ */
+function secretBy(tree: unknown, name: string): SecretProps {
+  const found = findAll(tree, "SettingsSecretField").find(
+    (node) => sec(node).id === `plugin-config-tinyfish-${name}`
+  );
+  assert.ok(found, `expected the ${name} key field in the tree`);
+  return sec(found);
+}
+
+/**
  * Everything the card says about the credential, joined.
  *
  * Not the same as `texts()` alone: `label`, `stateLabel` and `hint` are
@@ -187,12 +208,17 @@ function texts(node: unknown, acc: string[] = []): string[] {
  * only walks children measures the card against a subset of itself. It read
  * as correct for as long as the reference also happened to sit in a
  * paragraph of its own, and went blind the moment it did not.
+ *
+ * Every field's props, not the first one's: with both channels on screen,
+ * quoting one hint and checking it against both would make the other
+ * channel's reference unaccounted for.
  */
 function spoken(tree: unknown): string {
-  const secret = sec(firstOf(tree, "SettingsSecretField"));
-  return [...texts(tree), secret.label, secret.stateLabel, secret.hint].join(
-    " "
-  );
+  const secrets = findAll(tree, "SettingsSecretField").flatMap((node) => {
+    const { label, stateLabel, hint } = sec(node);
+    return [label, stateLabel, hint];
+  });
+  return [...texts(tree), ...secrets].join(" ");
 }
 
 /**
@@ -443,6 +469,47 @@ test("switching a channel back off stages the same", () => {
   assert.deepEqual(edits, [{ name: "search", value: "true" }]);
 });
 
+test("search and fetch share one labelled row", () => {
+  // They used to be two full-width rows: a label, a reset badge, a switch
+  // and a hint each — three lines of chrome per boolean, and two hints
+  // saying the same sentence with a different tool name in it. The pair is
+  // never configured apart from its hint, so one row states the rule once.
+  const { tree } = render({});
+  const groups = findAll(tree, "div").filter(
+    (node) => node.props.role === "group"
+  );
+  assert.equal(groups.length, 1, "exactly one labelled group");
+  const group = groups[0];
+  assert.ok(group, "the offer row rendered");
+  assert.equal(
+    group.props["aria-labelledby"],
+    "plugin-config-tinyfish-offer",
+    "pointed at the row's own heading, not a second copy of it"
+  );
+  const switches = findAll(group, "Switch");
+  const [first, second] = switches;
+  assert.ok(first, "the search switch is inside the row");
+  assert.ok(second, "the fetch switch is inside the row");
+  assert.equal(sw(first).label, "search", "search first");
+  assert.equal(sw(second).label, "fetch", "fetch second");
+  assert.equal(
+    findAll(tree, "Switch").length,
+    switches.length,
+    "and every switch on the card is in that one row"
+  );
+  const copy = texts(group).join(" ");
+  assert.ok(copy.includes("searchName"), "the row names web_search");
+  assert.ok(copy.includes("fetchName"), "and names web_fetch");
+  const heading = findAll(tree, "span").find(
+    (node) => node.props.id === group.props["aria-labelledby"]
+  );
+  assert.ok(heading, "the heading the group points at rendered");
+  assert.ok(
+    texts(heading).join(" ").includes("offer"),
+    "and it is the row's own Offer, not a copy inside it"
+  );
+});
+
 test("purpose is a search-only field and hides when search is off", () => {
   const idsOf = (tree: unknown): string[] =>
     findAll(tree, "SettingsValueField").map((field) => fld(field).id);
@@ -535,28 +602,31 @@ test("an untouched control offers no reset", () => {
   assert.equal(findAll(render({}).tree, "button").length, 0);
 });
 
-test("the direct channel shows the TinyFish key field", () => {
-  const secret = firstOf(render({}).tree, "SettingsSecretField");
-  assert.equal(sec(secret).id, "plugin-config-tinyfish-apiKey");
-  assert.equal(sec(secret).label, "apiKey");
+test("the TinyFish key field names the service it authenticates", () => {
+  const secret = secretBy(render({}).tree, "apiKey");
+  assert.equal(secret.id, "plugin-config-tinyfish-apiKey");
+  assert.equal(secret.label, "apiKey");
 });
 
-test("the monid channel shows the platform key field", () => {
-  const secrets = findAll(
-    render({ channel: "monid" }).tree,
-    "SettingsSecretField"
-  );
-  const secret = nth(secrets, 0, "secret field");
-  assert.equal(sec(secret).id, "plugin-config-tinyfish-monidApiKey");
-  assert.equal(sec(secret).label, "monidApiKey");
+test("the Monid key field names the service it authenticates", () => {
+  const secret = secretBy(render({ channel: "monid" }).tree, "monidApiKey");
+  assert.equal(secret.id, "plugin-config-tinyfish-monidApiKey");
+  assert.equal(secret.label, "monidApiKey");
 });
 
-test("exactly one key field renders, never both", () => {
+test("both key fields render, whatever channel is selected", () => {
+  // They used to hide behind the channel switch, which made a live setting
+  // double as the only route to the key you were not currently using: to set
+  // a Monid key while Direct was in use you had to stage a channel change
+  // you did not want, type into it, and stage it back.
   for (const section of [{}, { channel: "monid" }, { channel: "direct" }]) {
-    assert.equal(
-      findAll(render(section).tree, "SettingsSecretField").length,
-      1,
-      `one key field for ${JSON.stringify(section)}`
+    const ids = findAll(render(section).tree, "SettingsSecretField").map(
+      (node) => sec(node).id
+    );
+    assert.deepEqual(
+      ids,
+      ["plugin-config-tinyfish-apiKey", "plugin-config-tinyfish-monidApiKey"],
+      `both fields for ${JSON.stringify(section)}`
     );
   }
 });
@@ -577,7 +647,7 @@ test("the direct key writes to the reference the section names", async () => {
     save,
     discard: entry.inject().discard,
   });
-  sec(firstOf(tree, "SettingsSecretField")).onEdit("typed-key");
+  secretBy(tree, "apiKey").onEdit("typed-key");
   assert.deepEqual(written, [], "staging is not writing");
   await save();
   assert.deepEqual(
@@ -604,7 +674,7 @@ test("the monid key writes to its own reference, not the direct one", async () =
     save,
     discard: entry.inject().discard,
   });
-  sec(firstOf(tree, "SettingsSecretField")).onEdit("platform-key");
+  secretBy(tree, "monidApiKey").onEdit("platform-key");
   await save();
   assert.deepEqual(
     written,
@@ -690,8 +760,8 @@ test("a parseable boolean draft saves", async () => {
 test("the status falls back to defaults when a key entry is missing", () => {
   // The store always publishes both entries, so this guards the shape rather
   // than a reachable state — but a shape the card assumes and the store stops
-  // providing would otherwise render "undefined" into the page. Only the
-  // selected channel's line renders (here: the default, direct).
+  // providing would otherwise render "undefined" into the page. Both fields
+  // render, so both fallbacks are reachable here.
   const { component } = mount({});
   const tree = component({
     view: "page",
@@ -716,10 +786,8 @@ test("the status falls back to defaults when a key entry is missing", () => {
   });
   const all = spoken(tree);
   assert.ok(all.includes("TINYFISH_API_KEY"), "direct falls back");
-  assert.ok(
-    !all.includes("MONID_API_KEY"),
-    "the unselected channel stays out of the status line"
-  );
+  assert.ok(all.includes("MONID_API_KEY"), "and so does monid");
+  assert.ok(!all.includes("undefined"), "with no undefined in the copy");
 });
 
 test("a configured monid key reads as set", () => {
@@ -750,41 +818,59 @@ test("a configured monid key reads as set", () => {
     save: async () => true,
     discard: () => {},
   });
-  const all = spoken(tree);
-  assert.ok(all.includes("MY_PLATFORM"), "names the custom reference");
+  assert.equal(
+    secretBy(tree, "monidApiKey").stateLabel,
+    "apiKeySet",
+    "the Monid field names its custom reference and reads as set"
+  );
+  assert.equal(
+    secretBy(tree, "apiKey").stateLabel,
+    "apiKeyUnset",
+    "and the TinyFish field does not inherit that state"
+  );
+  assert.ok(spoken(tree).includes("MY_PLATFORM"), "the reference is spoken");
 });
 
-test("only the selected channel's status shows", () => {
-  // The status line names one reference: the secret field below already badges
-  // the selected channel's state, so repeating the other channel read as a
-  // second field that was never going to render.
+test("each key field names its own reference, and only its own", () => {
+  // What the single-field layout was really defending: a reader must never
+  // wonder which of the two saves where. Both fields on screen makes that
+  // the whole contract, so each one's hint states its own reference and
+  // crosses over into neither.
   const { tree } = render({});
-  const all = spoken(tree);
-  assert.ok(all.includes("TINYFISH_API_KEY"), "names the direct reference");
+  const direct = secretBy(tree, "apiKey");
+  const monid = secretBy(tree, "monidApiKey");
   assert.ok(
-    !all.includes("MONID_API_KEY"),
-    "and not the unselected monid reference"
+    direct.hint.includes("TINYFISH_API_KEY"),
+    "the TinyFish field names its own reference"
+  );
+  assert.ok(!direct.hint.includes("MONID_API_KEY"), "and never the Monid one");
+  assert.ok(
+    monid.hint.includes("MONID_API_KEY"),
+    "the Monid field names its own reference"
+  );
+  assert.ok(
+    !monid.hint.includes("TINYFISH_API_KEY"),
+    "and never the TinyFish one"
   );
 });
 
-test("the monid channel's status names the monid reference", () => {
-  const { component } = mount({ channel: "monid" });
-  const tree = component({
-    view: "page",
-    t: (key: string): string => key,
-    useTinyfishCard: (select: (state: TestState) => TestState) =>
-      select(state({ channel: "monid" })),
-    edit: () => {},
-    resetField: () => {},
-    save: (): void => {},
-    discard: (): void => {},
-  });
-  const all = spoken(tree);
-  assert.ok(all.includes("MONID_API_KEY"), "names the monid reference");
-  assert.ok(
-    !all.includes("TINYFISH_API_KEY"),
-    "and not the unselected direct reference"
-  );
+test("switching the channel leaves both key fields exactly as they are", () => {
+  // Selecting monid used to swap one reference out of the page and the other
+  // in. Channel now only decides which channel a request is sent through, so
+  // both fields say the same thing under either selection — and the field you
+  // did not select no longer disappears while you are editing the other one.
+  for (const section of [{}, { channel: "direct" }, { channel: "monid" }]) {
+    const { tree } = render(section);
+    const forWhat = JSON.stringify(section);
+    assert.ok(
+      secretBy(tree, "apiKey").hint.includes("TINYFISH_API_KEY"),
+      `the TinyFish field names its reference for ${forWhat}`
+    );
+    assert.ok(
+      secretBy(tree, "monidApiKey").hint.includes("MONID_API_KEY"),
+      `the Monid field names its reference for ${forWhat}`
+    );
+  }
 });
 
 test("credentials.describe marks configured keys as set in the UI", async () => {
@@ -852,35 +938,60 @@ test("credentials/reference-updated invalidation re-reads credentials", async ()
   assert.equal(callCount, 2, "re-read credentials after invalidation");
 });
 
-test("the key's state and its reference are each stated exactly once", () => {
+test("each key field states its state and its reference exactly once", () => {
   // The card used to print both above the field *and* inside it. The paragraph
-  // said "A key is configured." and appended `(TINYFISH_API_KEY)`; the field
-  // below it printed the same sentence as its `stateLabel` tag and the same
+  // said "A key is configured." and appended (TINYFISH_API_KEY); the field
+  // below it printed the same sentence as its stateLabel tag and the same
   // reference as its hint — four of them in a card two hundred pixels tall.
-  // `SettingsSecretField` renders `stateLabel` unconditionally, so the tag
-  // alone carries the state, and the hint alone carries the reference.
-  //
-  // Both states are rendered because the duplication was in both: the tag is
-  // `quiet` when unconfigured and `neutral` when configured, but it is never
-  // absent, so neither state had an excuse.
+  // SettingsSecretField renders stateLabel unconditionally, so the tag alone
+  // carries the state, and the hint alone carries the reference.
   //
   // The control's copy has to be read off its PROPS as well as its children —
-  // `label`, `stateLabel` and `hint` are arguments, not text nodes, and
-  // walking `texts()` alone measured the paragraph against nothing and passed
-  // either way. This test was plant-proved against the paragraph being put
-  // back, and it failed only after the props joined the count.
+  // label, stateLabel and hint are arguments, not text nodes, and walking
+  // texts() alone measured the paragraph against nothing and passed either
+  // way. This test was plant-proved against the paragraph being put back, and
+  // it failed only after the props joined the count.
+  //
+  // There are two fields now, so "exactly once" is counted two ways: each
+  // field carries its own reference and its own state sentence, and the card
+  // as a whole carries one state sentence per field — not one per channel plus
+  // a paragraph repeating whichever channel is selected.
+  const count = (hay: string, needle: string): number =>
+    hay.split(needle).length - 1;
   for (const configured of [false, true]) {
-    const said = spoken(render({}, { configured }).tree);
-    const count = (needle: string): number => said.split(needle).length - 1;
+    const tree = render({}, { configured }).tree;
+    const said = spoken(tree);
     assert.equal(
-      count("TINYFISH_API_KEY"),
+      count(said, "TINYFISH_API_KEY"),
       1,
-      `configured=${configured}: the reference is printed exactly once`
+      `configured=${configured}: the TinyFish reference is printed once`
     );
     assert.equal(
-      count("apiKeySet") + count("apiKeyUnset"),
+      count(said, "MONID_API_KEY"),
       1,
-      `configured=${configured}: the state is stated exactly once`
+      `configured=${configured}: the Monid reference is printed once`
     );
+    assert.equal(
+      count(said, "apiKeySet") + count(said, "apiKeyUnset"),
+      2,
+      `configured=${configured}: one state sentence per field, no repeats`
+    );
+    for (const [name, ref] of [
+      ["apiKey", "TINYFISH_API_KEY"],
+      ["monidApiKey", "MONID_API_KEY"],
+    ] as const) {
+      const field = secretBy(tree, name);
+      const alone = [field.label, field.stateLabel, field.hint].join(" ");
+      assert.equal(
+        count(alone, ref),
+        1,
+        `configured=${configured}: the ${name} field states its own reference once`
+      );
+      assert.equal(
+        count(alone, "apiKeySet") + count(alone, "apiKeyUnset"),
+        1,
+        `configured=${configured}: the ${name} field states its own state once`
+      );
+    }
   }
 });

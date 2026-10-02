@@ -822,23 +822,26 @@ test("the field specs cover every editable key in the host schema", () => {
   );
 });
 
-test("the key field shown follows the selected channel", () => {
-  // Both keys are stored; only the one that will actually be sent is shown, so
-  // a user cannot paste the Monid platform key into the field TinyFish
-  // authenticates with — the mix-up the two refs exist to prevent.
-  const direct = findByType(renderCard({}), "SettingsSecretField");
-  const monid = findByType(
-    renderCard({ channel: "monid" }),
-    "SettingsSecretField"
-  );
-  assert.equal(direct.length, 1, "exactly one key field on each channel");
-  assert.equal(monid.length, 1, "exactly one key field on each channel");
-  assert.ok(direct[0], "exactly one key field on each channel");
-  assert.ok(monid[0], "exactly one key field on each channel");
-  assert.equal(direct[0].props.id, "plugin-config-tinyfish-apiKey");
-  assert.equal(monid[0].props.id, "plugin-config-tinyfish-monidApiKey");
-  assert.equal(direct[0].props.label, "apiKey");
-  assert.equal(monid[0].props.label, "monidApiKey");
+test("both key fields render, on either channel", () => {
+  // Both keys are stored and both are shown, in that order, whatever channel
+  // is selected. They used to follow the selection, which made the channel
+  // switch the only route to the key you were not currently using — a live
+  // setting doubling as a view control — and left no way to tell whether the
+  // unselected channel even had a key. The mix-up that hiding prevented is
+  // answered by each field naming its own service instead.
+  for (const section of [{}, { channel: "direct" }, { channel: "monid" }]) {
+    const forWhat = JSON.stringify(section);
+    const secrets = findByType(renderCard(section), "SettingsSecretField");
+    assert.equal(secrets.length, 2, `both key fields for ${forWhat}`);
+    const direct = secrets[0];
+    const monid = secrets[1];
+    assert.ok(direct, `the TinyFish field for ${forWhat}`);
+    assert.ok(monid, `the Monid field for ${forWhat}`);
+    assert.equal(direct.props.id, "plugin-config-tinyfish-apiKey", forWhat);
+    assert.equal(monid.props.id, "plugin-config-tinyfish-monidApiKey", forWhat);
+    assert.equal(direct.props.label, "apiKey", forWhat);
+    assert.equal(monid.props.label, "monidApiKey", forWhat);
+  }
 });
 
 test("the published state carries a key entry for both channels", () => {

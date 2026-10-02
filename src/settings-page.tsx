@@ -65,12 +65,12 @@ const en = {
   channel: "Channel",
   channelHint:
     "direct calls TinyFish with its own key; monid routes through a Monid key.",
-  apiKey: "API key",
+  apiKey: "TinyFish API key",
   apiKeyHint:
     "Stored outside the settings file. Leave blank to keep the current key.",
   monidApiKey: "Monid platform key",
   monidApiKeyHint:
-    "Stored separately from the TinyFish key, so switching channels keeps both. `monid keys add` also works and takes precedence over this.",
+    "Stored separately from the TinyFish key. `monid keys add` also works and takes precedence over this.",
   apiKeySet: "A key is configured.",
   apiKeyUnset: "No key is configured, so searches fail until one is set.",
   purpose: "Purpose",
@@ -78,9 +78,11 @@ const en = {
   attempts: "Attempts",
   attemptsHint: "Retries for a transient failure or an empty result, 1 to 5.",
   search: "Offer search",
-  searchHint: "When off, web_search falls through to another provider.",
   fetch: "Offer fetch",
-  fetchHint: "When off, web_fetch falls through to another provider.",
+  offer: "Offer",
+  searchName: "web_search",
+  fetchName: "web_fetch",
+  offerHint: "When off, that tool falls through to another provider.",
   channelDirect: "Direct",
   channelMonid: "Monid",
   bothOff:
@@ -104,11 +106,11 @@ const zh = {
   description: "基于 TinyFish 的网页搜索与抓取，零成本。",
   channel: "通道",
   channelHint: "direct 使用 TinyFish 自己的密钥；monid 通过 Monid 密钥转发。",
-  apiKey: "API Key",
+  apiKey: "TinyFish 密钥",
   apiKeyHint: "不写入设置文件。留空表示保持当前密钥。",
   monidApiKey: "Monid 平台密钥",
   monidApiKeyHint:
-    "与 TinyFish 密钥分开保存，切换通道时两者都会保留。也可运行 `monid keys add`，其优先级高于此项。",
+    "与 TinyFish 密钥分开保存。也可运行 `monid keys add`，其优先级高于此项。",
   apiKeySet: "已配置密钥。",
   apiKeyUnset: "未配置密钥，搜索会失败，直到设置为止。",
   purpose: "目标说明",
@@ -116,9 +118,11 @@ const zh = {
   attempts: "尝试次数",
   attemptsHint: "瞬时失败或结果为空时的重试次数，1 到 5。",
   search: "提供搜索",
-  searchHint: "关闭后，web_search 会转由其他提供方处理。",
   fetch: "提供抓取",
-  fetchHint: "关闭后，web_fetch 会转由其他提供方处理。",
+  offer: "提供",
+  searchName: "web_search",
+  fetchName: "web_fetch",
+  offerHint: "关闭后，对应工具会转由其他提供方处理。",
   channelDirect: "直连",
   channelMonid: "Monid",
   bothOff:
@@ -146,6 +150,12 @@ const FIELD = {
   search: "search",
   fetch: "fetch",
 };
+
+/**
+ * The id the offer row's heading carries, so its `role="group"` can point at
+ * the text a sighted reader already sees rather than repeating it.
+ */
+const OFFER_LABEL_ID = "plugin-config-tinyfish-offer";
 
 /** Reads one key out of the page's dictionary. */
 type Translate = (key: keyof typeof en) => string;
@@ -191,9 +201,10 @@ interface CardState {
   };
   fields: Record<string, CardField>;
   /**
-   * One entry per channel, so the card can show the key the selected channel
-   * will actually send. Both are published: switching channels must not lose
-   * the draft for the other one.
+   * One entry per channel, both rendered. The channel switch decides which
+   * one a request will send; it does not decide which one the page may be
+   * edited — hiding the other would mean the only way to set a key for the
+   * channel you are not using is to change the channel you are using.
    */
   keys: Record<string, { text: string; named: boolean; ref: string }>;
 }
@@ -369,6 +380,23 @@ const STYLES = `
   align-items: center;
   gap: 8px;
 }
+.dsh-tf-toggles {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px 20px;
+}
+.dsh-tf-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.dsh-tf-toggle-name {
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--dsw-alias-label-secondary);
+}
 .dsh-tf-reset {
   border: none;
   background: none;
@@ -447,22 +475,44 @@ function TinyfishCard(props: CardProps) {
   const channelText = state.fields[FIELD.channel]?.text ?? "";
   const channel = channelText === "monid" ? "monid" : "direct";
 
-  // Only the selected channel's key is shown. Both are stored, so switching
-  // channels back and forth does not lose the other one — but showing both at
-  // once would invite a user to paste the Monid platform key into the field
-  // that TinyFish will authenticate with, which is exactly the mix-up the two
-  // separate references exist to prevent.
+  // Both keys render, whether or not the channel using them is selected.
+  // They used to hide behind the channel switch, which made that switch two
+  // things at once: a live setting, and the only way to reach the other key
+  // field. Configuring a Monid key while Direct was in use meant staging a
+  // channel change you did not want, typing into it, then staging it back —
+  // and with Direct selected there was no way to tell whether the Monid key
+  // existed at all.
+  //
+  // The mix-up the hiding was guarding against is answered by the labels
+  // instead: each field names the service it authenticates, and its hint
+  // names the reference the save lands on.
   //
   // Falls back to an empty entry rather than crashing: the store always
   // publishes both, so a missing one means the shapes drifted, and a settings
   // page that throws on a shape drift takes down the whole Plugins page with
   // it. An empty field that saves nowhere is the honest degradation.
-  const key = state.keys[channel] ?? {
-    text: "",
-    named: false,
-    ref: channel === "monid" ? DEFAULT_MONID_KEY_REF : DEFAULT_API_KEY_REF,
+  const keyField = (side: "direct" | "monid") => {
+    const entry = state.keys[side] ?? {
+      text: "",
+      named: false,
+      ref: side === "monid" ? DEFAULT_MONID_KEY_REF : DEFAULT_API_KEY_REF,
+    };
+    const name = side === "monid" ? FIELD.monidApiKey : FIELD.apiKey;
+    return (
+      <SettingsSecretField
+        id={`plugin-config-tinyfish-${name}`}
+        label={side === "monid" ? t("monidApiKey") : t("apiKey")}
+        hint={`${side === "monid" ? t("monidApiKeyHint") : t("apiKeyHint")} (${entry.ref})`}
+        text={entry.text}
+        disabled={disabled}
+        configured={entry.named}
+        stateLabel={entry.named ? t("apiKeySet") : t("apiKeyUnset")}
+        onEdit={(text: string) => {
+          props.edit(name, text);
+        }}
+      />
+    );
   };
-  const keyChannel = channel === "monid" ? FIELD.monidApiKey : FIELD.apiKey;
 
   // Effective switch states, driving both the controls and what renders below.
   const searchOn = switchValue(state.fields[FIELD.search]?.text ?? "");
@@ -487,6 +537,31 @@ function TinyfishCard(props: CardProps) {
         )}
       </span>
     ) : null;
+
+  /**
+   * One switch of the pair that shares a row.
+   *
+   * The visible name is the tool's own identifier, not "Offer search": the
+   * group label to the left already says Offer, `web_search` is what the
+   * hint, the provider and the docs all call this thing, and two copies of
+   * the word "offer" on one line said nothing either way. `t("search")`
+   * stays as the control's accessible name, where the full sentence is what
+   * a screen reader should hear.
+   */
+  const toggle = (name: string, displayName: string, on: boolean) => (
+    <span className="dsh-tf-toggle">
+      <span className="dsh-tf-toggle-name">{displayName}</span>
+      {resetControl(name, state.fields[name]?.overridden ?? false)}
+      <Switch
+        label={name === FIELD.search ? t("search") : t("fetch")}
+        checked={on}
+        onChange={(next) => {
+          props.edit(name, String(next));
+        }}
+        disabled={disabled}
+      />
+    </span>
+  );
 
   return (
     <SettingsForm
@@ -524,27 +599,16 @@ function TinyfishCard(props: CardProps) {
         />
         <p className="dsh-tf-hint">{t("channelHint")}</p>
       </div>
-      {/* No summary line above the field. `SettingsSecretField` renders
+      {/* No summary line above either field. `SettingsSecretField` renders
           `stateLabel` unconditionally — configured or not, the tag on the
           label row IS the state — and `hint` already carries the reference,
-          so the paragraph printed "A key is configured." twice and
-          `(TINYFISH_API_KEY)` twice in a two-hundred-pixel card. The ref
-          cannot move into the field instead: this control is write-only by
-          contract (the value never rides a response, and it starts blank),
-          which is also why there is nothing to show as a default — the key
-          is not in the page to show. */}
-      <SettingsSecretField
-        id={`plugin-config-tinyfish-${keyChannel}`}
-        label={channel === "monid" ? t("monidApiKey") : t("apiKey")}
-        hint={`${channel === "monid" ? t("monidApiKeyHint") : t("apiKeyHint")} (${key.ref})`}
-        text={key.text}
-        disabled={disabled}
-        configured={key.named}
-        stateLabel={key.named ? t("apiKeySet") : t("apiKeyUnset")}
-        onEdit={(text: string) => {
-          props.edit(keyChannel, text);
-        }}
-      />
+          so a paragraph of our own printed each of them twice in a card this
+          size. And there is nothing to show *in* the field instead: this
+          control is write-only by contract (the value never rides a
+          response, and it starts blank), which is also why there is no
+          default value to prefill — the key is not in the page to show. */}
+      {keyField("direct")}
+      {keyField("monid")}
       {searchOn && (
         <SettingsValueField
           {...field(FIELD.purpose)}
@@ -560,55 +624,26 @@ function TinyfishCard(props: CardProps) {
         invalidLabel={t("invalidNumber")}
         numeric
       />
+      {/* One row for both switches. They were two rows, each with its own
+          label, its own reset badge and a hint repeating the same sentence
+          with a different tool name in it — three lines of chrome per
+          boolean. The pair is never configured independently of its hint,
+          so one row states the rule once and names both tools it governs. */}
       <div className="dsh-tf-field">
         <div className="dsh-tf-head">
-          <label
-            className="dsh-tf-label"
-            htmlFor={`plugin-config-tinyfish-${FIELD.search}`}
+          <span className="dsh-tf-label" id={OFFER_LABEL_ID}>
+            {t("offer")}
+          </span>
+          <div
+            className="dsh-tf-toggles"
+            role="group"
+            aria-labelledby={OFFER_LABEL_ID}
           >
-            {t("search")}
-          </label>
-          <div className="dsh-tf-badges">
-            {resetControl(
-              FIELD.search,
-              state.fields[FIELD.search]?.overridden ?? false
-            )}
-            <Switch
-              label={t("search")}
-              checked={searchOn}
-              onChange={(next) => {
-                props.edit(FIELD.search, String(next));
-              }}
-              disabled={disabled}
-            />
+            {toggle(FIELD.search, t("searchName"), searchOn)}
+            {toggle(FIELD.fetch, t("fetchName"), fetchOn)}
           </div>
         </div>
-        <p className="dsh-tf-hint">{t("searchHint")}</p>
-      </div>
-      <div className="dsh-tf-field">
-        <div className="dsh-tf-head">
-          <label
-            className="dsh-tf-label"
-            htmlFor={`plugin-config-tinyfish-${FIELD.fetch}`}
-          >
-            {t("fetch")}
-          </label>
-          <div className="dsh-tf-badges">
-            {resetControl(
-              FIELD.fetch,
-              state.fields[FIELD.fetch]?.overridden ?? false
-            )}
-            <Switch
-              label={t("fetch")}
-              checked={fetchOn}
-              onChange={(next) => {
-                props.edit(FIELD.fetch, next.toString());
-              }}
-              disabled={disabled}
-            />
-          </div>
-        </div>
-        <p className="dsh-tf-hint">{t("fetchHint")}</p>
+        <p className="dsh-tf-hint">{t("offerHint")}</p>
       </div>
       {!searchOn && !fetchOn && <p className="dsh-tf-hint">{t("bothOff")}</p>}
     </SettingsForm>
