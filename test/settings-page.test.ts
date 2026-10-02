@@ -200,11 +200,12 @@ function mount(section: Record<string, unknown> = {}): {
   const store = (
     entry: SlotEntry,
     component: (props: Record<string, unknown>) => unknown
-  ): void => {
+  ): (() => void) => {
     registrations.push({
       entry: entry as unknown as SlotEntry,
       component,
     });
+    return () => {};
   };
   const snapshot: {
     status: string;
@@ -244,15 +245,21 @@ function mount(section: Record<string, unknown> = {}): {
       }),
       whileServed: (
         namespaces: string[],
-        register: (served: Set<string>) => void
-      ): void => {
-        register(new Set(namespaces));
+        register: (served: Set<string>) => (() => void) | undefined
+      ): (() => void) | undefined => {
+        const stop = register(new Set(namespaces));
+        return () => {
+          if (typeof stop === "function") {
+            stop();
+          }
+        };
       },
     },
     slots: {
-      inject: (_slot: string, register: () => void): void => {
-        register();
-      },
+      inject: (
+        _slot: string,
+        register: () => (() => void) | undefined
+      ): (() => void) | undefined => register(),
       register: store,
     },
     remote: {
@@ -626,7 +633,8 @@ test("a parseable boolean draft saves", async () => {
 test("the status falls back to defaults when a key entry is missing", () => {
   // The store always publishes both entries, so this guards the shape rather
   // than a reachable state — but a shape the card assumes and the store stops
-  // providing would otherwise render "undefined" into the page.
+  // providing would otherwise render "undefined" into the page. Only the
+  // selected channel's line renders (here: the default, direct).
   const { component } = mount({});
   const tree = component({
     view: "page",
@@ -651,7 +659,10 @@ test("the status falls back to defaults when a key entry is missing", () => {
   });
   const all = texts(tree).join(" ");
   assert.ok(all.includes("TINYFISH_API_KEY"), "direct falls back");
-  assert.ok(all.includes("MONID_API_KEY"), "monid falls back");
+  assert.ok(
+    !all.includes("MONID_API_KEY"),
+    "the unselected channel stays out of the status line"
+  );
 });
 
 test("a configured monid key reads as set", () => {
@@ -686,12 +697,35 @@ test("a configured monid key reads as set", () => {
   assert.ok(all.includes("MY_PLATFORM"), "names the custom reference");
 });
 
-test("both keys' status shows regardless of the selected channel", () => {
-  // A user on direct cannot otherwise tell whether their monid key is saved
-  // without switching channels and looking. The status names each reference,
-  // so an operator can also verify where a key lives.
+test("only the selected channel's status shows", () => {
+  // The status line names one reference: the secret field below already badges
+  // the selected channel's state, so repeating the other channel read as a
+  // second field that was never going to render.
   const { tree } = render({});
   const all = texts(tree).join(" ");
   assert.ok(all.includes("TINYFISH_API_KEY"), "names the direct reference");
-  assert.ok(all.includes("MONID_API_KEY"), "and the monid reference");
+  assert.ok(
+    !all.includes("MONID_API_KEY"),
+    "and not the unselected monid reference"
+  );
+});
+
+test("the monid channel's status names the monid reference", () => {
+  const { component } = mount({ channel: "monid" });
+  const tree = component({
+    view: "page",
+    t: (key: string): string => key,
+    useTinyfishCard: (select: (state: TestState) => TestState) =>
+      select(state({ channel: "monid" })),
+    edit: () => {},
+    resetField: () => {},
+    save: (): void => {},
+    discard: (): void => {},
+  });
+  const all = texts(tree).join(" ");
+  assert.ok(all.includes("MONID_API_KEY"), "names the monid reference");
+  assert.ok(
+    !all.includes("TINYFISH_API_KEY"),
+    "and not the unselected direct reference"
+  );
 });

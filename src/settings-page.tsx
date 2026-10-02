@@ -25,6 +25,7 @@ import {
   SettingsSecretField,
   SettingsValueField,
   Switch,
+  Tag,
   settingsNumberField,
   settingsTextField,
   type SettingsFieldSpec,
@@ -198,15 +199,18 @@ export interface ClientContext {
     get: (ns: string) => SettingsFormScope<unknown>;
     whileServed: (
       namespaces: string[],
-      register: (served: Set<string>) => void
-    ) => void;
+      register: (served: Set<string>) => (() => void) | undefined
+    ) => (() => void) | undefined;
   };
   slots: {
-    inject: (slot: string, register: () => void) => void;
+    inject: (
+      slot: string,
+      register: () => (() => void) | undefined
+    ) => (() => void) | undefined;
     register: (
       entry: Record<string, unknown>,
       component: (props: CardProps) => unknown
-    ) => void;
+    ) => () => void;
   };
   remote: {
     $on: (event: string, listener: () => void) => () => void;
@@ -287,6 +291,64 @@ function refOf(
     : fallback;
 }
 
+/**
+ * Component-local styles matching DSH settings fields.
+ *
+ * Renders as an in-tree `<style>` element so React removes it when unmounted;
+ * nothing is appended to `document.head`. Uses standard `--dsw-*` tokens so
+ * typography, colors, and borders match injected `SettingsValueField` exactly.
+ */
+const STYLES = `
+.dsh-tf-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px 0;
+}
+.dsh-tf-field + .dsh-tf-field {
+  border-top: 0.5px solid var(--dsw-alias-border-l2);
+}
+.dsh-tf-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.dsh-tf-label {
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.5;
+  color: var(--dsw-alias-label-primary);
+}
+.dsh-tf-hint {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--dsw-alias-label-tertiary);
+}
+.dsh-tf-badges {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.dsh-tf-reset {
+  border: none;
+  background: none;
+  padding: 0;
+  font: inherit;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--dsw-alias-label-secondary);
+  cursor: pointer;
+}
+.dsh-tf-reset:hover:not(:disabled) {
+  color: var(--dsw-alias-label-primary);
+}
+.dsh-tf-reset:disabled {
+  cursor: default;
+}
+`;
+
 /** The labels the shared form frame renders. */
 const formLabels = (t: Translate) => ({
   unavailable: t("unavailable"),
@@ -365,16 +427,22 @@ function TinyfishCard(props: CardProps) {
 
   // A reset control matching the form's visual language, for the custom
   // controls that SettingsValueField would otherwise provide one for.
-  const resetButton = (name: string, overridden: boolean) =>
-    overridden && !disabled ? (
-      <button
-        type="button"
-        onClick={() => {
-          props.resetField(name);
-        }}
-      >
-        {t("reset")}
-      </button>
+  const resetControl = (name: string, overridden: boolean) =>
+    overridden ? (
+      <span className="dsh-tf-badges">
+        <Tag tone="neutral">{t("overridden")}</Tag>
+        {!disabled && (
+          <button
+            type="button"
+            className="dsh-tf-reset"
+            onClick={() => {
+              props.resetField(name);
+            }}
+          >
+            {t("reset")}
+          </button>
+        )}
+      </span>
     ) : null;
 
   return (
@@ -384,7 +452,20 @@ function TinyfishCard(props: CardProps) {
       onSave={props.save}
       onDiscard={props.discard}
     >
-      <div>
+      <style>{STYLES}</style>
+      <div className="dsh-tf-field">
+        <div className="dsh-tf-head">
+          <label
+            className="dsh-tf-label"
+            htmlFor={`plugin-config-tinyfish-${FIELD.channel}`}
+          >
+            {t("channel")}
+          </label>
+          {resetControl(
+            FIELD.channel,
+            state.fields[FIELD.channel]?.overridden ?? false
+          )}
+        </div>
         <SegmentedControl
           id={`plugin-config-tinyfish-${FIELD.channel}`}
           label={t("channel")}
@@ -398,25 +479,16 @@ function TinyfishCard(props: CardProps) {
           }}
           disabled={disabled}
         />
-        <p>{t("channelHint")}</p>
-        {resetButton(
-          FIELD.channel,
-          state.fields[FIELD.channel]?.overridden ?? false
-        )}
+        <p className="dsh-tf-hint">{t("channelHint")}</p>
       </div>
-      <p>
-        {t("apiKey")}:{" "}
-        {(state.keys.direct?.named ?? false)
-          ? t("apiKeySet")
-          : t("apiKeyUnset")}{" "}
-        ({state.keys.direct?.ref ?? DEFAULT_API_KEY_REF}) · {t("monidApiKey")}:{" "}
-        {(state.keys.monid?.named ?? false) ? t("apiKeySet") : t("apiKeyUnset")}{" "}
-        ({state.keys.monid?.ref ?? DEFAULT_MONID_KEY_REF})
+      <p className="dsh-tf-hint" style={{ padding: "4px 0" }}>
+        {channel === "monid" ? t("monidApiKey") : t("apiKey")}:{" "}
+        {key.named ? t("apiKeySet") : t("apiKeyUnset")} ({key.ref})
       </p>
       <SettingsSecretField
         id={`plugin-config-tinyfish-${keyChannel}`}
         label={channel === "monid" ? t("monidApiKey") : t("apiKey")}
-        hint={channel === "monid" ? t("monidApiKeyHint") : t("apiKeyHint")}
+        hint={`${channel === "monid" ? t("monidApiKeyHint") : t("apiKeyHint")} (${key.ref})`}
         text={key.text}
         disabled={disabled}
         configured={key.named}
@@ -440,37 +512,57 @@ function TinyfishCard(props: CardProps) {
         invalidLabel={t("invalidNumber")}
         numeric
       />
-      <div>
-        <Switch
-          label={t("search")}
-          checked={searchOn}
-          onChange={(next) => {
-            props.edit(FIELD.search, String(next));
-          }}
-          disabled={disabled}
-        />
-        <p>{t("searchHint")}</p>
-        {resetButton(
-          FIELD.search,
-          state.fields[FIELD.search]?.overridden ?? false
-        )}
+      <div className="dsh-tf-field">
+        <div className="dsh-tf-head">
+          <label
+            className="dsh-tf-label"
+            htmlFor={`plugin-config-tinyfish-${FIELD.search}`}
+          >
+            {t("search")}
+          </label>
+          <div className="dsh-tf-badges">
+            {resetControl(
+              FIELD.search,
+              state.fields[FIELD.search]?.overridden ?? false
+            )}
+            <Switch
+              label={t("search")}
+              checked={searchOn}
+              onChange={(next) => {
+                props.edit(FIELD.search, String(next));
+              }}
+              disabled={disabled}
+            />
+          </div>
+        </div>
+        <p className="dsh-tf-hint">{t("searchHint")}</p>
       </div>
-      <div>
-        <Switch
-          label={t("fetch")}
-          checked={fetchOn}
-          onChange={(next) => {
-            props.edit(FIELD.fetch, next.toString());
-          }}
-          disabled={disabled}
-        />
-        <p>{t("fetchHint")}</p>
-        {resetButton(
-          FIELD.fetch,
-          state.fields[FIELD.fetch]?.overridden ?? false
-        )}
+      <div className="dsh-tf-field">
+        <div className="dsh-tf-head">
+          <label
+            className="dsh-tf-label"
+            htmlFor={`plugin-config-tinyfish-${FIELD.fetch}`}
+          >
+            {t("fetch")}
+          </label>
+          <div className="dsh-tf-badges">
+            {resetControl(
+              FIELD.fetch,
+              state.fields[FIELD.fetch]?.overridden ?? false
+            )}
+            <Switch
+              label={t("fetch")}
+              checked={fetchOn}
+              onChange={(next) => {
+                props.edit(FIELD.fetch, next.toString());
+              }}
+              disabled={disabled}
+            />
+          </div>
+        </div>
+        <p className="dsh-tf-hint">{t("fetchHint")}</p>
       </div>
-      {!searchOn && !fetchOn && <p>{t("bothOff")}</p>}
+      {!searchOn && !fetchOn && <p className="dsh-tf-hint">{t("bothOff")}</p>}
     </SettingsForm>
   );
 }
@@ -563,32 +655,45 @@ export function apply(ctx: ClientContext) {
   );
 
   ctx.effect(() => {
-    // Gated on the Host serving the namespace, so the page disappears when the
-    // plugin is not loaded rather than rendering a form that cannot save.
-    ctx.configForms.whileServed([NS], () => {
-      // `plugins.bundle.config`, NOT `plugins.item`. The item slot is the list
-      // of official plugins rendered beside the official bundles; a
-      // third-party bundle's own page renders `plugins.bundle.config`,
-      // filtered by `entryKey: pkg.name` — which is why the key below is the
-      // package name, spelled here rather than imported for the same reason
-      // the namespace is. A keyed slot requires `options.key`; the list-slot
-      // fields (`id`, `order`, `label`) do not apply here.
-      ctx.slots.inject("plugins.bundle.config", () => {
+    // `plugins.bundle.config`, NOT `plugins.item`: a third-party bundle's own
+    // page renders the former, filtered by `entryKey: pkg.name` — which is why
+    // the key below is the package name. Gated on the Host serving the
+    // namespace, so the page disappears when the plugin is not loaded rather
+    // than rendering a form that cannot save.
+    // The watcher is owned by this effect, and the registration it performs
+    // returns its own disposer: `whileServed` re-runs the callback on every
+    // mirror sync while watched, and re-registering the same key without
+    // disposing the previous entry throws inside a store subscriber (seen in
+    // production as `already has an entry for key "dsh-tinyfish"`). The same
+    // holds one level down: the inject callback returns the registration's
+    // disposer so a slot collapse-and-redeclare disposes before re-adding.
+    const stop = ctx.configForms.whileServed([NS], () => {
+      // The hook key becomes the `useTinyfishCard` prop; the actions spread
+      // in as `edit` / `resetField` / `save` / `discard`.
+      const disposeInject = ctx.slots.inject("plugins.bundle.config", () =>
         ctx.slots.register(
           {
             name: "plugins.bundle.config",
             key: "dsh-tinyfish",
             locale: NS,
-            // The hook key becomes the `useTinyfishCard` prop; the actions
-            // spread in as `edit` / `resetField` / `save` / `discard`.
             inject: () => ({
               hooks: { tinyfishCard: store },
               ...model.actions(),
             }),
           },
           TinyfishCard
-        );
-      });
+        )
+      );
+      return () => {
+        if (typeof disposeInject === "function") {
+          disposeInject();
+        }
+      };
     });
+    return () => {
+      if (typeof stop === "function") {
+        stop();
+      }
+    };
   }, "dsh-tinyfish: page");
 }

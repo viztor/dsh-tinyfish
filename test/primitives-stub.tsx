@@ -205,3 +205,7 @@ export function Switch(props: KitProps) {
 export function SegmentedControl(props: KitProps) {
   return { type: "SegmentedControl", props };
 }
+
+export function Tag(props: KitProps) {
+  return { type: "Tag", props };
+}
