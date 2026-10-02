@@ -25,6 +25,8 @@ import { runInNewContext } from "node:vm";
 
 import { test } from "vitest";
 
+import { Config } from "../src/index.ts";
+
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const BUNDLE = join(ROOT, "lib/client.js");
 
@@ -545,9 +547,11 @@ test("apply registers the bundle config form, gated on the namespace being serve
     "function",
     "and it registers the card component"
   );
-  assert.ok(
-    effects.some((label) => label.includes("page")),
-    "the registration is an effect, so it is torn down on unload"
+  assert.equal(
+    effects.filter((label) => label.includes("page")).length,
+    1,
+    "exactly one page effect: the registration is an effect, so it is torn " +
+      "down on unload — a second one would mean the card registered twice"
   );
 
   // The fields the page renders, read back off the model the card built. Every
@@ -796,24 +800,26 @@ test("a warning shows only when both providers are off", () => {
 test("the field specs cover every editable key in the host schema", () => {
   // The client spells its own field names; this is what keeps them equal to the
   // host's schema keys. A typo here is a control that silently writes nothing.
-  const hostSchema = readFileSync(join(ROOT, "src/index.ts"), "utf8");
-  for (const key of [
-    "channel",
-    "apiKey",
-    "purpose",
-    "attempts",
-    "search",
-    "fetch",
-  ]) {
-    assert.ok(
-      hostSchema.includes(`${key}: z`),
-      `${key} is a host schema key, so the client must edit it`
-    );
-    assert.ok(
-      SOURCE.includes(`"${key}"`),
-      `${key} appears in the built client`
-    );
-  }
+  //
+  // Driven off the schema itself, the way config.test.ts drives its table: the
+  // old version iterated a hardcoded list of six keys, so a seventh key added
+  // to `Config` was never checked at all. Now every schema key must either
+  // appear in the built client or be named below as config-only, and the
+  // config-only list must be exact — a key listed there while the page really
+  // does spell it is a stale exemption, and a key the page misses is a control
+  // that never renders.
+  const declared = Object.keys(Config({})).toSorted();
+  // No control on the page: the endpoint bases and the nested filters are
+  // retargeted from a patch file, not from the settings form.
+  const configOnly = ["fetchBase", "filters", "monidBase", "searchBase"];
+  const withoutControl = declared
+    .filter((key) => !SOURCE.includes(`"${key}"`))
+    .toSorted();
+  assert.deepEqual(
+    withoutControl,
+    configOnly.toSorted(),
+    "every schema key is either edited by the page or declared config-only"
+  );
 });
 
 test("the key field shown follows the selected channel", () => {

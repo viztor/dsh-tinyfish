@@ -163,18 +163,23 @@ test("every schema field has a stated default and a stated junk behaviour", () =
   assert.equal(resolveOptions({}).fetch, true);
 
   for (const field of FIELDS) {
+    // An empty env, not the ambient one: `monidBase`, `searchBase` and
+    // `fetchBase` fall through to `TINYFISH_*_BASE_URL` when the row is
+    // silent, so on a machine with those set the "stated default" and
+    // "degrades" rows below would be reading the machine, not the code —
+    // and passing silently on a host that is configured differently.
     assert.equal(
-      resolveOptions(validated)[field.name],
+      resolveOptions(validated, undefined, {})[field.name],
       field.default,
       `${field.name}: an unset row yields the stated default`
     );
     assert.equal(
-      resolveOptions({ [field.name]: "" })[field.name],
+      resolveOptions({ [field.name]: "" }, undefined, {})[field.name],
       field.junk,
       `${field.name}: an unusable value degrades to the same thing`
     );
     assert.equal(
-      resolveOptions({ [field.name]: field.set })[field.name],
+      resolveOptions({ [field.name]: field.set }, undefined, {})[field.name],
       field.set,
       `${field.name}: an explicit value is honoured, not silently dropped`
     );

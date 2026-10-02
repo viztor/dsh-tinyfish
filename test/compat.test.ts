@@ -9,6 +9,7 @@ import {
   TinyfishSearchProvider,
   type TinyfishProviderOptions,
 } from "../src/provider.ts";
+import { hit, nth, withStubbedFetch } from "./helpers.ts";
 
 /**
  * Coexistence with the providers DSH already ships.
@@ -159,11 +160,23 @@ test("it registers alongside the providers DSH ships", () => {
 test("its id is neither the shipped one nor a bare upstream name", () => {
   // The id is the seam's selection key. If it ever collided with a shipped
   // provider, loading this bundle would break every profile that has both.
-  for (const id of ["tinyfish"]) {
-    assert.notEqual(id, "deepseek-official");
-    assert.notEqual(id, "http");
-    assert.notEqual(id, "deepseek");
-    assert.notEqual(id, "monid");
+  //
+  // The id under test is the one the registration produced, not a literal the
+  // test would agree with either way: the previous version looped over
+  // `["tinyfish"]` and compared it with literals, which can only pass. A
+  // rename to `deepseek` or `monid` — a bare upstream name a user would
+  // expect — or to a shipped id now fails here (a shipped id fails even
+  // earlier, at the registry's duplicate rule inside `bootWithHarness…`).
+  const { search, fetch } = bootWithHarnessProviders();
+  const shipped = new Set(["deepseek-official", "http"]);
+  const ours = [...search.keys(), ...fetch.keys()].filter(
+    (id) => !shipped.has(id)
+  );
+  assert.ok(ours.length > 0, "the bundle registered an id at all");
+  for (const id of ours) {
+    for (const taken of ["deepseek-official", "http", "deepseek", "monid"]) {
+      assert.notEqual(id, taken, `${id} must not collide with ${taken}`);
+    }
   }
 });
 
@@ -228,28 +241,55 @@ test("the profile's selection resolves to this provider, and back again", () => 
   assert.ok(fetch.get("http"), "the shipped fetch provider likewise");
 });
 
-test("a provider it does not own is never consulted", () => {
-  // The adapter is constructed directly here, so this asserts the class does
-  // not reach for a foreign id: it only ever speaks to its own transport.
-  const provider = new TinyfishSearchProvider(
-    () =>
-      ({
-        channel: "monid",
-        apiKey: "k",
-        apiKeyEnv: "TINYFISH_API_KEY",
-        filters: {},
-        attempts: 1,
-        monidBase: "https://api.monid.ai",
-        searchBase: "https://api.search.tinyfish.ai",
-        fetchBase: "https://api.fetch.tinyfish.ai",
-      }) as unknown as TinyfishProviderOptions
+test("it claims only its own id and dials only its own endpoints", async () => {
+  // What a unit test can prove is what the class itself does: the ids it
+  // claims and the endpoints it dials. The old title here — "a provider it
+  // does not own is never consulted" — overclaimed: consultation happens in
+  // the seam's selection, which no unit test drives, so an assertion for it
+  // could never fail. The registry tests next door pin the rest (a colliding
+  // id throws at registration), and this one exercises the transport claim
+  // from the old comment: both providers speak to the bases they were given.
+  //
+  // The bases come from the options object under test, so the comparison is
+  // against the configuration, not a second copy of the same literal.
+  const options = {
+    channel: "direct",
+    apiKey: "k",
+    apiKeyEnv: "TINYFISH_API_KEY",
+    filters: {},
+    attempts: 1,
+    monidBase: "https://api.monid.ai",
+    searchBase: "https://api.search.tinyfish.ai",
+    fetchBase: "https://api.fetch.tinyfish.ai",
+  } as unknown as TinyfishProviderOptions;
+  const search = new TinyfishSearchProvider(() => options);
+  const fetch = new TinyfishFetchProvider(() => options);
+  assert.equal(search.id, "tinyfish");
+  assert.equal(fetch.id, "tinyfish");
+
+  const searchRun = await withStubbedFetch(
+    [{ respond: () => ({ body: { results: [hit()] } }) }],
+    async () => search.search({ query: "q" })
   );
-  assert.equal(provider.id, "tinyfish");
-  assert.equal(typeof provider.search, "function");
-  assert.equal(
-    new TinyfishFetchProvider(() => ({}) as unknown as TinyfishProviderOptions)
-      .id,
-    "tinyfish"
+  assert.ok(
+    nth(searchRun.calls, 0, "search request").url.startsWith(
+      options.searchBase
+    ),
+    `search dials its own base, not a foreign provider's: ${searchRun.calls[0]?.url}`
+  );
+  const fetchRun = await withStubbedFetch(
+    [
+      {
+        respond: () => ({
+          body: { results: [{ url: "https://x", text: "hi" }] },
+        }),
+      },
+    ],
+    async () => fetch.fetch({ url: "https://x" })
+  );
+  assert.ok(
+    nth(fetchRun.calls, 0, "fetch request").url.startsWith(options.fetchBase),
+    `fetch dials its own base, not a foreign provider's: ${fetchRun.calls[0]?.url}`
   );
 });
 
@@ -300,17 +340,44 @@ test("an unparseable value in a merged row degrades instead of poisoning it", ()
   assert.equal(options.attempts, 2);
 });
 
-test("the shipped providers are untouched by loading this bundle", async () => {
-  // A foreign provider's `available()` must still be reachable and stable —
-  // loading the bundle must not mutate another provider's state.
-  const { search } = bootWithHarnessProviders();
-  const shipped = search.get("deepseek-official")!;
-  const before = shipped.available();
-  const mine = search.get("tinyfish")!;
+test("the shipped providers are untouched by loading this bundle", () => {
+  // A foreign provider must come out of our apply exactly as it went in: same
+  // registration object, same methods, same answers. The snapshot is taken
+  // BEFORE the bundle loads — the previous version read the neighbour, loaded
+  // the bundle, then read it again, and against a stub whose `available()` is
+  // a constant the second read could never differ from the first.
+  const { ctx, search, fetch } = registry();
+  // What dsh-web ships, mounted before this bundle runs, as in a real profile.
+  ctx.web.registerSearchProvider(foreignProvider("deepseek-official"));
+  ctx.web.registerFetchProvider(foreignProvider("http"));
+  const beforeSearch = search.get("deepseek-official");
+  const beforeFetch = fetch.get("http");
+  assert.ok(beforeSearch, "the foreign provider mounts first");
+  assert.ok(beforeFetch, "on both seams");
+  const beforeAnswer = beforeSearch.available();
+  const beforeMethod = beforeSearch.available;
+
+  plugin.apply(ctx as unknown as Context, plugin.Config({}));
+  // Our own availability check runs between the two reads: whatever it does,
+  // it must not reach into the neighbour.
+  const mine = search.get("tinyfish");
+  assert.ok(mine, "our provider registered alongside them");
   mine.available();
+
   assert.equal(
-    shipped.available(),
-    before,
+    search.get("deepseek-official"),
+    beforeSearch,
+    "the same registration object, not a replacement"
+  );
+  assert.equal(fetch.get("http"), beforeFetch, "the fetch registry likewise");
+  assert.equal(
+    beforeSearch.available,
+    beforeMethod,
+    "its methods were not swapped out"
+  );
+  assert.equal(
+    beforeSearch.available(),
+    beforeAnswer,
     "another provider's state is not disturbed"
   );
 });

@@ -23,25 +23,65 @@ interface FieldState {
   invalid: boolean;
 }
 
+/** What a spec's `parse` yields: a staged value, a clear, or nothing. */
+type FieldWrite = { kind: "set"; value: string | number } | { kind: "clear" };
+
 /** One conversion spec, as the primitives build them. */
-function spec(field: string) {
+interface FieldSpec {
+  field: string;
+  format: (value: unknown) => string;
+  parse: (text: string) => FieldWrite | undefined;
+}
+
+/**
+ * The text primitive, reproduced from `@deepseek-ai/dsh-client-ui-primitives`.
+ *
+ * Trims first; blank clears; anything else stages the trimmed string. The old
+ * shared helper compared the raw text, so `"  x  "` staged untrimmed and a
+ * whitespace-only draft was a set rather than a clear.
+ */
+function textField(field: string): FieldSpec {
   return {
     field,
-    format: (value: unknown) =>
-      typeof value === "string" ||
-      typeof value === "number" ||
-      typeof value === "boolean"
-        ? String(value)
-        : "",
-    parse: (text: string) =>
-      text === ""
+    format: (value: unknown) => (typeof value === "string" ? value : ""),
+    parse: (text: string) => {
+      const trimmed = text.trim();
+      return trimmed === ""
         ? { kind: "clear" as const }
-        : { kind: "set" as const, value: text },
+        : { kind: "set" as const, value: trimmed };
+    },
   };
 }
 
-export const settingsTextField = (field: string) => spec(field);
-export const settingsNumberField = (field: string) => spec(field);
+/**
+ * The number primitive, likewise reproduced rather than hand-rolled.
+ *
+ * The old shared helper handed every draft back as a raw string, so no
+ * `attempts` typo could ever be unparseable, `field().invalid` never turned
+ * true for a number, and every guard built on that rule read a stub that
+ * could not fail it. The real spec trims, clears on blank, stages the parsed
+ * number when it is finite, and answers `undefined` otherwise — and
+ * `undefined` is what blocks the save.
+ */
+function numberField(field: string): FieldSpec {
+  return {
+    field,
+    format: (value: unknown) =>
+      typeof value === "number" ? String(value) : "",
+    parse: (text: string) => {
+      const trimmed = text.trim();
+      if (trimmed === "") return { kind: "clear" as const };
+      const parsed = Number(trimmed);
+      return Number.isFinite(parsed)
+        ? { kind: "set" as const, value: parsed }
+        : undefined;
+    },
+  };
+}
+
+export const settingsTextField = (field: string): FieldSpec => textField(field);
+export const settingsNumberField = (field: string): FieldSpec =>
+  numberField(field);
 
 export interface SecretSpec {
   field: string;
@@ -56,16 +96,12 @@ export class SettingsFormModel {
   private readonly staged = new Map<string, string>();
   private readonly cleared = new Set<string>();
   private readonly secrets: Map<string, SecretSpec>;
-  private readonly specs: Map<string, ReturnType<typeof spec>>;
+  private readonly specs: Map<string, FieldSpec>;
   private readonly value: Record<string, unknown>;
   private readonly user: Record<string, unknown>;
   private readonly scope: FormScope;
 
-  constructor(
-    scope: FormScope,
-    specs: ReturnType<typeof spec>[],
-    secrets: SecretSpec[]
-  ) {
+  constructor(scope: FormScope, specs: FieldSpec[], secrets: SecretSpec[]) {
     this.scope = scope;
     this.specs = new Map(specs.map((one) => [one.field, one]));
     this.secrets = new Map(secrets.map((one) => [one.field, one]));

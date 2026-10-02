@@ -140,6 +140,10 @@ test(
     );
     assert.ok(dated, "the response carries at least one date string");
     const iso = toIsoDate(dated.date);
-    if (iso) assert.ok(!Number.isNaN(Date.parse(iso)), "coerced dates parse");
+    // Unconditional: the old `if (iso)` guard skipped this check whenever the
+    // coercion returned nothing — which is exactly when coercion is broken,
+    // the case this test exists to catch.
+    assert.ok(iso, "the human-form date coerces to an ISO string");
+    assert.ok(!Number.isNaN(Date.parse(iso)), "coerced dates parse");
   }
 );

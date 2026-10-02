@@ -439,11 +439,26 @@ test("purpose is a search-only field and hides when search is off", () => {
 test("attempts stay visible regardless of the switches", () => {
   const idsOf = (tree: unknown): string[] =>
     findAll(tree, "SettingsValueField").map((field) => fld(field).id);
-  assert.ok(
-    idsOf(render({ search: "false", fetch: "false" }).tree).includes(
-      "plugin-config-tinyfish-attempts"
-    )
-  );
+  // The title says "regardless", so every switch combination is rendered, and
+  // the count is exact: `includes` was satisfied by a single render and blind
+  // to a duplicate, while zero — the control hiding the way purpose hides — is
+  // the regression this test exists to name.
+  const attempts = "plugin-config-tinyfish-attempts";
+  for (const section of [
+    {},
+    { search: "false" },
+    { fetch: "false" },
+    { search: "false", fetch: "false" },
+  ]) {
+    const shown = idsOf(render(section).tree).filter(
+      (id) => id === attempts
+    ).length;
+    assert.equal(
+      shown,
+      1,
+      `${JSON.stringify(section)}: attempts renders exactly once`
+    );
+  }
 });
 
 test("the both-off warning appears only when both are off", () => {
