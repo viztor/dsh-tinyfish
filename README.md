@@ -197,13 +197,13 @@ The toolchain is [Vite+](https://viteplus.dev): `vp pack` builds with tsdown, `v
 
 ```sh
 pnpm install
-pnpm test               # 151 hermetic tests — no network, no credential
+pnpm test               # hermetic — no network, no credential
 pnpm run check          # format + lint + types
 pnpm run release:gate   # build, then the full gate incl. 18 package checks
 pnpm run test:live      # the real APIs, still $0, needs credentials
 ```
 
-Requires **DSH 0.2.0+** and **Node 24+**. Full process and invariants: [`AGENTS.md`](./AGENTS.md). Contributing: [`CONTRIBUTING.md`](./CONTRIBUTING.md).
+Requires **DSH `^0.2.0-rc.1`** (0.2.0-rc.1 and later, below 0.3.0) and **Node 24+**. Full process and invariants: [`AGENTS.md`](./AGENTS.md). Contributing: [`CONTRIBUTING.md`](./CONTRIBUTING.md).
 
 </details>
 
