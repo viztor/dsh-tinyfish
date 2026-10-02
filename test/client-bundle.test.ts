@@ -271,7 +271,21 @@ function loadBundle(): LoadedBundle {
           return {
             bind: (project: Projection): unknown => {
               bindings.push(project);
-              return {};
+              // A real `bind` hands back a `SnapshotStore`, contract and all.
+              // Returning `{}` here would be a stub that violates the type it
+              // stands in for, and would force the page to defend itself
+              // against its own dependency's signature at every call site.
+              let state: unknown;
+              return {
+                getSnapshot: (): unknown => state,
+                subscribe: (): (() => void) => () => {},
+                update: (mutator: (draft: unknown) => void): void => {
+                  mutator(state);
+                },
+                set: (next: unknown): void => {
+                  state = next;
+                },
+              };
             },
             shell: () => ({
               available: true,

@@ -13,6 +13,7 @@ import {
   WEB_PROVIDER_ERROR,
   type TinyfishChannel,
   type TinyfishFetchPayload,
+  type TinyfishSearchHit,
   type TinyfishSearchPayload,
   resolveApiKey,
   tinyfishFetch,
@@ -121,6 +122,20 @@ export function toIsoDate(value: string | undefined): string | undefined {
 }
 
 /**
+ * A result row the seam can report.
+ *
+ * A row with no URL has nowhere to link, so it is dropped before the mapping
+ * rather than reported with a placeholder. Written as a *type predicate* and
+ * not a boolean: the same `typeof row.url === "string"` test inline gives TS
+ * nothing to narrow, which is precisely what used to force an
+ * `as string` on the very next line.
+ */
+const hasUrl = (
+  row: TinyfishSearchHit
+): row is TinyfishSearchHit & { readonly url: string } =>
+  typeof row.url === "string" && row.url !== "";
+
+/**
  * TinyFish search through the `ctx.web` search seam.
  *
  * The seam's request is only `{query, maxResults}`; everything else
@@ -200,24 +215,26 @@ export class TinyfishSearchProvider implements WebSearchProvider {
     return {
       // TinyFish returns ranked results, not a generated answer. `content`
       // stays unset rather than being filled with the query echo.
-      sources: results
-        .filter((row) => typeof row?.url === "string" && row.url !== "")
-        .map((row) => {
-          const source: {
-            url: string;
-            title?: string;
-            snippet?: string;
-            publishedAt?: string;
-          } = { url: row.url as string };
-          if (row.title) source.title = String(row.title);
-          // Monid names the snippet `snippet`; the direct API documents it
-          // the same way, but accept `description` in case that ever shifts.
-          const snippet = row.snippet ?? row.description;
-          if (snippet) source.snippet = String(snippet);
-          const publishedAt = toIsoDate(row.date);
-          if (publishedAt) source.publishedAt = publishedAt;
-          return source;
-        }),
+      sources: results.filter(hasUrl).map((row) => {
+        const source: {
+          url: string;
+          title?: string;
+          snippet?: string;
+          publishedAt?: string;
+        } = { url: row.url };
+        if (row.title !== "" && row.title !== undefined) {
+          source.title = row.title;
+        }
+        // Monid names the snippet `snippet`; the direct API documents it
+        // the same way, but accept `description` in case that ever shifts.
+        const snippet = row.snippet ?? row.description;
+        if (snippet !== "" && snippet !== undefined) {
+          source.snippet = snippet;
+        }
+        const publishedAt = toIsoDate(row.date);
+        if (publishedAt !== undefined) source.publishedAt = publishedAt;
+        return source;
+      }),
       // The seam truncates to `maxResults` and owns this flag.
       truncated: false,
     };
@@ -324,7 +341,7 @@ export class TinyfishFetchProvider implements WebFetchProvider {
       // TinyFish does not surface the origin's status on success. Anything
       // that reached this branch came back 2xx.
       statusCode: 200,
-      body: { kind: "text", content: String(page.text ?? "") },
+      body: { kind: "text", content: page.text ?? "" },
       truncated: false,
     };
   }

@@ -32,6 +32,8 @@ import {
   type SettingsFormScope,
 } from "@deepseek-ai/dsh-client-ui-primitives";
 
+import { isRecord } from "./guard.ts";
+
 /**
  * The settings namespace, spelled rather than imported.
  *
@@ -287,7 +289,15 @@ function refOf(
   snapshot: { value?: unknown } | undefined,
   which: "direct" | "monid"
 ) {
-  const section = snapshot?.value as Record<string, unknown> | undefined;
+  // The snapshot's `value` is the schema-resolved section, but it arrives as
+  // `unknown` and the page runs on a Host it does not control: a typo'd row,
+  // a no longer-registered field, or a raw value from an older manifest can
+  // land here as anything at all. Narrowing rather than asserting keeps a
+  // malformed section on the same path as an absent one — the default —
+  // instead of handing a primitive to an indexed read and reading back
+  // `undefined` anyway, one assertion worse off.
+  const raw: unknown = snapshot?.value;
+  const section = isRecord(raw) ? raw : undefined;
   const field = which === "monid" ? FIELD.monidKeyEnv : FIELD.apiKeyEnv;
   const named = section?.[field];
   const fallback =
@@ -396,7 +406,10 @@ function TinyfishCard(props: CardProps) {
     disabled,
     overriddenLabel: t("overridden"),
     resetLabel: t("reset"),
-    ...(state.fields[name] as CardField),
+    // Every entry the card renders is one the projection published, so the
+    // lookup cannot miss; spreading the indexed read directly keeps that
+    // guarantee visible instead of restating the index signature as a cast.
+    ...state.fields[name],
     onEdit: (text: string) => {
       props.edit(name, text);
     },
@@ -675,12 +688,7 @@ export function apply(ctx: ClientContext) {
       // Test environment fallback: maintain named state if describe is not stubbed
       credentialsState.direct.configured = directRef !== DEFAULT_API_KEY_REF;
       credentialsState.monid.configured = monidRef !== DEFAULT_MONID_KEY_REF;
-      if (
-        typeof (store as unknown as { set?: (v: unknown) => void })?.set ===
-        "function"
-      ) {
-        (store as unknown as { set: (v: unknown) => void }).set(projection());
-      }
+      store.set(projection());
       return;
     }
 
@@ -689,25 +697,25 @@ export function apply(ctx: ClientContext) {
         directRef,
         monidRef,
       ]);
-      if (response && response.ok && response.value) {
-        if (response.value[directRef]) {
-          credentialsState.direct.configured =
-            response.value[directRef].configured ?? false;
-          credentialsState.direct.writable =
-            response.value[directRef].writable ?? true;
+      // `describe` answers with `{ok, value}` and both are non-optional, so
+      // the old `response && response.ok && response.value` read as three
+      // guards and meant one: whether the Host ran the call at all. What is
+      // genuinely optional is the entry for *each* reference — a reference no
+      // key has ever been stored under is answered by its absence — so the
+      // object is narrowed once above and tested for per channel below.
+      const described = response.ok ? response.value : undefined;
+      if (described !== undefined) {
+        const direct = described[directRef];
+        if (direct !== undefined) {
+          credentialsState.direct.configured = direct.configured ?? false;
+          credentialsState.direct.writable = direct.writable ?? true;
         }
-        if (response.value[monidRef]) {
-          credentialsState.monid.configured =
-            response.value[monidRef].configured ?? false;
-          credentialsState.monid.writable =
-            response.value[monidRef].writable ?? true;
+        const monid = described[monidRef];
+        if (monid !== undefined) {
+          credentialsState.monid.configured = monid.configured ?? false;
+          credentialsState.monid.writable = monid.writable ?? true;
         }
-        if (
-          typeof (store as unknown as { set?: (v: unknown) => void })?.set ===
-          "function"
-        ) {
-          (store as unknown as { set: (v: unknown) => void }).set(projection());
-        }
+        store.set(projection());
       }
     } catch {
       // Degrade quietly

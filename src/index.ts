@@ -9,6 +9,7 @@ import {
   DEFAULT_MONID_BASE,
   DEFAULT_SEARCH_BASE,
 } from "./client.ts";
+import { isBoxed, isRecord } from "./guard.ts";
 import {
   TinyfishFetchProvider,
   TinyfishSearchProvider,
@@ -210,8 +211,8 @@ function asScalar(value: unknown): string {
 
 /** Read one field from a section, whether it is boxed (`.get()`) or raw. */
 function readField(section: Record<string, unknown>, key: string): string {
-  const value = section[key] as { get?: () => unknown } | undefined;
-  return asScalar(typeof value?.get === "function" ? value.get() : value);
+  const value = section[key];
+  return asScalar(isBoxed(value) ? value.get() : value);
 }
 
 /**
@@ -235,9 +236,21 @@ function credentialLookup(ctx: Context): CredentialResolver | undefined {
   interface CredentialService {
     resolve: (ref: unknown) => Promise<{ value: string } | undefined>;
   }
+  /**
+   * A service, or nothing. Checked rather than asserted: `ctx.get` is typed
+   * `any` by the platform, so casting it would launder a guess about the host
+   * into a guarantee at exactly the point where a wrong guess throws inside a
+   * search rather than at registration.
+   */
+  const isCredentialService = (value: unknown): value is CredentialService => {
+    if (!isRecord(value)) return false;
+    const member: unknown = Reflect.get(value, "resolve");
+    return typeof member === "function";
+  };
   let credentials: CredentialService | undefined;
   try {
-    credentials = ctx.get("credentials") as CredentialService | undefined;
+    const found: unknown = ctx.get("credentials");
+    credentials = isCredentialService(found) ? found : undefined;
   } catch {
     credentials = undefined;
   }
@@ -252,12 +265,20 @@ function credentialLookup(ctx: Context): CredentialResolver | undefined {
   return async (ref: string): Promise<string | undefined> => {
     // The service first: it is the layer a user can edit from Settings, so a
     // value there is more deliberate than one that happens to be exported.
-    if (credentials) {
+    if (credentials !== undefined) {
       const resolved = await credentials.resolve(credentialRef(ref));
-      if (resolved?.value) return resolved.value;
+      // Three distinct answers, and only the first is one: a missing entry,
+      // an entry with nothing behind it, and an entry that names a value. The
+      // middle case is why this is not `if (resolved?.value !== "")` — a store
+      // holding the ref with a blank value must fall through to the launch
+      // environment rather than return the blank as if it were the key.
+      const value = resolved?.value;
+      if (value !== undefined && value !== "") return value;
     }
-    const value = ambient?.get(ref)?.value;
-    return value && value.length > 0 ? value : undefined;
+    const ambientValue = ambient?.get(ref)?.value;
+    return ambientValue === undefined || ambientValue.length === 0
+      ? undefined
+      : ambientValue;
   };
 }
 
@@ -267,8 +288,8 @@ export function resolveOptions(
   ctx?: Context,
   env: Record<string, string | undefined> = process.env
 ): TinyfishProviderOptions {
-  const section = (config ?? {}) as Record<string, unknown>;
-  const rawFilters = (section.filters ?? {}) as Record<string, unknown>;
+  const section = isRecord(config) ? config : {};
+  const rawFilters = isRecord(section.filters) ? section.filters : {};
 
   // The harness spells these camelCase; TinyFish's API wants snake_case. The
   // translation happens here, once, so the client and the providers stay in

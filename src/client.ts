@@ -5,6 +5,8 @@ import { join } from "node:path";
 
 import { WebError } from "@deepseek-ai/dsh-web";
 
+import { isRecord } from "./guard.ts";
+
 /**
  * TinyFish transport for the DSH web capability seam.
  *
@@ -126,6 +128,167 @@ interface MonidEnvelope {
   output?: Record<string, unknown> | null;
   providerResponse?: { httpStatus?: number; error?: unknown };
   reason?: { reason?: string; hints?: string[] } | string;
+}
+
+/* --------------------------------------------------------------- decoding */
+
+/**
+ * Turn a response body into a typed payload, field by field.
+ *
+ * `call` returns `unknown` because that is what a response body genuinely is
+ * until something has parsed and checked it. The alternative — asserting the
+ * answer at each of the four call sites — makes an upstream rename arrive as
+ * `undefined` travelling through typed code until it throws somewhere
+ * unrelated. Decoding once, where the body is read, makes the same rename
+ * arrive as an empty result, which the retry loop already knows how to treat.
+ *
+ * Both channels share these: Monid's `output` is the direct response
+ * verbatim, so there is one shape to read and nothing above this branches.
+ */
+
+const isString = (value: unknown): value is string => typeof value === "string";
+
+const isNumber = (value: unknown): value is number =>
+  typeof value === "number" && Number.isFinite(value);
+
+/**
+ * Every declared field of one row, with the check each must pass.
+ *
+ * Keyed by `keyof T` rather than written free-form, so adding a field to a
+ * payload interface fails the build until this says how to read it. That is
+ * the whole point of decoding rather than asserting: the compiler can police a
+ * table, but it cannot police a cast.
+ */
+type RowShape = Record<string, (value: unknown) => boolean>;
+
+const SEARCH_HIT_SHAPE = {
+  position: isNumber,
+  site_name: isString,
+  title: isString,
+  snippet: isString,
+  description: isString,
+  url: isString,
+  date: isString,
+  publisher: isString,
+} satisfies Record<keyof TinyfishSearchHit, (value: unknown) => boolean>;
+
+const FETCH_PAGE_SHAPE = {
+  url: isString,
+  final_url: isString,
+  title: isString,
+  text: isString,
+  published_date: isString,
+  latency_ms: isNumber,
+} satisfies Record<keyof TinyfishFetchPage, (value: unknown) => boolean>;
+
+const FETCH_FAILURE_SHAPE = {
+  url: isString,
+  error: isString,
+  status: isNumber,
+} satisfies Record<keyof TinyfishFetchFailure, (value: unknown) => boolean>;
+
+/** True for a row whose declared fields all arrived as their declared type. */
+function rowFits(value: unknown, shape: RowShape): boolean {
+  if (!isRecord(value)) return false;
+  for (const [key, accept] of Object.entries(shape)) {
+    const field = value[key];
+    if (field !== undefined && !accept(field)) return false;
+  }
+  return true;
+}
+
+/** A search row. A wrong-typed field drops the row rather than being read. */
+const isSearchHit = (value: unknown): value is TinyfishSearchHit =>
+  rowFits(value, SEARCH_HIT_SHAPE);
+
+/** A fetched page. */
+const isFetchPage = (value: unknown): value is TinyfishFetchPage =>
+  rowFits(value, FETCH_PAGE_SHAPE);
+
+/** A per-URL failure. */
+const isFetchFailure = (value: unknown): value is TinyfishFetchFailure =>
+  rowFits(value, FETCH_FAILURE_SHAPE);
+
+/** An array of rows, kept `undefined` when upstream sent no array at all. */
+function rows<T>(
+  value: unknown,
+  accept: (item: unknown) => item is T
+): T[] | undefined {
+  return Array.isArray(value) ? value.filter(accept) : undefined;
+}
+
+/** Decode a `/search` payload. */
+function decodeSearch(raw: unknown): TinyfishSearchPayload {
+  if (!isRecord(raw)) return {};
+  return {
+    query: isString(raw.query) ? raw.query : undefined,
+    results: rows(raw.results, isSearchHit),
+    total_results: isNumber(raw.total_results) ? raw.total_results : undefined,
+    page: isNumber(raw.page) ? raw.page : undefined,
+  };
+}
+
+/** Decode a `/fetch` payload. */
+function decodeFetch(raw: unknown): TinyfishFetchPayload {
+  if (!isRecord(raw)) return {};
+  return {
+    results: rows(raw.results, isFetchPage),
+    errors: rows(raw.errors, isFetchFailure),
+  };
+}
+
+/** Decode one Monid envelope. */
+function decodeEnvelope(raw: unknown): MonidEnvelope {
+  if (!isRecord(raw)) return {};
+  const { runId, status, output, providerResponse, reason } = raw;
+
+  // `output: null` is not the same answer as an absent `output`. The first is
+  // Monid saying "the run completed and produced nothing" — which, alongside a
+  // provider error, is how an upstream 5xx is reported — and the second is
+  // "nothing has been produced yet". Collapsing them would discard the state
+  // `assertUsableRun` needs to tell a retryable failure from a success.
+  let decodedOutput: Record<string, unknown> | null | undefined;
+  if (output === null) {
+    decodedOutput = null;
+  } else if (output === undefined) {
+    decodedOutput = undefined;
+  } else if (isRecord(output)) {
+    decodedOutput = output;
+  } else {
+    decodedOutput = {};
+  }
+
+  // Monid reports a blocked run as either a bare string or an object; a
+  // third, unrecognised shape decodes to "no reason" rather than being read
+  // as one by a truthiness test that would also swallow `""`.
+  let decodedReason: MonidEnvelope["reason"];
+  if (typeof reason === "string") {
+    decodedReason = reason;
+  } else if (isRecord(reason)) {
+    const detail = isString(reason.reason) ? reason.reason : undefined;
+    const hints = rows(reason.hints, isString);
+    decodedReason = { reason: detail, hints };
+  } else {
+    decodedReason = undefined;
+  }
+
+  let decodedProvider: MonidEnvelope["providerResponse"];
+  if (isRecord(providerResponse)) {
+    const httpStatus = isNumber(providerResponse.httpStatus)
+      ? providerResponse.httpStatus
+      : undefined;
+    decodedProvider = { httpStatus, error: providerResponse.error };
+  } else {
+    decodedProvider = undefined;
+  }
+
+  return {
+    runId: isString(runId) ? runId : undefined,
+    status: isString(status) ? status : undefined,
+    output: decodedOutput,
+    reason: decodedReason,
+    providerResponse: decodedProvider,
+  };
 }
 
 /**
@@ -365,11 +528,8 @@ function readMonidCredentials(path: string): string {
 function readTinyfishConfig(path: string): string {
   try {
     const config: unknown = JSON.parse(readFileSync(home(path), "utf8"));
-    if (config && typeof config === "object" && "api_key" in config) {
-      const value = (config as { api_key?: unknown }).api_key;
-      return typeof value === "string" ? value.trim() : "";
-    }
-    return "";
+    if (!isRecord(config)) return "";
+    return isString(config.api_key) ? config.api_key.trim() : "";
   } catch {
     return "";
   }
@@ -620,6 +780,61 @@ function searchQueryString(params: Record<string, string | number>): string {
   return search.toString();
 }
 
+/**
+ * Start one Monid run and poll it until it settles.
+ *
+ * Shared by search and fetch because they are the same operation twice: the
+ * endpoint differs and nothing else does. Fetch used to carry its own copy
+ * *without* the poll loop, which is how an async `RUNNING` fetch envelope got
+ * read as if it were a completed one.
+ *
+ * The loop is bounded rather than `while (status === "RUNNING")`: Monid has no
+ * "cancelled" state for a run the client has stopped asking about, so an
+ * unreplied run would otherwise poll until the caller's signal fires — or
+ * forever, for a caller that has none.
+ */
+async function runMonid(options: {
+  key: string;
+  base: string;
+  /** Which operation to run: `/search` or `/fetch`. */
+  endpoint: string;
+  /** That operation's own parameters, nested as Monid's `input`. */
+  input: Record<string, unknown>;
+  signal?: AbortSignal;
+  pollMs: number;
+  maxPolls: number;
+}): Promise<MonidEnvelope> {
+  const { key, base, endpoint, input, signal, pollMs, maxPolls } = options;
+
+  const post = async (body: Record<string, unknown>): Promise<MonidEnvelope> =>
+    decodeEnvelope(
+      await call(`${base}/v1/run`, {
+        channel: "monid",
+        key,
+        signal,
+        init: { method: "POST", body: JSON.stringify(body) },
+      })
+    );
+
+  let envelope = await post({ provider: "tinyfish", endpoint, input });
+
+  let polls = 0;
+  while (envelope.status === "RUNNING" && polls < maxPolls) {
+    throwIfAborted(signal);
+    polls += 1;
+    await sleep(pollMs, signal);
+    envelope = await post({ runId: envelope.runId });
+  }
+  if (envelope.status === "RUNNING") {
+    throw new WebError(
+      `TinyFish run ${envelope.runId ?? "?"} did not settle within ${polls} polls`,
+      WEB_PROVIDER_ERROR
+    );
+  }
+  assertUsableRun(envelope);
+  return envelope;
+}
+
 /** One search through the monid channel, polling if the run is async. */
 async function searchMonid(options: {
   key: string;
@@ -630,52 +845,40 @@ async function searchMonid(options: {
   maxPolls: number;
 }): Promise<TinyfishSearchPayload> {
   const { key, base, params, signal, pollMs, maxPolls } = options;
-  let envelope = (await call(`${base}/v1/run`, {
-    channel: "monid",
+  const envelope = await runMonid({
     key,
+    base,
+    endpoint: "/search",
+    input: { queryParams: params },
     signal,
-    init: {
-      method: "POST",
-      body: JSON.stringify({
-        provider: "tinyfish",
-        endpoint: "/search",
-        input: { queryParams: params },
-      }),
-    },
-  })) as MonidEnvelope;
+    pollMs,
+    maxPolls,
+  });
+  return decodeSearch(envelope.output);
+}
 
-  let polls = 0;
-  while (envelope.status === "RUNNING" && polls < maxPolls) {
-    throwIfAborted(signal);
-    polls += 1;
-    await sleep(pollMs, signal);
-    envelope = (await call(`${base}/v1/run`, {
-      channel: "monid",
-      key,
-      signal,
-      init: { method: "POST", body: JSON.stringify({ runId: envelope.runId }) },
-    })) as MonidEnvelope;
-  }
-  if (envelope.status === "RUNNING") {
-    throw new WebError(
-      `TinyFish run ${envelope.runId ?? "?"} did not settle within ${polls} polls`,
-      WEB_PROVIDER_ERROR
-    );
-  }
-  assertUsableRun(envelope);
-  return envelope.output ?? {};
+/**
+ * The human-readable form of a `BLOCKED` reason, for the error text.
+ *
+ * Monid sends either a bare string or an object carrying `reason` plus
+ * `hints`; an empty result means neither arrived. Each arm is matched
+ * explicitly rather than by truthiness — a union is precisely where
+ * `if (reason && …)` reads as one test and means three of them.
+ */
+function describeBlock(reason: MonidEnvelope["reason"]): string {
+  if (typeof reason === "string") return reason;
+  if (reason === undefined) return "";
+  return [reason.reason, ...(reason.hints ?? [])]
+    .filter((part): part is string => part !== undefined && part !== "")
+    .join(" ");
 }
 
 /** Raise for a BLOCKED / FAILED run, which retrying will not fix. */
 function assertUsableRun(envelope: MonidEnvelope): void {
   if (envelope.status === "BLOCKED") {
-    const { reason } = envelope;
-    const detail =
-      reason && typeof reason === "object"
-        ? [reason.reason, ...(reason.hints ?? [])].filter(Boolean).join(" ")
-        : String(reason ?? "");
+    const detail = describeBlock(envelope.reason);
     throw new WebError(
-      `The Monid workspace blocked this run${detail ? `: ${detail}` : "."} ` +
+      `The Monid workspace blocked this run${detail === "" ? "." : `: ${detail}`} ` +
         "Top up at https://app.monid.ai/wallet.",
       WEB_PROVIDER_ERROR
     );
@@ -686,16 +889,18 @@ function assertUsableRun(envelope: MonidEnvelope): void {
       WEB_PROVIDER_ERROR
     );
   }
-  // `output: null` with a provider error is Monid reporting an upstream
-  // failure (rate limiting, 5xx) as a COMPLETED run. Retryable.
+  // `output: null` alongside a provider error is Monid reporting an upstream
+  // failure (rate limiting, 5xx) as a COMPLETED run. That one is retryable.
   const provider = envelope.providerResponse;
-  if (
-    !envelope.output &&
-    (provider?.error || (provider?.httpStatus ?? 0) >= 500)
-  ) {
-    const message = extractProviderMessage(provider?.error);
+  const noOutput = envelope.output === undefined || envelope.output === null;
+  const upstreamFault =
+    provider !== undefined &&
+    ((provider.error !== undefined && provider.error !== null) ||
+      (provider.httpStatus ?? 0) >= 500);
+  if (noOutput && upstreamFault) {
+    const message = extractProviderMessage(provider.error);
     throw new TransientWebError(
-      `TinyFish is temporarily unavailable${message ? `: ${message}` : "."}`,
+      `TinyFish is temporarily unavailable${message === "" ? "." : `: ${message}`}`,
       WEB_PROVIDER_ERROR
     );
   }
@@ -703,15 +908,18 @@ function assertUsableRun(envelope: MonidEnvelope): void {
 
 /** Dig a human message out of Monid's nested provider error, if there is one. */
 function extractProviderMessage(error: unknown): string {
-  if (!error || typeof error !== "object") return "";
-  const outer = error as { error?: { message?: unknown } };
-  const message = outer.error?.message;
-  return typeof message === "string" ? message : "";
+  // `{ error: { message } }` is the documented shape. Anything else — a bare
+  // string, a number, a shape that has since moved — yields no message rather
+  // than an exception thrown from inside the error path, where throwing would
+  // replace the failure being reported.
+  if (!isRecord(error)) return "";
+  const outer = error.error;
+  return isRecord(outer) && isString(outer.message) ? outer.message : "";
 }
 
 /* ------------------------------------------------------------------- fetch */
 
-/** One fetch through the monid channel. */
+/** One fetch through the monid channel, polling if the run is async. */
 async function fetchMonid(options: {
   key: string;
   base: string;
@@ -728,50 +936,32 @@ async function fetchMonid(options: {
     pollMs = DEFAULT_POLL_MS,
     maxPolls = DEFAULT_MAX_POLLS,
   } = options;
-  let envelope = (await call(`${base}/v1/run`, {
-    channel: "monid",
+  const envelope = await runMonid({
     key,
+    base,
+    endpoint: "/fetch",
+    input: { body },
     signal,
-    init: {
-      method: "POST",
-      body: JSON.stringify({
-        provider: "tinyfish",
-        endpoint: "/fetch",
-        input: { body },
-      }),
-    },
-  })) as MonidEnvelope;
-
-  let polls = 0;
-  while (envelope.status === "RUNNING" && polls < maxPolls) {
-    throwIfAborted(signal);
-    polls += 1;
-    await sleep(pollMs, signal);
-    envelope = (await call(`${base}/v1/run`, {
-      channel: "monid",
-      key,
-      signal,
-      init: { method: "POST", body: JSON.stringify({ runId: envelope.runId }) },
-    })) as MonidEnvelope;
-  }
-  if (envelope.status === "RUNNING") {
-    throw new WebError(
-      `TinyFish run ${envelope.runId ?? "?"} did not settle within ${polls} polls`,
-      WEB_PROVIDER_ERROR
-    );
-  }
-  assertUsableRun(envelope);
-  return envelope.output ?? {};
+    pollMs,
+    maxPolls,
+  });
+  return decodeFetch(envelope.output);
 }
 
 /* ------------------------------------------------------------------- api */
 
-/** What the retry loop needs to decide whether another attempt is worthwhile. */
-interface RetryPolicy {
+/**
+ * What the retry loop needs to decide whether another attempt is worthwhile.
+ *
+ * Parameterised by the operation's result so `retryWhen` receives a typed
+ * value: previously it took `unknown` and every caller had to cast the payload
+ * back to its own type, which is a round trip through `any` buying nothing.
+ */
+interface RetryPolicy<T> {
   attempts: number;
   signal?: AbortSignal;
   delayMs?: number;
-  retryWhen?: (value: unknown) => boolean;
+  retryWhen?: (value: T) => boolean;
   onRetry?: (attempt: number, total: number, error?: WebError) => void;
 }
 
@@ -786,7 +976,7 @@ interface RetryPolicy {
  */
 async function withRetry<T>(
   operation: () => Promise<T>,
-  policy: RetryPolicy
+  policy: RetryPolicy<T>
 ): Promise<T> {
   const {
     attempts,
@@ -801,12 +991,20 @@ async function withRetry<T>(
     try {
       const value = await operation();
       if (attempt > 1) onRetry?.(attempt, attempts, lastError);
-      if (!retryWhen?.(value) || attempt === attempts) return value;
+      if (
+        retryWhen === undefined ||
+        !retryWhen(value) ||
+        attempt === attempts
+      ) {
+        return value;
+      }
       onRetry?.(attempt, attempts);
     } catch (error) {
       // A cancelled attempt is not a failed attempt: retrying it would spend
       // another call on work the caller has already given up on.
-      if (signal?.aborted) throw aborted(signal, error);
+      if (signal !== undefined && signal.aborted) {
+        throw aborted(signal, error);
+      }
       if (isAbortError(error)) throw aborted(signal, error);
       if (!isTransient(error)) throw error;
       if (attempt === attempts) throw error;
@@ -901,7 +1099,7 @@ export async function tinyfishSearch(
   const params: Record<string, string | number> = { query, ...filters };
 
   return withRetry<TinyfishSearchPayload>(
-    () =>
+    async (): Promise<TinyfishSearchPayload> =>
       channel === "monid"
         ? searchMonid({
             key,
@@ -911,21 +1109,21 @@ export async function tinyfishSearch(
             pollMs,
             maxPolls,
           })
-        : (call(`${searchBase}?${searchQueryString(params)}`, {
-            channel: "direct",
-            key,
-            signal,
-            init: { method: "GET" },
-          }) as Promise<TinyfishSearchPayload>),
+        : decodeSearch(
+            await call(`${searchBase}?${searchQueryString(params)}`, {
+              channel: "direct",
+              key,
+              signal,
+              init: { method: "GET" },
+            })
+          ),
     {
       attempts,
       signal,
       delayMs,
       // A zero-result search is usually the upstream flake, not the answer.
-      retryWhen: (payload) => {
-        const value = payload as TinyfishSearchPayload;
-        return !Array.isArray(value?.results) || value.results.length === 0;
-      },
+      retryWhen: (payload) =>
+        payload.results === undefined || payload.results.length === 0,
       onRetry: (attempt, total) => onRetry?.(attempt, total),
     }
   );
@@ -970,18 +1168,20 @@ export async function tinyfishFetch(
   });
   requireKey(channel, key);
   const body: Record<string, unknown> = { urls, format: "markdown" };
-  if (purpose) body.purpose = purpose;
+  if (purpose !== undefined && purpose !== "") body.purpose = purpose;
 
   return withRetry<TinyfishFetchPayload>(
-    () =>
+    async (): Promise<TinyfishFetchPayload> =>
       channel === "monid"
         ? fetchMonid({ key, base: monidBase, body, signal, pollMs, maxPolls })
-        : (call(fetchBase, {
-            channel: "direct",
-            key,
-            signal,
-            init: { method: "POST", body: JSON.stringify(body) },
-          }) as Promise<TinyfishFetchPayload>),
+        : decodeFetch(
+            await call(fetchBase, {
+              channel: "direct",
+              key,
+              signal,
+              init: { method: "POST", body: JSON.stringify(body) },
+            })
+          ),
     {
       attempts,
       signal,
