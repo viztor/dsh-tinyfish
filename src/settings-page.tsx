@@ -214,7 +214,13 @@ export interface ClientContext {
   };
   remote: {
     $on: (event: string, listener: () => void) => () => void;
-    credentials: { set: (ref: string, value: string) => Promise<boolean> };
+    credentials: {
+      set: (ref: string, value: string) => Promise<boolean>;
+      describe?: (refs: string[]) => Promise<{
+        ok: boolean;
+        value: Record<string, { configured?: boolean; writable?: boolean }>;
+      }>;
+    };
   };
 }
 
@@ -586,23 +592,34 @@ export function apply(ctx: ClientContext) {
   // separate scope object to build.
   const scope = ctx.configForms.get(NS);
 
-  // Whether a key exists is a question for the credentials domain, and its
-  // answer arrives asynchronously — so the card does not ask it. What it can
-  // answer synchronously, and what actually decides where a key is looked up, is
-  // which reference the section names. The control reports that instead of
-  // claiming a key is present when it has not checked.
-  // Two secrets, one per channel, each written to its own reference. The
-  // primitive takes an array, so this costs nothing over the single field it
-  // replaces — and it is what lets a user save both keys and keep them.
+  // Asynchronously queries the host credentials service via `credentials.describe`
+  // so the card badges whether a key is actually saved in ~/.dsh/.credentials.yaml
+  // rather than checking reference strings.
+  const credentialsState: Record<
+    string,
+    { configured: boolean; writable: boolean; ref: string }
+  > = {
+    direct: {
+      configured: false,
+      writable: true,
+      ref: refOf(scope.getSnapshot(), "direct"),
+    },
+    monid: {
+      configured: false,
+      writable: true,
+      ref: refOf(scope.getSnapshot(), "monid"),
+    },
+  };
+
   const model = new SettingsFormModel(scope, SPECS, [
     {
       field: FIELD.apiKey,
       write: async (text) => {
         try {
-          await ctx.remote.credentials.set(
-            refOf(scope.getSnapshot(), "direct"),
-            text
-          );
+          const ref = refOf(scope.getSnapshot(), "direct");
+          await ctx.remote.credentials.set(ref, text);
+          credentialsState.direct.configured = true;
+          await readCredentials();
           return true;
         } catch {
           // A refused write surfaces through the form's own failed state;
@@ -615,10 +632,10 @@ export function apply(ctx: ClientContext) {
       field: FIELD.monidApiKey,
       write: async (text) => {
         try {
-          await ctx.remote.credentials.set(
-            refOf(scope.getSnapshot(), "monid"),
-            text
-          );
+          const ref = refOf(scope.getSnapshot(), "monid");
+          await ctx.remote.credentials.set(ref, text);
+          credentialsState.monid.configured = true;
+          await readCredentials();
           return true;
         } catch {
           return false;
@@ -627,7 +644,7 @@ export function apply(ctx: ClientContext) {
     },
   ]);
 
-  const store = model.bind(() => ({
+  const projection = () => ({
     shell: model.shell(),
     fields: Object.fromEntries(
       SPECS.map((spec) => [spec.field, model.field(spec.field)])
@@ -635,24 +652,89 @@ export function apply(ctx: ClientContext) {
     keys: {
       direct: {
         text: model.field(FIELD.apiKey).text,
-        // Synchronous: does the accepted section name a reference of its own?
-        named: refOf(scope.getSnapshot(), "direct") !== DEFAULT_API_KEY_REF,
-        ref: refOf(scope.getSnapshot(), "direct"),
+        named: credentialsState.direct.configured,
+        ref: credentialsState.direct.ref,
       },
       monid: {
         text: model.field(FIELD.monidApiKey).text,
-        named: refOf(scope.getSnapshot(), "monid") !== DEFAULT_MONID_KEY_REF,
-        ref: refOf(scope.getSnapshot(), "monid"),
+        named: credentialsState.monid.configured,
+        ref: credentialsState.monid.ref,
       },
     },
-  }));
+  });
+
+  const store = model.bind(projection);
+
+  const readCredentials = async () => {
+    const directRef = refOf(scope.getSnapshot(), "direct");
+    const monidRef = refOf(scope.getSnapshot(), "monid");
+    credentialsState.direct.ref = directRef;
+    credentialsState.monid.ref = monidRef;
+
+    if (typeof ctx.remote?.credentials?.describe !== "function") {
+      // Test environment fallback: maintain named state if describe is not stubbed
+      credentialsState.direct.configured = directRef !== DEFAULT_API_KEY_REF;
+      credentialsState.monid.configured = monidRef !== DEFAULT_MONID_KEY_REF;
+      if (
+        typeof (store as unknown as { set?: (v: unknown) => void })?.set ===
+        "function"
+      ) {
+        (store as unknown as { set: (v: unknown) => void }).set(projection());
+      }
+      return;
+    }
+
+    try {
+      const response = await ctx.remote.credentials.describe([
+        directRef,
+        monidRef,
+      ]);
+      if (response && response.ok && response.value) {
+        if (response.value[directRef]) {
+          credentialsState.direct.configured =
+            response.value[directRef].configured ?? false;
+          credentialsState.direct.writable =
+            response.value[directRef].writable ?? true;
+        }
+        if (response.value[monidRef]) {
+          credentialsState.monid.configured =
+            response.value[monidRef].configured ?? false;
+          credentialsState.monid.writable =
+            response.value[monidRef].writable ?? true;
+        }
+        if (
+          typeof (store as unknown as { set?: (v: unknown) => void })?.set ===
+          "function"
+        ) {
+          (store as unknown as { set: (v: unknown) => void }).set(projection());
+        }
+      }
+    } catch {
+      // Degrade quietly
+    }
+  };
+
+  const unsubscribeScope = scope.subscribe(() => {
+    void readCredentials();
+  });
+
+  ctx.effect(
+    () =>
+      ctx.remote.$on?.("credentials/reference-updated", () => {
+        void readCredentials();
+      }),
+    "dsh-tinyfish: credential invalidations"
+  );
 
   ctx.effect(
     () => () => {
+      unsubscribeScope();
       model.dispose();
     },
     "dsh-tinyfish: form subscription"
   );
+
+  void readCredentials();
 
   ctx.effect(() => {
     // `plugins.bundle.config`, NOT `plugins.item`: a third-party bundle's own

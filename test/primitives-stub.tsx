@@ -120,11 +120,17 @@ export class SettingsFormModel {
     };
   }
 
-  // The real model returns a value that tracks the scope; this recomputes on
-  // read instead, which is indistinguishable to a test that renders once.
-  // oxlint-disable-next-line class-methods-use-this -- no state to touch.
-  bind<T>(project: () => T): () => T {
-    return project;
+  // The real model returns a store that tracks the scope and provides .set();
+  // this recomputes on read and supports explicit sets from credential reads.
+  // oxlint-disable-next-line class-methods-use-this -- no instance state to touch.
+  bind<T>(project: () => T) {
+    let current = project();
+    const fn = Object.assign(() => current, {
+      set: (next: T) => {
+        current = next;
+      },
+    });
+    return fn;
   }
 
   actions() {
