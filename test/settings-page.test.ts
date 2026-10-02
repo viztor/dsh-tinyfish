@@ -598,6 +598,34 @@ test("an overridden custom control offers a reset button", () => {
   assert.deepEqual(edits, [{ name: "channel", value: undefined }]);
 });
 
+test("an overridden switch resets itself, not its neighbour", () => {
+  // The two switches share one row now, so their reset controls sit two
+  // elements apart. Each must still reset the field it belongs to, or an
+  // operator clearing one override silently clears the other one's.
+  const only = render({ fetch: "false" });
+  const [one] = findAll(only.tree, "button");
+  assert.ok(one, "just the overridden switch offers a reset");
+  btn(one).onClick();
+  assert.deepEqual(only.edits, [{ name: "fetch", value: undefined }]);
+
+  const both = render({ search: "true", fetch: "false" });
+  const buttons = findAll(both.tree, "button");
+  assert.equal(buttons.length, 2, "one reset per overridden switch");
+  const [searchReset, fetchReset] = buttons;
+  assert.ok(searchReset, "search's reset rendered");
+  assert.ok(fetchReset, "fetch's reset rendered");
+  btn(searchReset).onClick();
+  btn(fetchReset).onClick();
+  assert.deepEqual(
+    both.edits,
+    [
+      { name: "search", value: undefined },
+      { name: "fetch", value: undefined },
+    ],
+    "each button resets the switch it sits beside"
+  );
+});
+
 test("an untouched control offers no reset", () => {
   assert.equal(findAll(render({}).tree, "button").length, 0);
 });
