@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.6.4](https://github.com/viztor/dsh-tinyfish/compare/v0.6.3...v0.6.4) (2026-10-02)
+
+
+### Bug Fixes
+
+* **settings-page:** call the switches Provide and put them first ([d6b55ad](https://github.com/viztor/dsh-tinyfish/commit/d6b55ad1f61ef0aca8d355f44b6c043b77002b50))
+* **settings-page:** show both channel keys and pair the switches ([2a2ca42](https://github.com/viztor/dsh-tinyfish/commit/2a2ca42fad21ae1af7c5a949a96060838a8ad281))
+* **settings-page:** stop stating the credential's status twice ([dd10e6b](https://github.com/viztor/dsh-tinyfish/commit/dd10e6b439ccd716234034d0ee8268b37e3da838))
+
 ## [0.6.3](https://github.com/viztor/dsh-tinyfish/compare/v0.6.2...v0.6.3) (2026-10-02)
 
 
