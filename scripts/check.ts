@@ -156,6 +156,41 @@ for (const field of ["main", "types"]) {
   if (!pkg[field]) fail(`no ${field} declared`);
 }
 
+/**
+ * A DSH bundle is resolved by **bare name** out of the profile's
+ * `node_modules`, which makes `name` a runtime contract rather than a label:
+ * add an org prefix and the loader never looks for it — the package installs
+ * cleanly, the plugin registers nowhere, and nothing in the run says why.
+ * `docs/dsh-contracts.md` states that the exported `name` must equal the
+ * manifest `name`, and this is where that is made true rather than assumed.
+ *
+ * The repository URL is the other half of what those docs claimed. npm draws
+ * the package page, the source link and the provenance from it, and a wrong
+ * host there is invisible right up until someone follows the link.
+ */
+const BARE_NAME = "dsh-tinyfish";
+if (pkg.name !== BARE_NAME) {
+  fail(
+    `the package is named "${pkg.name}"; a bundle is resolved by bare name, so it must be ${BARE_NAME}`
+  );
+} else {
+  ok(`the package is named ${BARE_NAME}, the bare name the loader resolves`);
+}
+const repository: unknown =
+  typeof pkg.repository === "object" && pkg.repository !== null
+    ? pkg.repository.url
+    : pkg.repository;
+if (
+  typeof repository !== "string" ||
+  !repository.includes("viztor/dsh-tinyfish")
+) {
+  fail(
+    `repository is ${JSON.stringify(repository)}; it must name github.com/viztor/dsh-tinyfish`
+  );
+} else {
+  ok(`repository is ${repository}`);
+}
+
 /* --------------------------------------- 4. the harness surfaces are still there */
 
 /**

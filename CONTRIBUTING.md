@@ -5,23 +5,24 @@
 ```sh
 pnpm install
 pnpm run build        # produces lib/, which the tests read
-pnpm run ci           # vp check && vp test --coverage && node scripts/check.ts
+pnpm run ci           # tsc --noEmit && vp check && vp test --coverage && node scripts/check.ts
 ```
 
-The build is not optional before testing: `test/client-bundle.test.mjs` evaluates the built `lib/client.js` under `node:vm`, because proving the shipped artifact registers itself correctly is worth more than proving the source compiles.
+The build is not optional before testing: `test/client-bundle.test.ts` evaluates the built `lib/client.js` under `node:vm`, because proving the shipped artifact registers itself correctly is worth more than proving the source compiles.
 
 ## The toolchain is Vite+ (`vp`)
 
 One entry point for the whole toolchain — Vite, Rolldown, Vitest, tsdown, Oxlint and Oxfmt:
 
-| task             | command          |
-| ---------------- | ---------------- |
-| build            | `pnpm run build` |
-| format           | `vp fmt`         |
-| lint             | `vp lint`        |
-| types            | `tsc --noEmit`   |
-| test             | `vp test`        |
-| all of the above | `vp check`       |
+| task                             | command          |
+| -------------------------------- | ---------------- |
+| build                            | `pnpm run build` |
+| format                           | `vp fmt`         |
+| lint                             | `vp lint`        |
+| types                            | `tsc --noEmit`   |
+| test                             | `vp test`        |
+| format + lint + type-aware check | `vp check`       |
+| the whole gate                   | `pnpm run ci`    |
 
 **Lint and format configuration lives in the `lint` and `fmt` blocks of `vite.config.ts`, and nowhere else.** Vite+ disables nested `oxlint.config` and `.oxfmtrc` files, so a config in its own file is read by nobody and fails silently. That is not a style preference: during the migration the rules were off for a long stretch and CI was green the whole time. `scripts/check.ts` asserts the live rule count and that the type-aware tier is on, so the configuration cannot quietly go inert again.
 
@@ -31,10 +32,10 @@ One entry point for the whole toolchain — Vite, Rolldown, Vitest, tsdown, Oxli
 
 Two files, two boundaries:
 
-- `test/settings-page.test.mjs` imports the **source** and stubs the Host's UI kit, because `@deepseek-ai/dsh-client-ui-primitives` does not resolve outside the Host (it imports `*.module.css` and host-only workspace utilities).
-- `test/client-bundle.test.mjs` evaluates the **built** bundle against an equivalent stub, which is the only thing that proves the artifact the registry serves is wired correctly.
+- `test/settings-page.test.ts` imports the **source** and stubs the Host's UI kit, because `@deepseek-ai/dsh-client-ui-primitives` does not resolve outside the Host (it imports `*.module.css` and host-only workspace utilities).
+- `test/client-bundle.test.ts` evaluates the **built** bundle against an equivalent stub, which is the only thing that proves the artifact the registry serves is wired correctly.
 
-`pnpm run test:live` runs `test/integration/live.test.mjs` against the real TinyFish and Monid endpoints. It needs credentials and spends a little money; it is not part of `pnpm run ci`.
+`pnpm run test:live` runs `test/integration/live.test.ts` against the real TinyFish and Monid endpoints. It needs credentials and spends a little money; it is not part of `pnpm run ci`.
 
 ## Commits
 

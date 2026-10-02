@@ -2,7 +2,7 @@
 
 ## Project identity
 
-- Local source: `~/dev/dsh-tinyfish` · npm package: **`dsh-tinyfish`** (unscoped) · GitHub: `viztor/dsh-tinyfish` `scripts/check.ts` enforces both against the _built_ entry.
+- Local source: `~/dev/dsh-tinyfish` · npm package: **`dsh-tinyfish`** (unscoped) · GitHub: `viztor/dsh-tinyfish` · `scripts/check.ts` enforces both (a bundle resolves by bare name, so a rename is a runtime break, not a label).
 - **Registering a provider is not selecting it.** This plugin only _offers_ `tinyfish`; `dsh-web`'s `searchProvider` / `fetchProvider` decide. Reverting is two words in the profile — change them back to `deepseek-official` / `http` and the plugin stays mounted and idle. Do not "fix" selection by editing the plugin.
 
 ## Stack
@@ -38,9 +38,8 @@ TinyFish backs the harness's native `web_search` and `web_fetch`. Both endpoints
 | --- | --- | --- | --- | --- |
 | `direct` (default) | `GET api.search.tinyfish.ai` | `POST api.fetch.tinyfish.ai` | `X-API-Key` | `~/.tinyfish/config.json` |
 | `monid` | `POST api.monid.ai/v1/run` | same | `Authorization: Bearer` | `~/.config/monid/credentials.yaml` |
-| `direct` | `GET api.search.tinyfish.ai` | `POST api.fetch.tinyfish.ai` | `X-API-Key` | `~/.tinyfish/config.json` |
 
-**The two channels return the same payload.** Monid is a thin envelope whose `output` is TinyFish's response verbatim, and it forwards parameter names unchanged. That is why one transport serves both and nothing above it branches — a test asserts the top hit matches across channels. If that stops being true, `test/integration/live.test.mjs` fails first.
+**The two channels return the same payload.** Monid is a thin envelope whose `output` is TinyFish's response verbatim, and it forwards parameter names unchanged. That is why one transport serves both and nothing above it branches — a test asserts the top hit matches across channels. If that stops being true, `test/integration/live.test.ts` fails first.
 
 ## What the harness taught us
 
@@ -63,14 +62,13 @@ Publishing is a tag, not a local command. The publish job only runs on a `v*` ta
 
 ```sh
 pnpm install            # prepare runs vp pack, so lib/ exists for the harness
-pnpm run build          # vp pack -> lib/ (one .mjs + one .d.mts)
+pnpm run build          # vp pack -> lib/ (index.mjs + index.d.mts + client.js)
 pnpm run check          # vp check: format + lint + types in one pass
 pnpm test               # vp test — hermetic, no network, no credential
 pnpm run test:live      # real TinyFish + Monid, $0, needs credentials
 pnpm run lint           # vp lint  — Oxlint, type-aware
 pnpm run format         # vp fmt --check
-pnpm run ci             # check + test + the six package checks below
-pnpm run ci             # check + test + the four build/runtime checks
+pnpm run ci             # typecheck + check + test + the package checks below
 pnpm run release:gate   # build, then ci
 ```
 
@@ -105,11 +103,11 @@ When DSH moves: `pnpm add -D` the new `@deepseek-ai/dsh-*` versions, run `releas
 
 ## The settings UI, and why there isn't one yet
 
-**A plugin's `Config` does not render anywhere by itself.** The Plugins page is a shell that renders tabs contributed by feature-owned client bundles; it never reads a schema. A package with no client bundle has no form, however well its schema is declared — and the harness degrades quietly rather than reporting it. This package ships both halves, so the row is editable in the GUI; the two `vp pack` targets produce `lib/index.mjs` (the provider) and `lib/client.cjs` (the page), and the manifest declares `dsh.bundle` and `dsh.client` side by side.
+**A plugin's `Config` does not render anywhere by itself.** The Plugins page is a shell that renders tabs contributed by feature-owned client bundles; it never reads a schema. A package with no client bundle has no form, however well its schema is declared — and the harness degrades quietly rather than reporting it. This package ships both halves, so the row is editable in the GUI; the two `vp pack` targets produce `lib/index.mjs` (the provider) and `lib/client.cjs`, which `scripts/name-client-bundle.ts` renames to `lib/client.js` (the page), and the manifest declares `dsh.bundle` and `dsh.client` side by side.
 
 The rule that produced a false instruction in the README: **do not name a UI path unless a client bundle exists to render it.** Two user-facing places had it, and both were corrected before the page shipped.
 
-The page is `src/settings-page.tsx`, and its source of truth is the contract doc, not the shipped copy — every signature was read out of `dsh-client-ui-primitives`. `test/client-bundle.test.mjs` executes the built file under a `node:vm` stub of the loader, which is what catches a wrong wrapper or a wrong service name. The two deliberate limits are recorded in that file: the primitives have no boolean spec, so the switches use a hand-written one; and the credential control reports the _reference_ rather than asking asynchronously whether a key exists.
+The page is `src/settings-page.tsx`, and its source of truth is the contract doc, not the shipped copy — every signature was read out of `dsh-client-ui-primitives`. `test/client-bundle.test.ts` executes the built file under a `node:vm` stub of the loader, which is what catches a wrong wrapper or a wrong service name. The two deliberate limits are recorded in that file: the primitives have no boolean spec, so the switches use a hand-written one; and the credential control reports the _reference_ rather than asking asynchronously whether a key exists.
 
 ## Safety
 
@@ -121,11 +119,11 @@ The page is `src/settings-page.tsx`, and its source of truth is the contract doc
 
 ## TDD
 
-- `pnpm test` is hermetic and free: no network, no credential, well under a second. The count is deliberately not written down here — it drifts, and `pnpm test` reports it. `fetch` is stubbed per test through `test/helpers.mjs`; add a case there rather than reaching the real API.
-- `pnpm run test:live` talks to both real APIs and is a **separate Vitest config** (`vite.live.config.ts`), not a flag on the default run. An inline `projects` entry looked like the tidier answer and was not: it inherited the parent's `include` and re-ran all 70 unit tests under a second name. It is still skipped without `DSH_TINYFISH_LIVE=1`, and it still costs $0, so run it before a release — but never make a gate of it that blocks an offline machine.
+- `pnpm test` is hermetic and free: no network, no credential, well under a second. The count is deliberately not written down here — it drifts, and `pnpm test` reports it. `fetch` is stubbed per test through `test/helpers.ts`; add a case there rather than reaching the real API.
+- `pnpm run test:live` talks to both real APIs and is a **separate Vitest config** (`vite.live.config.ts`), not a flag on the default run. An inline `projects` entry looked like the tidier answer and was not: it inherited the parent's `include` and re-ran the whole suite under a second name. It is still skipped without `DSH_TINYFISH_LIVE=1`, and it still costs $0, so run it before a release — but never make a gate of it that blocks an offline machine.
 - Unit tests pin behaviour a stub cannot prove: retry boundaries, `BLOCKED` being terminal, blank-credential fallthrough, `publishedAt` coercion.
 - Prefer a failing test that names the defect over editing an assertion to match new behaviour. The suite has already caught `requireKey` swallowing the credential, `active_key` never being honoured, and unzoned dates parsing as local midnight.
-- The tests are `.mjs` on purpose. `src/` is type-checked and lint-gated type-aware; making the tests TypeScript would add a second surface to keep in sync for no extra safety, and the fleet's script override already accounts for untyped test code. Assertions stayed on `node:assert` through the Vitest migration on purpose: changing the runner and the assertion library in one commit means a red suite could be either, and neither would be knowable.
+- The tests are TypeScript and sit in the **same `tsconfig.json` program** as `src/` — `test/` and `scripts/` in one `include`, no second config with its own options. This is not about the type errors it catches. Oxlint's type-aware mode discovers the tsconfig _per file_ and does not apply it to a file the config does not `include`, so a config covering only `src/` had `tsc` and `vp lint` reading the same test sources and answering differently: `.toSorted()` fine in one and `TS2550` in the other, `array[i]` possibly undefined in one and not the other. Two checkers that disagree cannot say which of them is right, and `include` is what makes them one program. Assertions stayed on `node:assert` through the Vitest migration on purpose: changing the runner and the assertion library in one commit means a red suite could be either, and neither would be knowable.
 
 ## Invariants worth defending
 
@@ -142,13 +140,13 @@ Load-bearing and cheap to break. Each has a test.
 
 ```sh
 pnpm install            # prepare runs vp pack, so lib/ exists for the harness
-pnpm run build          # vp pack -> lib/ (one .mjs + one .d.mts)
+pnpm run build          # vp pack -> lib/ (index.mjs + index.d.mts + client.js)
 pnpm run check          # vp check: format + lint + types in one pass
 pnpm test               # vp test — hermetic, no network, no credential
 pnpm run test:live      # real TinyFish + Monid, $0, needs credentials
 pnpm run lint           # vp lint  — Oxlint, type-aware
 pnpm run format         # vp fmt --check
-pnpm run ci             # vp check + vp test + the package checks
+pnpm run ci             # typecheck + vp check + vp test --coverage + the package checks
 ```
 
 Run `release:gate` before every commit that touches `src/`, `cordis.patch.yml`, or `package.json`. `ci` is what CI runs and what a pre-push hook should run.
@@ -194,11 +192,11 @@ The scratch directory has to sit inside the project at the same depth as `lib/`.
 
 ## Changing the config surface
 
-`src/index.ts` holds the only normalisation: `channel` and `attempts` are clamped, filters are translated from the harness's camelCase to the upstream's snake_case, and `apiKey` / `purpose` are trimmed, and `search` / `fetch` become booleans. Adding a filter means touching `resolveOptions` **and** `test/plugin.test.mjs` in the same change — the translation is the contract, not an implementation detail.
+`src/index.ts` holds the only normalisation: `channel` and `attempts` are clamped, filters are translated from the harness's camelCase to the upstream's snake_case, and `apiKey` / `purpose` are trimmed, and `search` / `fetch` become booleans. Adding a filter means touching `resolveOptions` **and** `test/plugin.test.ts` in the same change — the translation is the contract, not an implementation detail.
 
 `search` and `fetch` are switches, not registrations: both providers always register and a disabled kind declines through `available()`. Not registering would make `dsh-web` raise `WEB_PROVIDER_CONFIGURED_MISSING`, which reads as a broken install rather than a choice. A switch is off only on an exact `"false"`, so a malformed row cannot silently disable a provider.
 
-`test/config.test.mjs` guards this whole area against going inert: it checks the schema's key list against a table of stated defaults, and each field against an explicit value that must round-trip. A field declared but never threaded through `resolveOptions` passes every other test in the suite — which is exactly the bug `attempts` had.
+`test/config.test.ts` guards this whole area against going inert: it checks the schema's key list against a table of stated defaults, and each field against an explicit value that must round-trip. A field declared but never threaded through `resolveOptions` passes every other test in the suite — which is exactly the bug `attempts` had.
 
 Validated sections hand back **boxed schema nodes**, not plain values, and not uniformly: a `union` of consts resolves to a bare value while a `default(...).volatile()` field stays a node. `readField` in `src/index.ts` handles both and refuses to stringify an object — a typo'd key must not become `"[object Object]"` in a request.
 
