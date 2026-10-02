@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.2](https://github.com/viztor/dsh-tinyfish/compare/v0.6.1...v0.6.2) (2026-10-02)
+
+
+### Bug Fixes
+
+* **ui:** adopt host typography tokens and standard field layout ([010c555](https://github.com/viztor/dsh-tinyfish/commit/010c55506f95cb17deb89ebbf4eef09136b813e8))
+
 ## [0.6.1](https://github.com/viztor/dsh-tinyfish/compare/v0.6.0...v0.6.1) (2026-10-01)
 
 
