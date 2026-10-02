@@ -48,20 +48,28 @@ export default defineConfig({
       eqeqeq: ["error", "always", { null: "ignore" }],
       "no-eq-null": "off",
 
-      // --- Quality debt: real, visible, not yet paid down.
-      "typescript/no-unsafe-argument": "warn",
-      "typescript/no-unsafe-assignment": "warn",
-      "typescript/no-unsafe-call": "warn",
-      "typescript/no-unsafe-member-access": "warn",
-      "typescript/no-unsafe-return": "warn",
-      "typescript/no-unsafe-type-assertion": "warn",
-      "typescript/no-unsafe-enum-comparison": "warn",
-      "typescript/no-unsafe-function-type": "warn",
-      "typescript/no-explicit-any": "warn",
-      "typescript/strict-boolean-expressions": "warn",
-      "typescript/no-non-null-assertion": "warn",
-      "typescript/prefer-nullish-coalescing": "warn",
-      "typescript/return-await": "warn",
+      // --- Quality gates: the type system's own defect classes. Never demote.
+      // These used to be the `warn` tier, and read as debt until the debt was
+      // paid: every occurrence in `src/` has since been removed, so the tier
+      // that recorded "known, tolerated" no longer describes anything. Leaving
+      // them at `warn` after that would be the opposite move — the rule would
+      // stay visible while its enforcement quietly did not, which is the same
+      // indistinguishable-from-passing failure that inert config produces.
+      // `test/` and `scripts/` keep their own `off` override below, so this
+      // widens the gate only where the contract lives.
+      "typescript/no-unsafe-argument": "error",
+      "typescript/no-unsafe-assignment": "error",
+      "typescript/no-unsafe-call": "error",
+      "typescript/no-unsafe-member-access": "error",
+      "typescript/no-unsafe-return": "error",
+      "typescript/no-unsafe-type-assertion": "error",
+      "typescript/no-unsafe-enum-comparison": "error",
+      "typescript/no-unsafe-function-type": "error",
+      "typescript/no-explicit-any": "error",
+      "typescript/strict-boolean-expressions": "error",
+      "typescript/no-non-null-assertion": "error",
+      "typescript/prefer-nullish-coalescing": "error",
+      "typescript/return-await": "error",
       "typescript/promise-function-async": "off",
       "no-await-in-loop": "off",
       "require-await": "off",
@@ -104,11 +112,13 @@ export default defineConfig({
       "promise/avoid-new": "off",
       "no-empty-function": "off",
       "typescript/non-nullable-type-assertion-style": "warn",
-      // Monid's run envelope is `output: Record<string, unknown> | null`; the
-      // two providers narrow it to their payload shapes. That is the one
-      // assertion in the package that an `unknown` forces, and it is checked by
-      // the shape tests rather than left on faith.
-      "typescript/no-unnecessary-type-assertion": "warn",
+      // Was `warn` for one reason: Monid's `output` field forced an assertion
+      // at both providers, so the rule was recording a known exception rather
+      // than tolerating sloppiness. The assertion is gone — the response body
+      // is now decoded where it is read instead of asserted at each call site,
+      // which is strictly better than either tier — so the exception the
+      // warning documented no longer exists and the rule becomes a gate.
+      "typescript/no-unnecessary-type-assertion": "error",
     },
     overrides: [
       {
@@ -258,7 +268,7 @@ export default defineConfig({
 
   test: {
     // The suite is hermetic and free: `fetch` is stubbed per test in
-    // test/helpers.mjs. Nothing here touches the network or needs a
+    // test/helpers.ts. Nothing here touches the network or needs a
     // credential, so `vp test` stays runnable offline.
     //
     // The live suite has its own config, `vite.live.config.ts`. An inline
@@ -272,8 +282,10 @@ export default defineConfig({
     // `*.module.css` and host-only workspace utilities that no consumer has.
     // So a test that imports the *source* of the settings page aliases the kit
     // to a stub. Testing our code with the host's kit stubbed is the right
-    // boundary anyway; `test/client-bundle.test.mjs` covers the built artifact
-    // against the same stub.
+    // boundary anyway; `test/client-bundle.test.ts` then covers the *built*
+    // artifact under a `node:vm` stub of the module loader, with its own
+    // inline stand-in for the primitives — two different stubs, because the
+    // two tests are proving two different things.
     alias: {
       "@deepseek-ai/dsh-client-ui-primitives": fileURLToPath(
         new URL("test/primitives-stub.tsx", import.meta.url)
@@ -281,19 +293,20 @@ export default defineConfig({
     },
     coverage: {
       provider: "v8",
-      // `.tsx` is here for a reason: `**/*.ts` does not match it, and
-      // `settings-page.tsx` is the one source file with no unit coverage of its
-      // own — it is exercised by executing the *built* bundle under `node:vm`.
-      // Excluded from the report it had no number at all, which reads as "not
+      // `.tsx` is here for a reason: `**/*.ts` does not match it, so
+      // `settings-page.tsx` would silently drop out of this report. A file
+      // excluded from the report has no number at all, which reads as "not
       // measured" rather than "not counted".
       include: ["src/**/*.ts", "src/**/*.tsx"],
       reporter: ["text-summary", "text"],
       // A floor, not a target. A threshold nobody fails is a check that cannot
       // fail, which is worth less than no threshold at all: it reads as
       // "covered" on the dashboard. These sit just under what the suite
-      // actually reaches today (92 / 86 / 89 / 92), so a real regression fails
-      // and closing a gap lets them be raised. Widening one is a deliberate act
-      // visible in the diff — which is the point.
+      // actually reaches today (92.8 / 85.0 / 93.8 / 94.7), so a real
+      // regression fails and closing a gap lets them be raised. Widening one
+      // is a deliberate act visible in the diff — which is the point.
+      // `branches` is the tight one on purpose: 85 against a measured 85.01
+      // means the first untested branch fails it.
       thresholds: {
         statements: 90,
         branches: 85,
