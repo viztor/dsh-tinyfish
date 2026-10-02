@@ -524,10 +524,15 @@ function TinyfishCard(props: CardProps) {
         />
         <p className="dsh-tf-hint">{t("channelHint")}</p>
       </div>
-      <p className="dsh-tf-hint" style={{ padding: "4px 0" }}>
-        {channel === "monid" ? t("monidApiKey") : t("apiKey")}:{" "}
-        {key.named ? t("apiKeySet") : t("apiKeyUnset")} ({key.ref})
-      </p>
+      {/* No summary line above the field. `SettingsSecretField` renders
+          `stateLabel` unconditionally — configured or not, the tag on the
+          label row IS the state — and `hint` already carries the reference,
+          so the paragraph printed "A key is configured." twice and
+          `(TINYFISH_API_KEY)` twice in a two-hundred-pixel card. The ref
+          cannot move into the field instead: this control is write-only by
+          contract (the value never rides a response, and it starts blank),
+          which is also why there is nothing to show as a default — the key
+          is not in the page to show. */}
       <SettingsSecretField
         id={`plugin-config-tinyfish-${keyChannel}`}
         label={channel === "monid" ? t("monidApiKey") : t("apiKey")}

@@ -94,6 +94,9 @@ interface ButtonProps {
 interface SecretProps {
   id: string;
   label: string;
+  hint: string;
+  stateLabel: string;
+  configured: boolean;
   onEdit: (text: string) => void;
 }
 
@@ -174,6 +177,22 @@ function texts(node: unknown, acc: string[] = []): string[] {
     texts(children, acc);
   }
   return acc;
+}
+
+/**
+ * Everything the card says about the credential, joined.
+ *
+ * Not the same as `texts()` alone: `label`, `stateLabel` and `hint` are
+ * arguments handed to `SettingsSecretField`, not text nodes, so a test that
+ * only walks children measures the card against a subset of itself. It read
+ * as correct for as long as the reference also happened to sit in a
+ * paragraph of its own, and went blind the moment it did not.
+ */
+function spoken(tree: unknown): string {
+  const secret = sec(firstOf(tree, "SettingsSecretField"));
+  return [...texts(tree), secret.label, secret.stateLabel, secret.hint].join(
+    " "
+  );
 }
 
 /**
@@ -301,7 +320,10 @@ function mount(
 /** A store snapshot shaped like the one `SettingsFormModel.bind` publishes. */
 function state(
   section: Record<string, unknown>,
-  { writable = true }: { writable?: boolean } = {}
+  {
+    writable = true,
+    configured = false,
+  }: { writable?: boolean; configured?: boolean } = {}
 ): TestState {
   const field = (value: unknown): TestField => {
     const text =
@@ -332,7 +354,7 @@ function state(
     },
     fields,
     keys: {
-      direct: { text: "", named: false, ref: "TINYFISH_API_KEY" },
+      direct: { text: "", named: configured, ref: "TINYFISH_API_KEY" },
       monid: { text: "", named: false, ref: "MONID_API_KEY" },
     },
   };
@@ -341,7 +363,7 @@ function state(
 /** Render the card's page view. */
 function render(
   section: Record<string, unknown>,
-  options: { writable?: boolean } = {}
+  options: { writable?: boolean; configured?: boolean } = {}
 ): { edits: TestEdit[]; tree: unknown } {
   const { component } = mount(section);
   const edits: TestEdit[] = [];
@@ -692,7 +714,7 @@ test("the status falls back to defaults when a key entry is missing", () => {
     save: async () => true,
     discard: () => {},
   });
-  const all = texts(tree).join(" ");
+  const all = spoken(tree);
   assert.ok(all.includes("TINYFISH_API_KEY"), "direct falls back");
   assert.ok(
     !all.includes("MONID_API_KEY"),
@@ -728,7 +750,7 @@ test("a configured monid key reads as set", () => {
     save: async () => true,
     discard: () => {},
   });
-  const all = texts(tree).join(" ");
+  const all = spoken(tree);
   assert.ok(all.includes("MY_PLATFORM"), "names the custom reference");
 });
 
@@ -737,7 +759,7 @@ test("only the selected channel's status shows", () => {
   // the selected channel's state, so repeating the other channel read as a
   // second field that was never going to render.
   const { tree } = render({});
-  const all = texts(tree).join(" ");
+  const all = spoken(tree);
   assert.ok(all.includes("TINYFISH_API_KEY"), "names the direct reference");
   assert.ok(
     !all.includes("MONID_API_KEY"),
@@ -757,7 +779,7 @@ test("the monid channel's status names the monid reference", () => {
     save: (): void => {},
     discard: (): void => {},
   });
-  const all = texts(tree).join(" ");
+  const all = spoken(tree);
   assert.ok(all.includes("MONID_API_KEY"), "names the monid reference");
   assert.ok(
     !all.includes("TINYFISH_API_KEY"),
@@ -828,4 +850,37 @@ test("credentials/reference-updated invalidation re-reads credentials", async ()
   onInvalidate();
   await Promise.resolve();
   assert.equal(callCount, 2, "re-read credentials after invalidation");
+});
+
+test("the key's state and its reference are each stated exactly once", () => {
+  // The card used to print both above the field *and* inside it. The paragraph
+  // said "A key is configured." and appended `(TINYFISH_API_KEY)`; the field
+  // below it printed the same sentence as its `stateLabel` tag and the same
+  // reference as its hint — four of them in a card two hundred pixels tall.
+  // `SettingsSecretField` renders `stateLabel` unconditionally, so the tag
+  // alone carries the state, and the hint alone carries the reference.
+  //
+  // Both states are rendered because the duplication was in both: the tag is
+  // `quiet` when unconfigured and `neutral` when configured, but it is never
+  // absent, so neither state had an excuse.
+  //
+  // The control's copy has to be read off its PROPS as well as its children —
+  // `label`, `stateLabel` and `hint` are arguments, not text nodes, and
+  // walking `texts()` alone measured the paragraph against nothing and passed
+  // either way. This test was plant-proved against the paragraph being put
+  // back, and it failed only after the props joined the count.
+  for (const configured of [false, true]) {
+    const said = spoken(render({}, { configured }).tree);
+    const count = (needle: string): number => said.split(needle).length - 1;
+    assert.equal(
+      count("TINYFISH_API_KEY"),
+      1,
+      `configured=${configured}: the reference is printed exactly once`
+    );
+    assert.equal(
+      count("apiKeySet") + count("apiKeyUnset"),
+      1,
+      `configured=${configured}: the state is stated exactly once`
+    );
+  }
 });
