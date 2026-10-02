@@ -181,16 +181,28 @@ function texts(node: unknown, acc: string[] = []): string[] {
  * @param section - the accepted section, as the Host would publish it.
  * @returns the registered component, plus the credential refs it writes to.
  */
-function mount(section: Record<string, unknown> = {}): {
+interface MountOptions {
+  describe?: (refs: string[]) => Promise<{
+    ok: boolean;
+    value: Record<string, { configured?: boolean; writable?: boolean }>;
+  }>;
+}
+
+function mount(
+  section: Record<string, unknown> = {},
+  options?: MountOptions
+): {
   entry: SlotEntry;
   component: (props: Record<string, unknown>) => unknown;
   written: TestWrite[];
   snapshot: unknown;
+  listeners: Record<string, (() => void)[]>;
 } {
   // Typed as the page's own context: a drift between what the test provides
   // and what the page consumes is a type error here, not a silent mismatch.
 
   const written: TestWrite[] = [];
+  const listeners: Record<string, (() => void)[]> = {};
   const registrations: {
     entry: SlotEntry;
     component: (props: Record<string, unknown>) => unknown;
@@ -263,8 +275,12 @@ function mount(section: Record<string, unknown> = {}): {
       register: store,
     },
     remote: {
-      $on: (): (() => void) => () => {},
+      $on: (event: string, listener: () => void): (() => void) => {
+        (listeners[event] ??= []).push(listener);
+        return () => {};
+      },
       credentials: {
+        describe: options?.describe,
         set: async (ref: string, value: string): Promise<boolean> => {
           written.push({ ref, value });
           return true;
@@ -278,7 +294,7 @@ function mount(section: Record<string, unknown> = {}): {
   assert.equal(registrations.length, 1, "one slot entry");
   const [first] = registrations;
   assert.ok(first, "the card was registered");
-  return { ...first, written, snapshot };
+  return { ...first, written, snapshot, listeners };
 }
 
 /** A store snapshot shaped like the one `SettingsFormModel.bind` publishes. */
@@ -728,4 +744,69 @@ test("the monid channel's status names the monid reference", () => {
     !all.includes("TINYFISH_API_KEY"),
     "and not the unselected direct reference"
   );
+});
+
+test("credentials.describe marks configured keys as set in the UI", async () => {
+  const describeCalls: string[][] = [];
+  const { entry } = mount(
+    { channel: "direct" },
+    {
+      describe: async (refs) => {
+        describeCalls.push(refs);
+        return {
+          ok: true,
+          value: {
+            TINYFISH_API_KEY: { configured: true, writable: true },
+            MONID_API_KEY: { configured: false, writable: true },
+          },
+        };
+      },
+    }
+  );
+  await Promise.resolve();
+  assert.equal(describeCalls.length, 1);
+  assert.deepEqual(describeCalls[0], ["TINYFISH_API_KEY", "MONID_API_KEY"]);
+  const injected = entry.inject() as unknown as {
+    hooks: {
+      tinyfishCard: (
+        select: (s: { keys: { direct: { named: boolean } } }) => {
+          keys: { direct: { named: boolean } };
+        }
+      ) => { keys: { direct: { named: boolean } } };
+    };
+  };
+  const cardState = injected.hooks.tinyfishCard(
+    (s: { keys: { direct: { named: boolean } } }) => s
+  );
+  assert.equal(
+    cardState.keys.direct.named,
+    true,
+    "configured direct key is set"
+  );
+});
+
+test("credentials/reference-updated invalidation re-reads credentials", async () => {
+  let callCount = 0;
+  const { listeners } = mount(
+    {},
+    {
+      describe: async () => {
+        callCount += 1;
+        return {
+          ok: true,
+          value: {
+            TINYFISH_API_KEY: { configured: true, writable: true },
+            MONID_API_KEY: { configured: false, writable: true },
+          },
+        };
+      },
+    }
+  );
+  await Promise.resolve();
+  assert.equal(callCount, 1);
+  const onInvalidate = listeners["credentials/reference-updated"]?.[0];
+  assert.ok(onInvalidate, "listener registered");
+  onInvalidate();
+  await Promise.resolve();
+  assert.equal(callCount, 2, "re-read credentials after invalidation");
 });

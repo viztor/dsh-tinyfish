@@ -205,7 +205,7 @@ const isTransient = (error: unknown): error is TransientWebError =>
  */
 const aborted = (signal?: AbortSignal, fallback?: unknown): WebError =>
   new WebError("TinyFish request aborted", WEB_ABORTED, {
-    cause: signal?.aborted ? signal.reason : fallback,
+    cause: signal !== undefined && signal.aborted ? signal.reason : fallback,
   });
 
 /**
@@ -222,53 +222,81 @@ const isAbortError = (error: unknown): boolean =>
 
 /** Throw the stable cancellation error when the caller has already aborted. */
 const throwIfAborted = (signal?: AbortSignal): void => {
-  if (signal?.aborted) throw aborted(signal);
+  if (signal !== undefined && signal.aborted) throw aborted(signal);
 };
 
 /**
  * Race an operation against the caller's cancellation.
  *
- * The settlement handlers stay attached after an abort, so a late rejection
- * from the abandoned operation cannot become an unhandled rejection — the
- * usual failure mode of naively wrapping a promise in a race.
+ * Two properties are load-bearing and both are stated here so they are not
+ * "simplified" away later:
+ *
+ * 1. **Both settlement handlers are attached before anything is awaited.**
+ *    When the abort wins and the abandoned operation rejects afterwards, that
+ *    rejection already has a handler, so it is marked handled instead of
+ *    surfacing as an `unhandledRejection`. This is the usual failure mode of
+ *    abandoning a `Promise.race`'s loser, and a hand-rolled wrapper that stops
+ *    observing on abort has it.
+ * 2. **The listener is removed on every path that settles.** An operation that
+ *    wins leaves its subscription behind otherwise, so a signal reused across a
+ *    batch of searches accumulates one dead listener per attempt.
  */
 export function abortable<T>(
   operation: Promise<T>,
   signal?: AbortSignal
 ): Promise<T> {
-  if (!signal) return operation;
-  throwIfAborted(signal);
+  if (signal === undefined) return operation;
+  const active = signal;
+  if (active.aborted) return Promise.reject(aborted(active));
 
-  // `Promise.race` is sufficient here, and the reason is worth stating: it
-  // attaches its own handler to `operation`, so when the abort wins and the
-  // operation later rejects, that rejection is already marked handled. A
-  // hand-rolled `new Promise` that stopped observing on abort would leak it as
-  // an unhandledRejection — the exact bug the naive version of this had.
-  const cancelled = new Promise<never>((_resolve, reject) => {
-    const onAbort = (): void => {
-      reject(aborted(signal));
+  return new Promise<T>((resolve, reject) => {
+    const drop = (): void => {
+      active.removeEventListener("abort", onAbort);
     };
-    signal.addEventListener("abort", onAbort, { once: true });
+    const onAbort = (): void => {
+      drop();
+      reject(aborted(active));
+    };
+    active.addEventListener("abort", onAbort, { once: true });
+    void (async () => {
+      try {
+        const value = await operation;
+        drop();
+        resolve(value);
+      } catch (error: unknown) {
+        drop();
+        reject(error instanceof Error ? error : new Error(String(error)));
+      }
+    })();
   });
-  return Promise.race([operation, cancelled]);
 }
 
 /** Sleep that rejects promptly when the caller's signal aborts. */
 function sleep(ms: number, signal?: AbortSignal): Promise<void> {
+  if (signal === undefined) {
+    return new Promise((resolve) => {
+      setTimeout(resolve, ms);
+    });
+  }
+  const active = signal;
+  if (active.aborted) return Promise.reject(aborted(active));
+
   return new Promise((resolve, reject) => {
-    if (signal?.aborted) {
-      reject(aborted(signal));
-      return;
-    }
-    const timer = setTimeout(resolve, ms);
-    signal?.addEventListener(
-      "abort",
-      () => {
-        clearTimeout(timer);
-        reject(aborted(signal));
-      },
-      { once: true }
-    );
+    const drop = (): void => {
+      active.removeEventListener("abort", onAbort);
+    };
+    const onAbort = (): void => {
+      clearTimeout(timer);
+      drop();
+      reject(aborted(active));
+    };
+    // The timer clears the listener as well: a sleep that finishes must not
+    // leave a subscription on a signal the caller may keep for a whole batch.
+    const timer = setTimeout(() => {
+      drop();
+      resolve();
+    }, ms);
+    active.addEventListener("abort", onAbort, { once: true });
   });
 }
 
@@ -311,13 +339,17 @@ function readMonidCredentials(path: string): string {
   const keyIn = (body?: string): string | undefined =>
     /^\s+key:\s*(\S+)\s*$/m.exec(body ?? "")?.[1];
 
-  if (active) {
+  // `undefined` is the distinct answer from `""`: no `active_key` line means
+  // "pick the only entry", while one that names nothing we have is "retry on
+  // the first entry that still carries a key". Collapsing them to a string
+  // would make `if (active)` a truthiness test on a value that can be empty.
+  if (active !== undefined) {
     const chosen = keyIn(entries.get(active));
-    if (chosen) return chosen;
+    if (chosen !== undefined) return chosen;
   }
   for (const body of entries.values()) {
     const key = keyIn(body);
-    if (key) return key;
+    if (key !== undefined) return key;
   }
   // A flat file with no entry headers: read the only `key:` there is.
   return keyIn(text) ?? "";
@@ -344,31 +376,62 @@ function readTinyfishConfig(path: string): string {
 }
 
 /**
+ * Read a field out of the environment, trimming only what it holds.
+ *
+ * A present-but-empty entry is the same answer as an absent one: the source
+ * declared the name, but declared no credential. Keeping that distinction out
+ * of `if (fromEnv)` is what makes the rung readable as a lookup rather than as
+ * a truthiness test on a possibly-empty string.
+ */
+const envKey = (
+  env: Record<string, string | undefined>,
+  name: string
+): string | undefined => {
+  const value = env[name]?.trim();
+  return value !== undefined && value !== "" ? value : undefined;
+};
+
+/**
  * Resolve the credential for one channel.
  *
  * Explicit config wins, then the environment, then the channel's own
  * credential store. Stores are re-read per call rather than cached at module
  * load: they are a few hundred bytes, and caching would pin a rotated key
  * inside a long-lived host process.
+ *
+ * The environment rung reads the **configured reference** first and the
+ * channel's conventional names second. That ordering is the documented
+ * contract of `apiKeyEnv` — "credential reference, or env var" — and it is
+ * also the one `hasCredential` implements, so `available()` and the request
+ * that follows it cannot disagree about whether a key exists.
  */
 export function resolveApiKey(
   channel: TinyfishChannel,
   options: ResolveApiKeyOptions = {}
 ): string {
   const explicit = options.apiKey?.trim();
-  if (explicit) return explicit;
+  if (explicit !== undefined && explicit !== "") return explicit;
 
   const env = options.env ?? process.env;
-  if (channel === "monid") {
-    const fromEnv = env.MONID_API_KEY ?? env.MONID_MCP_TOKEN;
-    if (fromEnv?.trim()) return fromEnv.trim();
-    return readMonidCredentials(options.credentialsPath ?? DEFAULT_CREDENTIALS);
+  const ref = channel === "monid" ? options.monidKeyEnv : options.apiKeyEnv;
+  if (ref !== undefined) {
+    const named = envKey(env, ref);
+    if (named !== undefined) return named;
   }
-  const direct = env.TINYFISH_API_KEY;
-  if (direct?.trim()) return direct.trim();
-  return readTinyfishConfig(
-    options.tinyfishConfigPath ?? DEFAULT_TINYFISH_CONFIG
-  );
+
+  // The conventional names stay a rung below the named one rather than being
+  // replaced by it. A default `monidKeyEnv` still falls through to
+  // `MONID_MCP_TOKEN` when only that is exported, which is the whole point of
+  // keeping both rungs for this channel.
+  const conventional =
+    channel === "monid"
+      ? (envKey(env, "MONID_API_KEY") ?? envKey(env, "MONID_MCP_TOKEN"))
+      : envKey(env, "TINYFISH_API_KEY");
+  if (conventional !== undefined) return conventional;
+
+  return channel === "monid"
+    ? readMonidCredentials(options.credentialsPath ?? DEFAULT_CREDENTIALS)
+    : readTinyfishConfig(options.tinyfishConfigPath ?? DEFAULT_TINYFISH_CONFIG);
 }
 
 /**
@@ -383,7 +446,7 @@ export async function resolveApiKeyAsync(
   options: ResolveApiKeyOptions = {}
 ): Promise<string> {
   const explicit = options.apiKey?.trim();
-  if (explicit) return explicit;
+  if (explicit !== undefined && explicit !== "") return explicit;
 
   const { apiKeyEnv, monidKeyEnv, resolveCredential } = options;
   // The ref belongs to the channel that is about to use it. Selecting it here,
@@ -395,19 +458,21 @@ export async function resolveApiKeyAsync(
   // unguarded rejection from the abandoned call would surface as an
   // unhandledRejection rather than as a cancellation.
   throwIfAborted(options.signal);
-  if (ref && resolveCredential) {
+  if (ref !== undefined && resolveCredential !== undefined) {
     try {
       const stored = await abortable(
         Promise.resolve(resolveCredential(ref)),
         options.signal
       );
       const trimmed = stored?.trim();
-      if (trimmed) return trimmed;
+      if (trimmed !== undefined && trimmed !== "") return trimmed;
     } catch (error) {
       // A failing credential service must not fail the search: the CLI stores
       // are a working fallback, and treating that as fatal would take out a
       // provider that was fine a moment ago. A cancelled signal still wins.
-      if (options.signal?.aborted) throw aborted(options.signal, error);
+      if (options.signal !== undefined && options.signal.aborted) {
+        throw aborted(options.signal, error);
+      }
     }
   }
 
@@ -455,12 +520,15 @@ async function call(
   }
 ): Promise<unknown> {
   const { channel, key, init, signal } = options;
+  // Auth headers are owned here, deliberately: `call` is the only thing that
+  // knows which header a channel authenticates with, and letting a caller pass
+  // its own would make an override of `Authorization` possible without a
+  // reviewer noticing.
   const headers: Record<string, string> = {
     "User-Agent": USER_AGENT,
     ...(channel === "monid"
       ? { Authorization: `Bearer ${key}`, "Content-Type": "application/json" }
       : { "X-API-Key": key }),
-    ...(init.headers as Record<string, string> | undefined),
   };
 
   let response: Response;
@@ -473,10 +541,10 @@ async function call(
       ...init,
       headers,
       redirect: "error",
-      ...(signal ? { signal } : {}),
+      ...(signal !== undefined ? { signal } : {}),
     });
   } catch (error) {
-    if (signal?.aborted) throw aborted(signal);
+    if (signal !== undefined && signal.aborted) throw aborted(signal);
     if (isAbortError(error)) throw aborted(signal, error);
     throw new WebError(
       `TinyFish request to ${url} failed: ${String(error)}`,
@@ -505,6 +573,19 @@ async function call(
   if (response.status === 429) {
     throw new TransientWebError(
       "TinyFish rate limit reached (HTTP 429).",
+      WEB_PROVIDER_ERROR
+    );
+  }
+  // An upstream 5xx is the other transient shape, and it has to be labelled
+  // here rather than left for the retry loop to recognise: `TransientWebError`
+  // is the *only* thing `isTransient` accepts, so a plain 5xx used to reach
+  // `withRetry` and be rethrown on the first attempt. That contradicted this
+  // class's own contract — "transient covers rate limits and upstream 5xx" —
+  // and cost the retry its whole purpose on the one status that means "try
+  // again". Both surfaces are $0, so a blind retry spends nothing.
+  if (response.status >= 500) {
+    throw new TransientWebError(
+      `TinyFish returned HTTP ${response.status} for ${url}`,
       WEB_PROVIDER_ERROR
     );
   }
@@ -636,9 +717,18 @@ async function fetchMonid(options: {
   base: string;
   body: Record<string, unknown>;
   signal?: AbortSignal;
+  pollMs?: number;
+  maxPolls?: number;
 }): Promise<TinyfishFetchPayload> {
-  const { key, base, body, signal } = options;
-  const envelope = (await call(`${base}/v1/run`, {
+  const {
+    key,
+    base,
+    body,
+    signal,
+    pollMs = DEFAULT_POLL_MS,
+    maxPolls = DEFAULT_MAX_POLLS,
+  } = options;
+  let envelope = (await call(`${base}/v1/run`, {
     channel: "monid",
     key,
     signal,
@@ -651,6 +741,25 @@ async function fetchMonid(options: {
       }),
     },
   })) as MonidEnvelope;
+
+  let polls = 0;
+  while (envelope.status === "RUNNING" && polls < maxPolls) {
+    throwIfAborted(signal);
+    polls += 1;
+    await sleep(pollMs, signal);
+    envelope = (await call(`${base}/v1/run`, {
+      channel: "monid",
+      key,
+      signal,
+      init: { method: "POST", body: JSON.stringify({ runId: envelope.runId }) },
+    })) as MonidEnvelope;
+  }
+  if (envelope.status === "RUNNING") {
+    throw new WebError(
+      `TinyFish run ${envelope.runId ?? "?"} did not settle within ${polls} polls`,
+      WEB_PROVIDER_ERROR
+    );
+  }
   assertUsableRun(envelope);
   return envelope.output ?? {};
 }
@@ -740,6 +849,9 @@ export interface TinyfishFetchOptions extends ResolveApiKeyOptions {
   /** Base backoff between attempts, in ms; doubles per attempt. Default 1200. */
   delayMs?: number;
   onRetry?: (attempt: number, total: number) => void;
+  /** Poll cadence for an async Monid run. */
+  pollMs?: number;
+  maxPolls?: number;
 }
 
 /**
@@ -842,6 +954,8 @@ export async function tinyfishFetch(
     attempts = 3,
     delayMs,
     onRetry,
+    pollMs = DEFAULT_POLL_MS,
+    maxPolls = DEFAULT_MAX_POLLS,
   } = options;
 
   const key = await resolveApiKeyAsync(channel, {
@@ -861,7 +975,7 @@ export async function tinyfishFetch(
   return withRetry<TinyfishFetchPayload>(
     () =>
       channel === "monid"
-        ? fetchMonid({ key, base: monidBase, body, signal })
+        ? fetchMonid({ key, base: monidBase, body, signal, pollMs, maxPolls })
         : (call(fetchBase, {
             channel: "direct",
             key,

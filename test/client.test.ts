@@ -20,6 +20,7 @@ import {
   DEFAULT_SEARCH_BASE,
   WEB_PROVIDER_CREDENTIAL_MISSING,
   WebError,
+  abortable,
   resolveApiKey,
   resolveApiKeyAsync,
   tinyfishFetch,
@@ -213,6 +214,28 @@ test("resolveApiKey: a missing or malformed store yields empty, not a throw", ()
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
+});
+
+test("a ref that names an environment variable is read from that variable", () => {
+  assert.equal(
+    resolveApiKey("direct", {
+      apiKeyEnv: "MY_TINYFISH",
+      env: { MY_TINYFISH: "from-named-var" },
+      tinyfishConfigPath: "/nope/absent",
+    }),
+    "from-named-var"
+  );
+});
+
+test("a named ref does not hide the channel's own conventional names", () => {
+  assert.equal(
+    resolveApiKey("monid", {
+      monidKeyEnv: "MONID_API_KEY",
+      env: { MONID_MCP_TOKEN: "mcp" },
+      credentialsPath: "/nope/absent",
+    }),
+    "mcp"
+  );
 });
 
 /* ------------------------------------------------- the credentials service */
@@ -455,6 +478,82 @@ test("a RUNNING envelope is polled until it settles", async () => {
   assert.equal(calls.length, 3);
   assert.deepEqual(JSON.parse(calls[1].init.body as string), { runId: "r1" });
   assert.equal(result.results?.length, 1);
+});
+
+test("a RUNNING fetch run is polled until it settles, like search", async () => {
+  const { calls, result } = await withStubbedFetch(
+    [
+      { respond: () => ({ body: { runId: "r1", status: "RUNNING" } }) },
+      { respond: () => ({ body: { runId: "r1", status: "RUNNING" } }) },
+      { respond: () => ({ body: fetchEnvelope([{ url: "https://x" }]) }) },
+    ],
+    async () =>
+      tinyfishFetch({
+        channel: "monid",
+        apiKey: "k",
+        urls: ["https://x"],
+        pollMs: 1,
+        delayMs: 1,
+      })
+  );
+  assert.equal(calls.length, 3, "one call per poll, then the one that settles");
+  assert.deepEqual(JSON.parse(calls[1].init.body as string), { runId: "r1" });
+  assert.equal(result.results?.length, 1);
+});
+
+test("a settled operation leaves no listener on the caller's signal", async () => {
+  const controller = new AbortController();
+  const signal = controller.signal;
+  const counters = { added: 0, removed: 0 };
+  const add = signal.addEventListener.bind(signal);
+  const remove = signal.removeEventListener.bind(signal);
+  Object.defineProperty(signal, "addEventListener", {
+    configurable: true,
+    value: (
+      type: string,
+      listener: EventListenerOrEventListenerObject,
+      options?: boolean | AddEventListenerOptions
+    ): void => {
+      counters.added += 1;
+      add(type, listener, options);
+    },
+  });
+  Object.defineProperty(signal, "removeEventListener", {
+    configurable: true,
+    value: (
+      type: string,
+      listener: EventListenerOrEventListenerObject,
+      options?: boolean | EventListenerOptions
+    ): void => {
+      counters.removed += 1;
+      remove(type, listener, options);
+    },
+  });
+
+  await abortable(Promise.resolve("ok"), signal);
+
+  await withStubbedFetch(
+    [
+      { respond: () => ({ status: 500, text: "boom" }) },
+      { respond: () => ({ body: searchEnvelope([hit()]) }) },
+    ],
+    async () =>
+      tinyfishSearch({
+        channel: "monid",
+        apiKey: "k",
+        query: "q",
+        attempts: 2,
+        delayMs: 1,
+        signal,
+      })
+  );
+
+  assert.ok(counters.added > 0, "both paths subscribe while a signal is live");
+  assert.equal(
+    counters.added,
+    counters.removed,
+    "and both take the subscription back off"
+  );
 });
 
 /* ------------------------------------------------------------- retry policy */
