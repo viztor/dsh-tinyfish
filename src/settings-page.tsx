@@ -60,7 +60,7 @@ export const inject = [
 
 /** English copy. */
 const en = {
-  title: "TinyFish",
+  title: "Tinyfish",
   description: "TinyFish-backed web search and fetch, at $0.",
   channel: "Channel",
   channelHint:
@@ -103,7 +103,7 @@ const en = {
 
 /** Simplified Chinese copy, for the profile locale this bundle was written in. */
 const zh = {
-  title: "TinyFish",
+  title: "Tinyfish",
   description: "基于 TinyFish 的网页搜索与抓取，零成本。",
   channel: "通道",
   channelHint: "direct 使用 TinyFish 自己的密钥；monid 通过 Monid 密钥转发。",
@@ -594,59 +594,70 @@ function TinyfishCard(props: CardProps) {
         <p className="dsh-tf-hint">{t("provideHint")}</p>
       </div>
       {!searchOn && !fetchOn && <p className="dsh-tf-hint">{t("bothOff")}</p>}
-      <div className="dsh-tf-field">
-        <div className="dsh-tf-head">
-          <label
-            className="dsh-tf-label"
-            htmlFor={`plugin-config-tinyfish-${FIELD.channel}`}
-          >
-            {t("channel")}
-          </label>
-          {resetControl(
-            FIELD.channel,
-            state.fields[FIELD.channel]?.overridden ?? false
+      {/* Shared config: one channel, both keys, and the tuning fields serve
+          whichever kind is on, so the whole block hides only when nothing
+          answers. The provide row above stays visible — it is the way back
+          on — as do save/discard, which the form frame owns. */}
+      {(searchOn || fetchOn) && (
+        <>
+          <div className="dsh-tf-field">
+            <div className="dsh-tf-head">
+              <label
+                className="dsh-tf-label"
+                htmlFor={`plugin-config-tinyfish-${FIELD.channel}`}
+              >
+                {t("channel")}
+              </label>
+              {resetControl(
+                FIELD.channel,
+                state.fields[FIELD.channel]?.overridden ?? false
+              )}
+            </div>
+            <SegmentedControl
+              id={`plugin-config-tinyfish-${FIELD.channel}`}
+              label={t("channel")}
+              value={channel}
+              options={[
+                { value: "direct", label: t("channelDirect") },
+                { value: "monid", label: t("channelMonid") },
+              ]}
+              onChange={(next) => {
+                props.edit(FIELD.channel, next);
+              }}
+              disabled={disabled}
+            />
+            <p className="dsh-tf-hint">{t("channelHint")}</p>
+          </div>
+          {/* No summary line above either field. `SettingsSecretField` renders
+              `stateLabel` unconditionally — configured or not, the tag on the
+              label row IS the state — and `hint` already carries the reference,
+              so a paragraph of our own printed each of them twice in a card this
+              size. And there is nothing to show *in* the field instead: this
+              control is write-only by contract (the value never rides a
+              response, and it starts blank), which is also why there is no
+              default value to prefill — the key is not in the page to show. */}
+          {keyField("direct")}
+          {keyField("monid")}
+          {/* `purpose` rides the fetch request, not search, so it follows the
+              fetch switch: search-off + fetch-on still needs it, and
+              fetch-off never does. */}
+          {fetchOn && (
+            <SettingsValueField
+              {...field(FIELD.purpose)}
+              label={t("purpose")}
+              hint={t("purposeHint")}
+              invalidLabel={t("invalidText")}
+            />
           )}
-        </div>
-        <SegmentedControl
-          id={`plugin-config-tinyfish-${FIELD.channel}`}
-          label={t("channel")}
-          value={channel}
-          options={[
-            { value: "direct", label: t("channelDirect") },
-            { value: "monid", label: t("channelMonid") },
-          ]}
-          onChange={(next) => {
-            props.edit(FIELD.channel, next);
-          }}
-          disabled={disabled}
-        />
-        <p className="dsh-tf-hint">{t("channelHint")}</p>
-      </div>
-      {/* No summary line above either field. `SettingsSecretField` renders
-          `stateLabel` unconditionally — configured or not, the tag on the
-          label row IS the state — and `hint` already carries the reference,
-          so a paragraph of our own printed each of them twice in a card this
-          size. And there is nothing to show *in* the field instead: this
-          control is write-only by contract (the value never rides a
-          response, and it starts blank), which is also why there is no
-          default value to prefill — the key is not in the page to show. */}
-      {keyField("direct")}
-      {keyField("monid")}
-      {searchOn && (
-        <SettingsValueField
-          {...field(FIELD.purpose)}
-          label={t("purpose")}
-          hint={t("purposeHint")}
-          invalidLabel={t("invalidText")}
-        />
+          <SettingsValueField
+            {...field(FIELD.attempts)}
+            label={t("attempts")}
+            hint={t("attemptsHint")}
+            invalidLabel={t("invalidNumber")}
+            numeric
+          />
+        </>
       )}
-      <SettingsValueField
-        {...field(FIELD.attempts)}
-        label={t("attempts")}
-        hint={t("attemptsHint")}
-        invalidLabel={t("invalidNumber")}
-        numeric
-      />
     </SettingsForm>
   );
 }

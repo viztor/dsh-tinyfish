@@ -586,35 +586,80 @@ test("the provide hint does not promise a fallthrough", () => {
   );
 });
 
-test("purpose is a search-only field and hides when search is off", () => {
+test("purpose is a fetch-only field and hides when fetch is off", () => {
+  // `purpose` rides the fetch request, not search (`tinyfishFetch` takes it;
+  // `tinyfishSearch` does not), so it follows the fetch switch. The old gate
+  // read `searchOn`, which hid the field in exactly the state that needed it
+  // (search off, fetch on) and showed it where nothing consumed it.
   const idsOf = (tree: unknown): string[] =>
     findAll(tree, "SettingsValueField").map((field) => fld(field).id);
   assert.ok(
-    idsOf(render({ search: "true" }).tree).includes(
-      "plugin-config-tinyfish-purpose"
-    )
+    idsOf(render({}).tree).includes("plugin-config-tinyfish-purpose"),
+    "both on: purpose shows"
   );
   assert.ok(
-    !idsOf(render({ search: "false" }).tree).includes(
+    idsOf(render({ search: "false" }).tree).includes(
       "plugin-config-tinyfish-purpose"
-    )
+    ),
+    "search off, fetch on: purpose still shows"
+  );
+  assert.ok(
+    !idsOf(render({ fetch: "false" }).tree).includes(
+      "plugin-config-tinyfish-purpose"
+    ),
+    "fetch off: purpose hides"
+  );
+  assert.ok(
+    !idsOf(render({ search: "false", fetch: "false" }).tree).includes(
+      "plugin-config-tinyfish-purpose"
+    ),
+    "both off: purpose hides with the rest of the shared config"
   );
 });
 
-test("attempts stay visible regardless of the switches", () => {
+test("the shared config hides only when both providers are off", () => {
+  // One channel, both keys, and the tuning fields serve whichever kind is
+  // on, so the block hides only when nothing answers. The provide row stays
+  // visible throughout — it is the way back on.
+  const configOf = (tree: unknown): { channel: number; keys: number } => ({
+    channel: findAll(tree, "SegmentedControl").length,
+    keys: findAll(tree, "SettingsSecretField").length,
+  });
+  assert.deepEqual(
+    configOf(render({}).tree),
+    { channel: 1, keys: 2 },
+    "both on: channel and both keys show"
+  );
+  assert.deepEqual(
+    configOf(render({ search: "false" }).tree),
+    { channel: 1, keys: 2 },
+    "search off, fetch on: shared config stays"
+  );
+  assert.deepEqual(
+    configOf(render({ fetch: "false" }).tree),
+    { channel: 1, keys: 2 },
+    "fetch off, search on: shared config stays"
+  );
+  assert.deepEqual(
+    configOf(render({ search: "false", fetch: "false" }).tree),
+    { channel: 0, keys: 0 },
+    "both off: channel and keys hide"
+  );
+  assert.equal(
+    findAll(render({ search: "false", fetch: "false" }).tree, "Switch").length,
+    2,
+    "both off: the two switches stay visible"
+  );
+});
+
+test("attempts show whenever either provider is on", () => {
   const idsOf = (tree: unknown): string[] =>
     findAll(tree, "SettingsValueField").map((field) => fld(field).id);
-  // The title says "regardless", so every switch combination is rendered, and
-  // the count is exact: `includes` was satisfied by a single render and blind
-  // to a duplicate, while zero — the control hiding the way purpose hides — is
-  // the regression this test exists to name.
+  // Exact counts: `includes` was satisfied by a single render and blind to a
+  // duplicate, while zero — the control hiding — is the regression this test
+  // exists to name.
   const attempts = "plugin-config-tinyfish-attempts";
-  for (const section of [
-    {},
-    { search: "false" },
-    { fetch: "false" },
-    { search: "false", fetch: "false" },
-  ]) {
+  for (const section of [{}, { search: "false" }, { fetch: "false" }]) {
     const shown = idsOf(render(section).tree).filter(
       (id) => id === attempts
     ).length;
@@ -624,6 +669,13 @@ test("attempts stay visible regardless of the switches", () => {
       `${JSON.stringify(section)}: attempts renders exactly once`
     );
   }
+  assert.equal(
+    idsOf(render({ search: "false", fetch: "false" }).tree).filter(
+      (id) => id === attempts
+    ).length,
+    0,
+    `{"search":"false","fetch":"false"}: attempts hide with the shared config`
+  );
 });
 
 test("the both-off warning appears only when both are off", () => {

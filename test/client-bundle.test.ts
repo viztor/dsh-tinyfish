@@ -765,15 +765,51 @@ test("search and fetch render as switches, not text fields", () => {
   assert.ok(!treeText.includes("boolHint"), "no boolean hint text remains");
 });
 
-test("purpose hides when search is off", () => {
-  const on = renderCard({ search: true });
-  const off = renderCard({ search: false });
+test("purpose hides when fetch is off", () => {
+  // `purpose` rides the fetch request, not search, so it follows the fetch
+  // switch. The old test gated it on search, which hid the field in exactly
+  // the state that needed it (search off, fetch on).
   const hasPurpose = (tree: unknown): boolean =>
     findByType(tree, "SettingsValueField").some(
       (f) => f.props.id === "plugin-config-tinyfish-purpose"
     );
-  assert.ok(hasPurpose(on), "purpose shows when search is on");
-  assert.ok(!hasPurpose(off), "purpose hides when search is off");
+  assert.ok(hasPurpose(renderCard({})), "purpose shows by default");
+  assert.ok(
+    hasPurpose(renderCard({ search: false })),
+    "purpose still shows when only search is off"
+  );
+  assert.ok(
+    !hasPurpose(renderCard({ fetch: false })),
+    "purpose hides when fetch is off"
+  );
+  assert.ok(
+    !hasPurpose(renderCard({ search: false, fetch: false })),
+    "purpose hides with the shared config when both are off"
+  );
+});
+
+test("the shared config hides only when both providers are off", () => {
+  const count = (tree: unknown, type: string): number =>
+    findByType(tree, type).length;
+  assert.equal(count(renderCard({}), "SegmentedControl"), 1);
+  assert.equal(count(renderCard({}), "SettingsSecretField"), 2);
+  assert.equal(count(renderCard({ search: false }), "SegmentedControl"), 1);
+  assert.equal(count(renderCard({ fetch: false }), "SegmentedControl"), 1);
+  assert.equal(
+    count(renderCard({ search: false, fetch: false }), "SegmentedControl"),
+    0,
+    "channel hides when both are off"
+  );
+  assert.equal(
+    count(renderCard({ search: false, fetch: false }), "SettingsSecretField"),
+    0,
+    "keys hide when both are off"
+  );
+  assert.equal(
+    count(renderCard({ search: false, fetch: false }), "Switch"),
+    2,
+    "the switches stay visible as the way back on"
+  );
 });
 
 test("a warning shows only when both providers are off", () => {
