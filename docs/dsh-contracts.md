@@ -2,7 +2,7 @@
 
 Every claim here was read out of the installed harness, not inferred from convention. Where a fact was checked by running something, the command is recorded. Read this before changing the manifest, the config row, or the provider registration — each section is a contract that a change can break.
 
-Installed runtime for all of it: **DSH 0.2.0-rc.1**, `@deepseek-ai/cordis` 4.0.4. The packages live in the pnpm store; `scripts/check.ts` resolves them the same way the plugin does.
+Installed runtime for all of it: **DSH 0.2.0-rc.2**, `@deepseek-ai/cordis` 4.0.4. The packages live in the pnpm store; `scripts/check.ts` resolves them the same way the plugin does. The five `@deepseek-ai/dsh-*` devDependencies are pinned to that same version, one exact pin each: the surface checks in `scripts/check.ts` read their types, so a devDep left behind makes them assert the previous release's surfaces and pass.
 
 ## The manifest is one object, two independent readers
 

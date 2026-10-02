@@ -199,7 +199,7 @@ The toolchain is [Vite+](https://viteplus.dev): `vp pack` builds with tsdown, `v
 pnpm install
 pnpm test               # 151 hermetic tests — no network, no credential
 pnpm run check          # format + lint + types
-pnpm run release:gate   # build, then the full gate incl. 17 package checks
+pnpm run release:gate   # build, then the full gate incl. 18 package checks
 pnpm run test:live      # the real APIs, still $0, needs credentials
 ```
 

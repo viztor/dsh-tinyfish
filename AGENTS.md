@@ -99,7 +99,9 @@ The loader checks `@deepseek-ai/dsh` and `@deepseek-ai/dsh-*` peers against the 
 
 That choice gives up _automatic_ detection of a genuine break, so detection is bought back explicitly by `scripts/check.ts`: the harness-surface check asserts every surface `src/` uses still exists, the peer-range check rejects both wrong shapes, and the install check packs the tarball and loads it under plain npm. Each is proved by planting the regression it guards.
 
-When DSH moves: `pnpm add -D` the new `@deepseek-ai/dsh-*` versions, run `release:gate`, and read what the surface check says. If it passes, nothing in `src/` needs to change.
+There is a fourth, because the surface check reads **those devDependencies' types** and a devDep one release behind makes it assert last release's surfaces — and pass. It happened: `dsh-web`, `dsh-credentials` and `dsh-launch-environment` sat at `0.2.0-rc.1` while the host resolved `0.2.0-rc.2`, and every gate stayed green. The check now requires all five `@deepseek-ai/dsh-*` devDependencies to carry one identical **exact** pin, so a partial bump or a stray caret fails before the surface check can quietly answer a stale question.
+
+When DSH moves: `pnpm add -D` the new `@deepseek-ai/dsh-*` versions **all together** — the same-version check names whichever one you left behind — run `release:gate`, and read what the surface check says. The peer range stays `^0.2.0-rc.1`: it is a floor covering everything from here up, and `^0.2.0-rc.1` does accept `0.2.0-rc.2`. If it passes, nothing in `src/` needs to change.
 
 ## The settings UI, and why there isn't one yet
 

@@ -191,6 +191,47 @@ if (
   ok(`repository is ${repository}`);
 }
 
+/**
+ * The harness publishes its `@deepseek-ai/dsh-*` packages as one set at one
+ * version, so this repo has to type-check against the set the host actually
+ * resolves. Section 4 below asserts every surface `src/` uses against
+ * **these devDependencies' types**, which means a devDep left one release
+ * behind makes that check assert last release's surfaces — and pass. That is
+ * not hypothetical: `dsh-web`, `dsh-credentials` and `dsh-launch-environment`
+ * sat at `0.2.0-rc.1` while the host was resolving `0.2.0-rc.2`, and every
+ * gate was green throughout.
+ *
+ * One exact pin, not one per package and not a range: the harness ships them
+ * together, and a caret can move on the next install to surfaces the host has
+ * not shipped yet.
+ */
+const harnessDevDeps = Object.entries(
+  (pkg.devDependencies as Record<string, string> | undefined) ?? {}
+)
+  .filter(([name]) => name.startsWith("@deepseek-ai/dsh-"))
+  .toSorted(([a], [b]) => a.localeCompare(b));
+const harnessPins = new Set(harnessDevDeps.map(([, spec]) => spec));
+if (harnessDevDeps.length === 0) {
+  fail(
+    "no @deepseek-ai/dsh-* devDependencies to check the harness surfaces against"
+  );
+} else if (harnessPins.size > 1) {
+  fail(
+    `the harness devDependencies disagree: ${[...harnessPins].toSorted().join(", ")}; the harness ships them as one version`
+  );
+} else {
+  const [spec = ""] = [...harnessPins];
+  if (/^[~^]/.test(spec) || spec === "*" || spec.includes(" - ")) {
+    fail(
+      `the @deepseek-ai/dsh-* devDependencies are pinned to ${spec}; one exact version or the surfaces can move under the lockfile`
+    );
+  } else {
+    ok(
+      `all ${harnessDevDeps.length} @deepseek-ai/dsh-* devDependencies pin ${spec}, the version the host resolves`
+    );
+  }
+}
+
 /* --------------------------------------- 4. the harness surfaces are still there */
 
 /**
