@@ -46,13 +46,14 @@ jobs:
       - name: Build
         run: pnpm run build
 
-      # `vp check` type-checks through Oxlint, and Oxlint does not read
-      # `noUncheckedIndexedAccess` out of tsconfig — so `array[i]` in a test
-      # types as `T` here and `T | undefined` to `tsc`, and every other gate
-      # would stay green on the difference. This is the step that closes it:
-      # `tsconfig.typecheck.json` runs the real compiler over `src/`, `test/`
-      # and `scripts/` with the full option set. `src/settings-page.tsx` used
-      # to be outside `tsconfig.json`'s `*.ts` include for the same reason.
+      # The real compiler, over `src/`, `test/` and `scripts/`. `vp check`
+      # below type-checks too, but through Oxlint's experimental type checker,
+      # which discovers the tsconfig *per file* and only applies it to files
+      # that config's `include` covers — leave `test/` out and both tools look
+      # at the same sources and disagree, with neither one obviously wrong.
+      # `tsconfig.json` covers all three, so they agree now; this step still
+      # speaks for the compiler, and it is the one that fails on a decision
+      # Oxlint has not learned to make.
       - name: Type-check (src, test, scripts)
         run: pnpm run typecheck
 

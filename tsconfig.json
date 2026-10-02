@@ -6,7 +6,15 @@
     "moduleResolution": "NodeNext",
 
     "outDir": "lib",
-    "rootDir": "src",
+    // No `rootDir`, deliberately. Oxlint's type-aware mode discovers the
+    // tsconfig *per file* and only applies a config whose `include` covers
+    // that file — anything outside it falls back to a default program with a
+    // different `lib` and without `noUncheckedIndexedAccess`. Keeping `test/`
+    // and `scripts/` out of `include` therefore made the two type checkers
+    // disagree about the same sources: `tsc` accepted `.toSorted()` and
+    // flagged `array[i]` as possibly undefined, `vp lint` did the opposite,
+    // and neither could be used to tell which answer was right. `include`
+    // below now covers everything, so there is one program and one answer.
     "declaration": true,
 
     // Source imports carry the real `.ts` extension so Node's type stripping
@@ -39,5 +47,11 @@
 
     "types": ["node"]
   },
-  "include": ["src/**/*.ts", "src/**/*.tsx"]
+  "include": [
+    "src/**/*.ts",
+    "src/**/*.tsx",
+    "test/**/*.ts",
+    "test/**/*.tsx",
+    "scripts/**/*.ts"
+  ]
 }

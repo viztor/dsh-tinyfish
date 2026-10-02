@@ -157,8 +157,3 @@ export function hit(overrides: Partial<StubHit> = {}): StubHit {
     ...overrides,
   };
 }
-
-/** An abort signal that has already fired. */
-export function abortedSignal(reason = "caller cancelled"): AbortSignal {
-  return AbortSignal.abort(reason);
-}

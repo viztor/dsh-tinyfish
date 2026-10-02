@@ -22,10 +22,10 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm run build
-      # `tsc` over `src/`, `test/` and `scripts/`. `vp check` below type-checks
-      # too, but through Oxlint, which does not read `noUncheckedIndexedAccess`
-      # from tsconfig — so this is the only step that sees `array[i]` as
-      # `T | undefined` the way the compiler does.
+      # The real compiler over `src/`, `test/` and `scripts/`. `vp check`
+      # below type-checks too, through Oxlint's type checker, which only
+      # applies the tsconfig to files its `include` covers — `tsconfig.json`
+      # covers all three, so the two agree, and this is the step that says so.
       - run: pnpm run typecheck
       - run: pnpm exec vp check
       - run: pnpm exec vp test --coverage

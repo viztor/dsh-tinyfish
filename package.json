@@ -61,7 +61,7 @@
     "release:gate": "pnpm run build && pnpm run ci",
     "test": "vp test",
     "test:live": "DSH_TINYFISH_LIVE=1 vp test --config vite.live.config.ts --run",
-    "typecheck": "tsc --noEmit -p tsconfig.typecheck.json"
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@deepseek-ai/schemastery": "3.18.4"

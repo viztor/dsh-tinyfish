@@ -25,11 +25,6 @@ export function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-/** A string that is not `undefined`, `null`, or blank after trimming. */
-export function isPresent(value: unknown): value is string {
-  return typeof value === "string" && value.trim() !== "";
-}
-
 /**
  * A boxed schema node: the `default(...).volatile()` field shape that hands
  * its value back through `.get()`.

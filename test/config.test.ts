@@ -132,13 +132,11 @@ test("every schema field has a stated default and a stated junk behaviour", () =
   // Driven off the schema itself: `Config({})` is a validated section, and a
   // validated section carries a node for every key the schema declares.
   const validated = Config({});
-  // oxlint-disable-next-line unicorn/no-array-sort -- `.toSorted()` is not in the lib this file is checked against (TS2550); `Object.keys` returns a fresh array, so in-place sort mutates nothing shared.
-  const declared = Object.keys(validated).sort();
+  const declared = Object.keys(validated).toSorted();
 
   assert.deepEqual(
     declared.filter((k) => k !== "apiKey" && k !== "filters"),
-    // oxlint-disable-next-line unicorn/no-array-sort -- as above: `.map()` returns a fresh array, and `.toSorted()` is unavailable here.
-    FIELDS.map((f) => f.name).sort(),
+    FIELDS.map((f) => f.name).toSorted(),
     "the table covers the schema exactly — a new field must be given a default here"
   );
 

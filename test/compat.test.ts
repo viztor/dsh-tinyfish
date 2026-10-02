@@ -75,12 +75,12 @@ function registry(): {
     // disposer: `ctx.effect(function* () { store.set(...); yield () => ... })`.
     for (const yielded of body()) disposers.push(yielded);
     effects.push(() => {
-      // oxlint-disable-next-line unicorn/no-array-reverse -- the type env lacks toReversed; spread-then-reverse is the same copy
-      for (const dispose of [...disposers].reverse()) dispose();
+      for (const dispose of disposers.toReversed()) dispose();
     });
     return () => {
-      // oxlint-disable-next-line unicorn/no-array-reverse -- splice already copies; reverse runs on the copy
-      for (const dispose of disposers.splice(0).reverse()) dispose();
+      // `splice(0)` empties the list as it returns it, which is what keeps a
+      // second call a no-op; `toReversed` reads that returned copy.
+      for (const dispose of disposers.splice(0).toReversed()) dispose();
     };
   };
   const register = (
@@ -145,14 +145,12 @@ function bootWithHarnessProviders() {
 test("it registers alongside the providers DSH ships", () => {
   const { search, fetch } = bootWithHarnessProviders();
   assert.deepEqual(
-    // oxlint-disable-next-line unicorn/no-array-sort -- the type env lacks toSorted; sort runs on a spread copy
-    [...search.keys()].sort((a, b) => a.localeCompare(b)),
+    [...search.keys()].toSorted((a, b) => a.localeCompare(b)),
     ["deepseek-official", "tinyfish"],
     "both search providers coexist under distinct ids"
   );
   assert.deepEqual(
-    // oxlint-disable-next-line unicorn/no-array-sort -- the type env lacks toSorted; sort runs on a spread copy
-    [...fetch.keys()].sort((a, b) => a.localeCompare(b)),
+    [...fetch.keys()].toSorted((a, b) => a.localeCompare(b)),
     ["http", "tinyfish"],
     "both fetch providers coexist under distinct ids"
   );
