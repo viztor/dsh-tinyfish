@@ -27,9 +27,9 @@ jobs:
       # - `include-component-in-tag: false` keeps tags as `v0.9.0`. The default
       #   prefixes the component (`dsh-tinyfish-v0.9.0`), which matches no
       #   `v*.*.*` filter and so would never fire the publish workflow.
-      # - `skip-changelog` leaves CHANGELOG.md alone. It is written as a
-      #   versionless description of what the package does; release-please would
-      #   otherwise prepend version headings to it.
+      # - The changelog is release-please's to write: it prepends a versioned
+      #   section per release. The unversioned list already in CHANGELOG.md
+      #   summarises the state at 0.8.0 and stays below those sections.
       #
       # `manifest-file` is what puts the action in manifest mode, which is the
       # mode `config-file` requires. It carries one line per package path and is
