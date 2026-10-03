@@ -5,11 +5,11 @@ headings: this describes what the package does, not which release did it.
 
 ## Features
 
-- **Additive bundle patch** — the bundle inserts only its own row and no
-  longer sets the web seam's `searchProvider` / `fetchProvider`. Choosing a
-  provider for the host is the profile's decision, so point those fields at
-  `tinyfish` in your own patch layer to put it on the web path; reverting is
-  the same two words in reverse.
+- **Self-selecting bundle patch** — the patch inserts the plugin's own row
+  and points the web seam at it by row `id`, with no `name` assertion, so a
+  fresh install is on the web path without anyone editing a profile. Point
+  `searchProvider` / `fetchProvider` elsewhere in your own patch layer to
+  override it; the plugin stays mounted and idle.
 - **Plugin name** — the plugins interface shows **Tinyfish**, in both
   locale dictionaries and on the settings card itself.
 - **Collapsible settings card** — channel, both credential fields, purpose
