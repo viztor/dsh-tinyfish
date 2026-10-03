@@ -1,0 +1,36 @@
+name: dependency-review
+
+on:
+  pull_request:
+    paths:
+      - "package.json"
+      - "pnpm-lock.yaml"
+      # Action bumps carry the same invisible blast radius as package bumps —
+      # a compromised action runs with the workflow token — so they are
+      # reviewed here too rather than merged unreviewed.
+      - ".github/workflows/**"
+      - ".github/dependabot.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    # A dependency change is the one change whose blast radius is invisible in
+    # the diff: a patch bump can pull in a compromised transitive package, and
+    # nothing in the source diff says so. This comments on the PR when a
+    # dependency introduces a known vulnerability or an incompatible license,
+    # before it merges rather than after it ships.
+    #
+    # This gates. It was `continue-on-error` while the repository had no
+    # Dependency graph — the action cannot run without one and failed with
+    # "not supported on this repository" on every PR, which is noise about a
+    # setting rather than about the code. The graph is enabled now, so a
+    # finding here fails the pull request.
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/dependency-review-action@v5
+        with:
+          fail-on-severity: moderate
+          deny-licenses: GPL-2.0, GPL-3.0, AGPL-1.0, AGPL-3.0

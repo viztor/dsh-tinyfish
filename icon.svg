@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="TinyFish logo">
+  <title>TinyFish</title>
+  <defs>
+    <linearGradient id="tf-fish" x1="12" y1="20" x2="52" y2="44" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#4D6BFE"/>
+      <stop offset="1" stop-color="#14B8A6"/>
+    </linearGradient>
+  </defs>
+  <!--
+    The DeepSeek Harness icon family: a softly tinted rounded square carrying
+    one vibrant glyph. Pale blue container, DeepSeek-blue-to-teal fish, white
+    knockout eye. Fill only, so it stays crisp at any size.
+  -->
+  <rect x="2" y="2" width="60" height="60" rx="15" fill="#E8F1FE"/>
+  <ellipse cx="27" cy="33" rx="15" ry="11" fill="url(#tf-fish)"/>
+  <polygon points="39,33 53,23 53,43" fill="url(#tf-fish)"/>
+  <circle cx="21" cy="30.5" r="2.4" fill="#ffffff"/>
+</svg>

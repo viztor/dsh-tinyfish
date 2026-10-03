@@ -1,0 +1,111 @@
+{
+  "name": "dsh-tinyfish",
+  "version": "0.6.5",
+  "description": "TinyFish-backed search and fetch providers for the DeepSeek Harness web capability seam (ctx.web) — $0 SERP and page extraction, direct or via Monid.",
+  "keywords": [
+    "cordis",
+    "deepseek-harness",
+    "dsh",
+    "dsh-bundle",
+    "dsh-plugin",
+    "monid",
+    "scraping",
+    "search",
+    "tinyfish",
+    "web-fetch",
+    "web-search"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/viztor/dsh-tinyfish.git"
+  },
+  "files": [
+    "lib/index.mjs",
+    "lib/index.d.mts",
+    "lib/client.js",
+    "locale/*.json",
+    "cordis.patch.yml",
+    "README.md",
+    "LICENSE",
+    "icon.svg"
+  ],
+  "type": "module",
+  "main": "lib/index.mjs",
+  "types": "lib/index.d.mts",
+  "exports": {
+    ".": {
+      "types": "./lib/index.d.mts",
+      "import": "./lib/index.mjs",
+      "default": "./lib/index.mjs"
+    },
+    "./src/*": "./src/*",
+    "./package.json": "./package.json",
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./locale/*.json": "./locale/*.json",
+    "./client": {
+      "default": "./lib/client.js"
+    }
+  },
+  "scripts": {
+    "build": "vp pack && node scripts/name-client-bundle.ts",
+    "check": "vp check",
+    "ci": "pnpm run typecheck && vp check && vp test --coverage && node scripts/check.ts",
+    "clean": "rm -rf lib",
+    "format": "vp fmt --check",
+    "format:fix": "vp fmt --write",
+    "lint": "vp lint",
+    "lint:fix": "vp lint --fix",
+    "prepare": "pnpm run build",
+    "prepublishOnly": "pnpm run release:gate",
+    "release:gate": "pnpm run build && pnpm run ci",
+    "test": "vp test",
+    "test:live": "DSH_TINYFISH_LIVE=1 vp test --config vite.live.config.ts --run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@deepseek-ai/schemastery": "3.18.4"
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis": "~4.0.4",
+    "@deepseek-ai/dsh-client-store": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-client-ui-primitives": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-credentials": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-launch-environment": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-web": "0.2.0-rc.2",
+    "@types/node": "^26.6.3",
+    "@types/react": "^18.3.31",
+    "@vitest/coverage-v8": "5.0.1",
+    "react": "^18.3.1",
+    "typescript": "^7.0.2",
+    "ultracite": "^7.12.2",
+    "vite-plus": "catalog:",
+    "vitest": "5.0.1"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "~4.0.4",
+    "@deepseek-ai/dsh-credentials": "^0.2.0-rc.1",
+    "@deepseek-ai/dsh-launch-environment": "^0.2.0-rc.1",
+    "@deepseek-ai/dsh-web": "^0.2.0-rc.1"
+  },
+  "icon": "./icon.svg",
+  "engines": {
+    "node": ">=24"
+  },
+  "packageManager": "pnpm@12.6.0",
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "inject": [
+        "@deepseek-ai/dsh-client-locale",
+        "@deepseek-ai/dsh-client-ui-settings",
+        "@deepseek-ai/dsh-client-ui-plugin-manager",
+        "@deepseek-ai/dsh-api-remotes"
+      ],
+      "platform": "web",
+      "immediately": true
+    }
+  }
+}

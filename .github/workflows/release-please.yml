@@ -1,0 +1,33 @@
+name: release-please
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  release-please:
+    runs-on: ubuntu-latest
+    steps:
+      # Reads conventional commits (feat:, fix:, …) since the last tag, then
+      # opens a version-bump and CHANGELOG pull request. Merging that PR creates
+      # the tag and the GitHub Release, which fires `release.yml`.
+      #
+      # The PAT is not optional. Tags and releases created with the built-in
+      # GITHUB_TOKEN do not trigger downstream workflows, so a release-please
+      # running on the default token would produce a tag that never publishes.
+      # Secret: RELEASE_PLEASE_TOKEN — a fine-grained PAT with Contents and
+      # Pull requests read/write on this repository only.
+      #
+      # Until that secret is set this job fails on every push with "Input
+      # required and not supplied: token". That is the upstream action's message
+      # and it is not improved here: guarding the step on `secrets` in an `if`
+      # made GitHub reject the whole file as invalid, which is a worse failure
+      # than a clear one. The one-time setup is in CONTRIBUTING.md.
+      - uses: googleapis/release-please-action@v5
+        with:
+          release-type: node
+          token: ${{ secrets.RELEASE_PLEASE_TOKEN }}

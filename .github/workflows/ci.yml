@@ -1,0 +1,82 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+    # A release tag is the `release` workflow's trigger, not this one's. Without
+    # this filter a tag push matches no branch and the whole workflow is
+    # skipped — which is the bug this line exists to prevent. (It bit us: the
+    # publish job sat in this file, gated on `startsWith(github.ref, 'refs/tags/')`,
+    # and a workflow that never runs can never reach its own job.)
+    tags-ignore: ["v*.*.*"]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  ci:
+    name: check, test, build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      # No `version:` input: pnpm/action-setup refuses to run when it is given
+      # both that and a `packageManager` field, and package.json pins 12.6.0
+      # exactly. One source of truth, and the action reads it.
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v7
+        with:
+          # The test runtime needs a newer Node than the library's public engine
+          # contract promises. The library still supports `>=24`; only the
+          # tooling here needs more.
+          node-version: 26
+          cache: pnpm
+
+      # A lockfile that no longer matches the manifest is a gate in its own
+      # right, and `--frozen-lockfile` is the only way to see it in CI.
+      - run: pnpm install --frozen-lockfile
+
+      - name: Build
+        run: pnpm run build
+
+      # The real compiler, over `src/`, `test/` and `scripts/`. `vp check`
+      # below type-checks too, but through Oxlint's experimental type checker,
+      # which discovers the tsconfig *per file* and only applies it to files
+      # that config's `include` covers — leave `test/` out and both tools look
+      # at the same sources and disagree, with neither one obviously wrong.
+      # `tsconfig.json` covers all three, so they agree now; this step still
+      # speaks for the compiler, and it is the one that fails on a decision
+      # Oxlint has not learned to make.
+      - name: Type-check (src, test, scripts)
+        run: pnpm run typecheck
+
+      # `vp check` is format, lint and type-check in one pass — Oxlint and Oxfmt
+      # under the Vite+ entry point, reading the `lint` / `fmt` blocks of
+      # vite.config.ts. They must live there: Vite+ disables nested
+      # oxlint.config / .oxfmtrc files, so a config in its own file is silently
+      # inert, and `scripts/check.ts` asserts the live rule count so that
+      # cannot come back unnoticed.
+      - name: Check (format, lint, types)
+        run: pnpm exec vp check
+
+      # Coverage runs here rather than in a separate job, so the thresholds in
+      # vite.config.ts gate the build: the run fails if a change drops the
+      # suite below the floor.
+      - name: Test
+        run: pnpm exec vp test --coverage
+
+      # One script: lib/ freshness, peer ranges npm can parse, the bundle
+      # contract, the harness surfaces still present, no credentials in the
+      # tree, the release wiring being reachable, and — the one that earns its
+      # keep — installing the packed tarball with plain npm and loading it.
+      # Everything else runs against the working tree; that is the only check
+      # that sees what a consumer receives.
+      - name: Package checks
+        run: node scripts/check.ts

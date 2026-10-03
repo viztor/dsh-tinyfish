@@ -1,0 +1,57 @@
+{
+  "compilerOptions": {
+    "target": "ES2024",
+    "lib": ["ES2024", "DOM"],
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+
+    "outDir": "lib",
+    // No `rootDir`, deliberately. Oxlint's type-aware mode discovers the
+    // tsconfig *per file* and only applies a config whose `include` covers
+    // that file — anything outside it falls back to a default program with a
+    // different `lib` and without `noUncheckedIndexedAccess`. Keeping `test/`
+    // and `scripts/` out of `include` therefore made the two type checkers
+    // disagree about the same sources: `tsc` accepted `.toSorted()` and
+    // flagged `array[i]` as possibly undefined, `vp lint` did the opposite,
+    // and neither could be used to tell which answer was right. `include`
+    // below now covers everything, so there is one program and one answer.
+    "declaration": true,
+
+    // Source imports carry the real `.ts` extension so Node's type stripping
+    // resolves them when the tests import `src/` directly — no build, no
+    // loader, no separate compiled copy under test. `rewriteRelativeImportExtensions`
+    // turns those into `.js` on emit, so the published package still imports
+    // cleanly. This is the combination that makes "run the tests against the
+    // source" possible without giving up a working build.
+    "allowImportingTsExtensions": true,
+    "rewriteRelativeImportExtensions": true,
+
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true,
+    "noFallthroughCasesInSwitch": true,
+    "exactOptionalPropertyTypes": false,
+    "verbatimModuleSyntax": true,
+    "isolatedModules": true,
+    "erasableSyntaxOnly": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+
+    // The client half is JSX. Without this the checker refuses to parse it at
+    // all, and `include` below (`*.ts` does not match `*.tsx`) quietly left
+    // `settings-page.tsx` — half the shipped artifact — outside every type
+    // check, so the option was never noticed being absent. `react-jsx` is the
+    // automatic runtime the bundle already builds with: no `React` import in
+    // the source, the JSX factory resolved by the transform.
+    "jsx": "react-jsx",
+
+    "types": ["node"]
+  },
+  "include": [
+    "src/**/*.ts",
+    "src/**/*.tsx",
+    "test/**/*.ts",
+    "test/**/*.tsx",
+    "scripts/**/*.ts"
+  ]
+}
