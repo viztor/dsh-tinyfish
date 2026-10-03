@@ -13,8 +13,27 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       # Reads conventional commits (feat:, fix:, …) since the last tag, then
-      # opens a version-bump and CHANGELOG pull request. Merging that PR creates
-      # the tag and the GitHub Release, which fires `release.yml`.
+      # opens a version-bump pull request. Merging that PR creates the tag and
+      # the GitHub Release, which fires `release.yml`.
+      #
+      # The settings that matter here live in `release-please-config.json`
+      # rather than in the inputs below, because none of them is an action
+      # input:
+      #
+      # - `bump-minor-pre-major` keeps a breaking change on the minor line while
+      #   the version is below 1.0.0. Without it a `feat!` proposes 1.0.0, and
+      #   this plugin has no business reaching 1.0.0 before the harness it plugs
+      #   into leaves 0.x.
+      # - `include-component-in-tag: false` keeps tags as `v0.9.0`. The default
+      #   prefixes the component (`dsh-tinyfish-v0.9.0`), which matches no
+      #   `v*.*.*` filter and so would never fire the publish workflow.
+      # - `skip-changelog` leaves CHANGELOG.md alone. It is written as a
+      #   versionless description of what the package does; release-please would
+      #   otherwise prepend version headings to it.
+      #
+      # `manifest-file` is what puts the action in manifest mode, which is the
+      # mode `config-file` requires. It carries one line per package path and is
+      # kept in step with the released version by release-please itself.
       #
       # The PAT is not optional. Tags and releases created with the built-in
       # GITHUB_TOKEN do not trigger downstream workflows, so a release-please
@@ -29,5 +48,6 @@ jobs:
       # than a clear one. The one-time setup is in CONTRIBUTING.md.
       - uses: googleapis/release-please-action@v5
         with:
-          release-type: node
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
           token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
