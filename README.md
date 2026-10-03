@@ -28,7 +28,7 @@ DeepSeek Harness allows installing plugins directly through the Web interface wi
 3. Search or enter `dsh-tinyfish` (or `@viztor/dsh-tinyfish`).
 4. Click **Install** — DSH automatically fetches the package from npm, builds the bundle patch, and activates it live without restarting!
 5. In **Settings → Plugins → TinyFish**, select your channel (`direct` or `monid`), enter the key for that channel, and hit **Save**!
-6. **Select it** — installing registers the provider, it does not choose it. Point the web path at TinyFish as shown in [Select it](#-select-it) below.
+6. That is the whole install — the bundle points the web path at TinyFish on both kinds. See [Select it](#-select-it) to choose otherwise.
 
 ---
 
@@ -82,17 +82,18 @@ then `npm install @viztor/dsh-tinyfish` resolves from the mirror. Unless npmjs i
 
 ### Select it
 
-**Installing registers the provider; it does not choose it.** `dsh-web` picks between providers from its own config, and this bundle stays additive — it inserts its own row and touches nothing else. A plugin that reached into another package's row to make itself the default would be choosing on your behalf. So the choice is yours, in the profile's `cordis.patch.yml`:
+**The bundle selects TinyFish on both web kinds by default**, so a fresh install works with no patch editing. It does that by setting the web seam's `searchProvider` / `fetchProvider`, matched by row id. That is the only route a plugin has: `dsh-web` resolves those two fields once in its constructor and exposes no API by which a provider could elect itself.
+
+To choose differently, override it in the profile's `cordis.patch.yml`, which applies after every bundle patch and therefore wins:
 
 ```yaml
 - id: web
-  name: "@deepseek-ai/dsh-web"
   config:
-    searchProvider: tinyfish
-    fetchProvider: tinyfish
+    searchProvider: deepseek-official
+    fetchProvider: http
 ```
 
-The two kinds are independent fields, so search can run through TinyFish while fetch stays on the shipped `http` provider, or the other way round. Reverting is the same two words in reverse — `deepseek-official` and `http` — with the plugin still mounted and idle.
+The two kinds are independent fields, so search can run through TinyFish while fetch stays on the shipped `http` provider, or the other way round. The plugin stays mounted and idle either way. A host can also set `DSH_WEB_SEARCH_PROVIDER` / `DSH_WEB_FETCH_PROVIDER` instead — those feed the same fields, with the config value winning when both are present.
 
 ## 🔑 Two channels, one plugin
 
@@ -143,6 +144,12 @@ Everything lives in one row, `dsh-tinyfish`. The row is validated, so an out-of-
 | `search` / `fetch` | `true` | provide this kind; `false` reports it unavailable without unregistering |
 
 Turning one off reports _unavailable_ rather than _missing_ — the harness tells those apart, and only the second means "the install is broken". But _unavailable_ is not a silent fall-through: if `searchProvider`/`fetchProvider` still names TinyFish, the call fails. Point that tool at another provider to use one.
+
+#### Manifest metadata, not configuration
+
+The manifest also carries `dsh.compatibility`: the Node and DSH ranges stated explicitly, plus a per-release verdict — `compatible`, `incompatible`, or `unknown` — for the DSH versions a catalog checks.
+
+**DSH itself never reads it.** Neither `compatibility` nor `dshReleases` appears anywhere in the harness, so these fields cannot change how the plugin loads, registers, or behaves. They exist so a listing can state what has actually been verified, and the verdicts here are honest rather than aspirational: `0.2.0-rc.2` is what every build and test in this repository runs against, `0.2.0-rc.1` is admitted by the peer range but never exercised, and `0.1.7-rc.2` sits below that floor.
 
 ```yaml
 - id: dsh-tinyfish

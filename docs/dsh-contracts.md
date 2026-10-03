@@ -28,6 +28,27 @@ The bundle contract itself:
 - Bundles resolve at **boot**. `patchReload: live` covers a patch change, not a newly mounted bundle, so installing one needs a restart.
 - Patch lists apply in `dsh.profile.bundles` order over an empty entry list, then the profile's own patches, then any launch patch. **Later layers win**, which is what makes a host row able to override a bundle's default.
 
+### A patch `name` is an assertion, not a label
+
+Read out of `dsh-app-boot`'s patch merge (`lib/index.js`):
+
+```js
+const { id, insert, name, ...overrides } = patch;
+// …
+if (name && name !== target.name) {
+  warn("patch: name mismatch for %C (expected %C, got %C), skipping", id, target.name, name);
+  continue;
+}
+```
+
+A non-insert patch is matched by **`id`**. `name` is optional, and when present it must equal the target's existing plugin name — it _asserts_ an identity rather than renaming anything. So a third-party bundle that writes an official package's scoped name in order to override that row's config is claiming the official identity, which a patch-safety check reads as impersonation. The override needs nothing but the `id`.
+
+`config` is replaced **wholesale**, not deep-merged, so an override must restate every field it means to keep. That is safe for `ctx.web`, whose config is exactly `searchProvider` and `fetchProvider`.
+
+### `dsh.compatibility` is metadata, not a contract
+
+`dsh.compatibility` — and the `dshReleases` map inside it — appears **nowhere in the harness**. It is not read by `dsh-app-boot`, the loader, or any `@deepseek-ai` package. It is consumer-facing metadata for catalogs that want an explicit per-release verdict instead of a peer range. No behaviour in this package depends on it, and a wrong verdict there cannot break an install: the peer range plus `scripts/check.ts` are what actually guard compatibility.
+
 ## The web seam
 
 `ctx.web` exposes exactly two provider kinds, and a provider is a plain function interface — not a tool surface:

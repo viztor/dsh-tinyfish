@@ -79,27 +79,38 @@ test("the bundle exports what a cordis plugin must", () => {
   assert.equal(plugin.TINYFISH_PROVIDER_ID, "tinyfish");
 });
 
-test("the bundle patch is additive and names no protected package", () => {
-  // A bundle may insert its own rows. Reaching into another package's row —
-  // naming the web package so as to set `searchProvider` / `fetchProvider` — is
-  // a bundle choosing a provider for the host, and a patch-safety check reads
-  // it as impersonating a protected entry. Selection belongs to the profile,
-  // so the patch file must not carry the protected scope at all, comments
-  // included: a scanner cannot be relied on to skip them.
+test("the bundle patch asserts no identity it does not own", () => {
+  // A patch's `name` field asserts the target's existing plugin name — it does
+  // not rename anything. dsh-app-boot skips a patch whose `name` disagrees:
+  // `if (name && name !== target.name) { warn(...); continue }`. So carrying
+  // the official web package's scoped name in a third-party bundle claims that
+  // identity, which a patch-safety check reads as impersonation. `name` is
+  // optional, so the selection override is matched by `id` alone.
   const root = join(dirname(fileURLToPath(import.meta.url)), "..");
   const patch = readFileSync(join(root, "cordis.patch.yml"), "utf8");
   assert.ok(
     !patch.includes("@deepseek-ai/"),
-    "the bundle patch must name no protected package or entry"
+    "the bundle patch must name no protected package"
   );
-  // It still does its own job: insert the plugin's row under its own id, and
-  // leave selection to a layer that owns the decision.
-  assert.match(patch, /-\s*insert:/, "the patch inserts the plugin's row");
-  assert.match(patch, /id:\s*dsh-tinyfish/, "and that row is the plugin's own");
-  assert.ok(
-    !/searchProvider|fetchProvider/.test(patch.replaceAll(/^#.*$/gm, "")),
-    "and it selects nothing, since selection is the profile's decision"
+
+  // Every `name:` the file asserts must be the plugin's own. Comment lines
+  // start with `#`, so a documented example cannot satisfy this pattern and
+  // mask a real assertion.
+  const asserted = [...patch.matchAll(/^\s*name:\s*(.+?)\s*$/gm)].map(
+    (match) => match[1]
   );
+  assert.deepEqual(
+    asserted,
+    ['"dsh-tinyfish"'],
+    "the only name asserted in the patch is the plugin's own"
+  );
+
+  // And it still does both of its jobs: insert its own row, and point the web
+  // seam at itself — the latter by id, which needs no identity assertion.
+  assert.match(patch, /-\s*insert:/, "the patch inserts the plugin's own row");
+  assert.match(patch, /id:\s*web/, "and targets the web row by id");
+  assert.match(patch, /searchProvider:\s*tinyfish/, "selecting itself");
+  assert.match(patch, /fetchProvider:\s*tinyfish/, "on both kinds");
 });
 
 test("it exports a schemastery Config, so the row renders as a settings section", () => {

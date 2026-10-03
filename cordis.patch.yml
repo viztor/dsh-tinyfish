@@ -1,35 +1,37 @@
 # Bundle patch for `dsh-tinyfish`.
 #
-# Additive only. This file inserts the plugin's own row and touches nothing
-# else — in particular it does NOT set the web seam's `searchProvider` /
-# `fetchProvider`. Selecting a provider is the profile's decision, and a bundle
-# that reaches into another package's row to make itself the default is making
-# that decision for the host. This plugin only *offers* `tinyfish`.
+# Two jobs: insert the plugin's own row, and point the web seam at it.
 #
-# A host that wants TinyFish on the web path says so in its own patch layer,
-# where the choice is visible and reversible — it targets the web row by id:
+# The selection override below matches the web row by `id` alone, with no
+# `name`. That is deliberate. In the patch format a `name` field *asserts* the
+# target's existing plugin name — it does not rename anything — so writing the
+# official web package's scoped name in a third-party bundle claims that
+# identity, which is what a patch-safety check reads as impersonation. `name`
+# is optional, and a config override needs nothing but the id.
+#
+# A host that wants a different arrangement overrides this in its own patch
+# layer, which applies later and therefore wins:
 #
 #   - id: web
 #     config:
-#       searchProvider: tinyfish
-#       fetchProvider: tinyfish
+#       searchProvider: deepseek-official
+#       fetchProvider: http
 #
-# Reverting is the same two words pointing back at `deepseek-official` / `http`,
-# with this plugin still mounted and idle.
-#
-# `channel` picks the upstream route and is deliberately NOT set here, so the
-# schema default stands: `direct`, which calls TinyFish's own API with the key
-# the `tinyfish` CLI stored in ~/.tinyfish/config.json. A package named for
-# TinyFish should not open by asking for an account at a different service.
+# The two kinds are independent fields, so search can run through TinyFish
+# while fetch stays on the shipped http provider, or the other way round.
 #
 # A host that prefers the Monid envelope — which reuses the credential a Monid
-# MCP mount already holds, and costs the same — pins it in its own patch layer,
-# where the preference belongs and where it can be changed without a new
-# release:
+# MCP mount already holds, and costs the same — pins the channel in that same
+# layer, where the preference can change without a new release:
 #
 #   - id: dsh-tinyfish
 #     config:
 #       channel: monid
+#
+# `channel` is deliberately NOT set below, so the schema default stands:
+# `direct`, which calls TinyFish's own API with the key the `tinyfish` CLI
+# stored in ~/.tinyfish/config.json. A package named for TinyFish should not
+# open by asking for an account at a different service.
 #
 # `apiKey` is not set here either — a secret belongs in the environment, the
 # CLI's own store, or the harness credentials service, never in a patch file.
@@ -38,3 +40,10 @@
       name: "dsh-tinyfish"
       config:
         attempts: 3
+# Found by id; no `name`, so nothing here asserts another package's identity.
+# `config` replaces the target's wholesale rather than merging, and the web
+# seam's config is exactly these two fields, so nothing is lost.
+- id: web
+  config:
+    searchProvider: tinyfish
+    fetchProvider: tinyfish
