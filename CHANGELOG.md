@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.9.0](https://github.com/viztor/dsh-tinyfish/compare/v0.8.0...v0.9.0) (2026-10-03)
+
+
+### Features
+
+* **settings:** point the card and the docs at the key sign-up ([8a8470b](https://github.com/viztor/dsh-tinyfish/commit/8a8470ba1e101a7f6eaa7aa7bfbc5189eaee3361))
+
 ## 0.8.0 (2026-10-03)
 
 The release that followed the history reset. Written by hand, so it describes
