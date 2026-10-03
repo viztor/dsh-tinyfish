@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.9.1](https://github.com/viztor/dsh-tinyfish/compare/v0.9.0...v0.9.1) (2026-10-03)
+
+
+### Bug Fixes
+
+* **settings:** put the key sign-up link on the description line ([4d1043d](https://github.com/viztor/dsh-tinyfish/commit/4d1043d68a9122687ccd2d089025ecbe36a2b20c))
+
 ## [0.9.0](https://github.com/viztor/dsh-tinyfish/compare/v0.8.0...v0.9.0) (2026-10-03)
 
 
