@@ -9,7 +9,7 @@
 
 ---
 
-Your agent can already reason. This gives it something to reason _about_: live search results and clean page content, wired straight into the harness's own `web_search` and `web_fetch` tools. Powered by [TinyFish](https://tinyfish.ai) — both endpoints are free, so the web path on your host stops costing money per call.
+Your agent can already reason. This gives it something to reason _about_: live search results and clean page content, wired straight into the harness's own `web_search` and `web_fetch` tools. Powered by [TinyFish](https://agent.tinyfish.ai/sign-up?ref=v1.dXNlcl8zSnh2TDJGaldOV2FQYWhnaDRqbTIzc0dqZTE.KxSdeNUG14oJKVFVFWLkOwn3-Pia7QI5BuaxiJ_iEVY) — both endpoints are free, so the web path on your host stops costing money per call.
 
 | Before | After |
 | --- | --- |
@@ -100,7 +100,7 @@ The two kinds are independent fields, so search can run through TinyFish while f
 |  | Direct _(default)_ | Via Monid |
 | --- | --- | --- |
 | What's behind it | TinyFish's own API | The same TinyFish endpoints, through your Monid wallet |
-| You need | A free key from [tinyfish.ai](https://tinyfish.ai) | A platform key from [app.monid.ai](https://app.monid.ai) |
+| You need | A free key from [tinyfish.ai](https://agent.tinyfish.ai/sign-up?ref=v1.dXNlcl8zSnh2TDJGaldOV2FQYWhnaDRqbTIzc0dqZTE.KxSdeNUG14oJKVFVFWLkOwn3-Pia7QI5BuaxiJ_iEVY) | A platform key from [app.monid.ai](https://app.monid.ai) |
 | Fastest setup | `tinyfish auth login` | `monid keys add` |
 | Costs | $0 | $0 |
 

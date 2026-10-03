@@ -787,6 +787,46 @@ test("both key fields render, whatever channel is selected", () => {
   }
 });
 
+test("the card links out to where a key comes from, safely", () => {
+  // The field above it stores a credential the user has to obtain somewhere,
+  // and this is where the card says how. It must open in a new tab: the page
+  // holds staged drafts, so navigating away in the same tab would discard
+  // every edit the user had not saved yet.
+  const { tree } = render({});
+  const [link] = findAll(tree, "a");
+  assert.ok(link, "the card offers a way to get a key");
+  const href = String(link.props.href);
+  assert.match(
+    href,
+    /^https:\/\/agent\.tinyfish\.ai\/sign-up\?ref=v1\./,
+    "pointing at the referral sign-up rather than the bare site"
+  );
+  assert.equal(link.props.target, "_blank", "opening in a new tab");
+  assert.equal(
+    link.props.rel,
+    "noreferrer noopener",
+    "with the referrer suppressed and the opener severed"
+  );
+  assert.ok(
+    texts(link).join(" ").includes("getKey"),
+    "labelled from the dictionary, not a literal in the component"
+  );
+
+  // Both dictionaries carry the label, or the card renders a bare key name.
+  const { dictionaries } = mount({});
+  assert.ok(dictionaries, "the page registered its copy");
+  const en = dictionaries.en.getKey;
+  const zh = dictionaries.zh.getKey;
+  assert.ok(
+    typeof en === "string" && en !== "",
+    "English states what the link is for"
+  );
+  assert.ok(
+    typeof zh === "string" && zh !== "",
+    "and the Chinese copy does too"
+  );
+});
+
 test("the direct key writes to the reference the section names", async () => {
   // Driven through the real `SettingsFormModel`, because that is where the
   // write is decided: the slot entry's `inject()` hands the card the model's

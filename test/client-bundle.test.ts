@@ -833,6 +833,29 @@ test("a warning shows only when both providers are off", () => {
   );
 });
 
+test("the built card carries the key sign-up link", () => {
+  // The source test proves the component renders it; this proves the artifact
+  // that actually ships to browsers still does, after bundling. A link is easy
+  // to lose to a tree-shake or an over-eager external, and nothing else would
+  // report it — the card would simply stop offering a way to get a key.
+  const tree = renderCard({});
+  const links = findByType(tree, "a");
+  assert.equal(links.length, 1, "exactly one link on the card");
+  const [link] = links;
+  assert.ok(link, "the card offers a way to get a key");
+  assert.match(
+    String(link.props.href),
+    /^https:\/\/agent\.tinyfish\.ai\/sign-up\?ref=v1\./,
+    "pointing at the referral sign-up"
+  );
+  assert.equal(link.props.target, "_blank", "opening in a new tab");
+  assert.equal(
+    link.props.rel,
+    "noreferrer noopener",
+    "with the referrer suppressed and the opener severed"
+  );
+});
+
 test("the field specs cover every editable key in the host schema", () => {
   // The client spells its own field names; this is what keeps them equal to the
   // host's schema keys. A typo here is a control that silently writes nothing.

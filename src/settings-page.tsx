@@ -73,6 +73,7 @@ const en = {
     "Stored separately from the TinyFish key. `monid keys add` also works and takes precedence over this.",
   apiKeySet: "A key is configured.",
   apiKeyUnset: "No key is configured, so searches fail until one is set.",
+  getKey: "Get your TinyFish API key",
   purpose: "Purpose",
   purposeHint: "Optional goal statement; TinyFish ranks results against it.",
   attempts: "Attempts",
@@ -114,6 +115,7 @@ const zh = {
     "与 TinyFish 密钥分开保存。也可运行 `monid keys add`，其优先级高于此项。",
   apiKeySet: "已配置密钥。",
   apiKeyUnset: "未配置密钥，搜索会失败，直到设置为止。",
+  getKey: "获取你的 TinyFish API 密钥",
   purpose: "目标说明",
   purposeHint: "可选的目标描述；TinyFish 会据此排序结果。",
   attempts: "尝试次数",
@@ -266,6 +268,18 @@ const DEFAULT_API_KEY_REF = "TINYFISH_API_KEY";
 const DEFAULT_MONID_KEY_REF = "MONID_API_KEY";
 
 /**
+ * Where the `direct` channel's key comes from.
+ *
+ * A referral link rather than the bare site: it is how this package pays for
+ * itself, and keeping it in one named constant stops the card and the docs
+ * from drifting apart. The `direct` key is the only credential with a sign-up
+ * page worth linking — a Monid platform key comes from an account the user
+ * already has.
+ */
+const TINYFISH_SIGNUP_URL =
+  "https://agent.tinyfish.ai/sign-up?ref=v1.dXNlcl8zSnh2TDJGaldOV2FQYWhnaDRqbTIzc0dqZTE.KxSdeNUG14oJKVFVFWLkOwn3-Pia7QI5BuaxiJ_iEVY";
+
+/**
  * A boolean field.
  *
  * The primitives ship a text and a number spec but no boolean one, and the Host
@@ -414,6 +428,19 @@ const STYLES = `
 }
 .dsh-tf-reset:disabled {
   cursor: default;
+}
+.dsh-tf-signup {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.dsh-tf-signup a {
+  color: var(--dsw-alias-label-primary);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.dsh-tf-signup a:hover {
+  text-decoration-thickness: 2px;
 }
 `;
 
@@ -637,6 +664,19 @@ function TinyfishCard(props: CardProps) {
               response, and it starts blank), which is also why there is no
               default value to prefill — the key is not in the page to show. */}
           {keyField("direct")}
+          {/* The way to obtain the key the field above stores. It sits under
+              that field rather than beside the switches, and links out in a
+              new tab: a settings page that navigated away from an unsaved
+              form would silently discard every staged edit. */}
+          <p className="dsh-tf-signup">
+            <a
+              href={TINYFISH_SIGNUP_URL}
+              target="_blank"
+              rel="noreferrer noopener"
+            >
+              {t("getKey")}
+            </a>
+          </p>
           {keyField("monid")}
           {/* `purpose` rides the fetch request, not search, so it follows the
               fetch switch: search-off + fetch-on still needs it, and
