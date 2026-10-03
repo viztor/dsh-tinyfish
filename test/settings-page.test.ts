@@ -201,6 +201,20 @@ function secretBy(tree: unknown, name: string): SecretProps {
 }
 
 /**
+ * The combined description line under the direct key field, where the
+ * TinyFish reference lives now that it shares a line with the sign-up link.
+ * The field's own hint is empty by design (it renders zero-height), so the
+ * reference is read here instead of off the field's props.
+ */
+function signupLine(tree: unknown): TestElement {
+  const found = findAll(tree, "p").find(
+    (node) => node.props.className === "dsh-tf-signup"
+  );
+  assert.ok(found, "expected the sign-up line under the TinyFish field");
+  return found;
+}
+
+/**
  * Everything the card says about the credential, joined.
  *
  * Not the same as `texts()` alone: `label`, `stateLabel` and `hint` are
@@ -1030,16 +1044,18 @@ test("a configured monid key reads as set", () => {
 test("each key field names its own reference, and only its own", () => {
   // What the single-field layout was really defending: a reader must never
   // wonder which of the two saves where. Both fields on screen makes that
-  // the whole contract, so each one's hint states its own reference and
-  // crosses over into neither.
+  // the whole contract. The Monid reference rides the field's own hint; the
+  // TinyFish one rides the combined description line beneath its field — the
+  // hint prop is a plain string, so sharing one line with the sign-up link is
+  // only possible outside the primitive — and neither crosses over.
   const { tree } = render({});
-  const direct = secretBy(tree, "apiKey");
-  const monid = secretBy(tree, "monidApiKey");
+  const signup = texts(signupLine(tree)).join(" ");
   assert.ok(
-    direct.hint.includes("TINYFISH_API_KEY"),
-    "the TinyFish field names its own reference"
+    signup.includes("TINYFISH_API_KEY"),
+    "the TinyFish line names its own reference"
   );
-  assert.ok(!direct.hint.includes("MONID_API_KEY"), "and never the Monid one");
+  assert.ok(!signup.includes("MONID_API_KEY"), "and never the Monid one");
+  const monid = secretBy(tree, "monidApiKey");
   assert.ok(
     monid.hint.includes("MONID_API_KEY"),
     "the Monid field names its own reference"
@@ -1059,8 +1075,8 @@ test("switching the channel leaves both key fields exactly as they are", () => {
     const { tree } = render(section);
     const forWhat = JSON.stringify(section);
     assert.ok(
-      secretBy(tree, "apiKey").hint.includes("TINYFISH_API_KEY"),
-      `the TinyFish field names its reference for ${forWhat}`
+      texts(signupLine(tree)).join(" ").includes("TINYFISH_API_KEY"),
+      `the TinyFish line names its reference for ${forWhat}`
     );
     assert.ok(
       secretBy(tree, "monidApiKey").hint.includes("MONID_API_KEY"),
@@ -1151,7 +1167,10 @@ test("each key field states its state and its reference exactly once", () => {
   // There are two fields now, so "exactly once" is counted two ways: each
   // field carries its own reference and its own state sentence, and the card
   // as a whole carries one state sentence per field — not one per channel plus
-  // a paragraph repeating whichever channel is selected.
+  // a paragraph repeating whichever channel is selected. The TinyFish
+  // reference moved from its field's props onto the combined description
+  // line; `spoken` already covers both — the secret fields' props and the
+  // card's own paragraphs — so the card-wide count needs no second source.
   const count = (hay: string, needle: string): number =>
     hay.split(needle).length - 1;
   for (const configured of [false, true]) {
@@ -1172,22 +1191,33 @@ test("each key field states its state and its reference exactly once", () => {
       2,
       `configured=${configured}: one state sentence per field, no repeats`
     );
-    for (const [name, ref] of [
-      ["apiKey", "TINYFISH_API_KEY"],
-      ["monidApiKey", "MONID_API_KEY"],
-    ] as const) {
-      const field = secretBy(tree, name);
-      const alone = [field.label, field.stateLabel, field.hint].join(" ");
-      assert.equal(
-        count(alone, ref),
-        1,
-        `configured=${configured}: the ${name} field states its own reference once`
-      );
-      assert.equal(
-        count(alone, "apiKeySet") + count(alone, "apiKeyUnset"),
-        1,
-        `configured=${configured}: the ${name} field states its own state once`
-      );
-    }
+    const monid = secretBy(tree, "monidApiKey");
+    const monidAlone = [monid.label, monid.stateLabel, monid.hint].join(" ");
+    assert.equal(
+      count(monidAlone, "MONID_API_KEY"),
+      1,
+      `configured=${configured}: the monidApiKey field states its own reference once`
+    );
+    assert.equal(
+      count(monidAlone, "apiKeySet") + count(monidAlone, "apiKeyUnset"),
+      1,
+      `configured=${configured}: the monidApiKey field states its own state once`
+    );
+    // The TinyFish field's own hint is empty by design; its reference lives
+    // on the combined line, and its state still lives on the field.
+    const direct = secretBy(tree, "apiKey");
+    const directAlone = [direct.label, direct.stateLabel, direct.hint].join(
+      " "
+    );
+    assert.equal(
+      count(directAlone, "apiKeySet") + count(directAlone, "apiKeyUnset"),
+      1,
+      `configured=${configured}: the apiKey field states its own state once`
+    );
+    assert.equal(
+      count(texts(signupLine(tree)).join(" "), "TINYFISH_API_KEY"),
+      1,
+      `configured=${configured}: the TinyFish reference prints once, on its own line`
+    );
   }
 });

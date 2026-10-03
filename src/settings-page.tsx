@@ -433,6 +433,7 @@ const STYLES = `
   margin: 0;
   font-size: 12px;
   line-height: 1.5;
+  color: var(--dsw-alias-label-tertiary);
 }
 .dsh-tf-signup a {
   color: var(--dsw-alias-label-primary);
@@ -520,18 +521,29 @@ function TinyfishCard(props: CardProps) {
   // publishes both, so a missing one means the shapes drifted, and a settings
   // page that throws on a shape drift takes down the whole Plugins page with
   // it. An empty field that saves nowhere is the honest degradation.
-  const keyField = (side: "direct" | "monid") => {
+  // The reference a channel's save lands on. Factored out of `keyField` so
+  // the direct channel's combined description line can print it: that line —
+  // not the field's own hint — is where the direct reference now lives, which
+  // is what lets the description and the sign-up link share one line.
+  const channelRef = (side: "direct" | "monid"): string =>
+    state.keys[side]?.ref ??
+    (side === "monid" ? DEFAULT_MONID_KEY_REF : DEFAULT_API_KEY_REF);
+
+  const keyField = (side: "direct" | "monid", hint?: string) => {
     const entry = state.keys[side] ?? {
       text: "",
       named: false,
-      ref: side === "monid" ? DEFAULT_MONID_KEY_REF : DEFAULT_API_KEY_REF,
+      ref: channelRef(side),
     };
     const name = side === "monid" ? FIELD.monidApiKey : FIELD.apiKey;
     return (
       <SettingsSecretField
         id={`plugin-config-tinyfish-${name}`}
         label={side === "monid" ? t("monidApiKey") : t("apiKey")}
-        hint={`${side === "monid" ? t("monidApiKeyHint") : t("apiKeyHint")} (${entry.ref})`}
+        hint={
+          hint ??
+          `${side === "monid" ? t("monidApiKeyHint") : t("apiKeyHint")} (${entry.ref})`
+        }
         text={entry.text}
         disabled={disabled}
         configured={entry.named}
@@ -663,12 +675,16 @@ function TinyfishCard(props: CardProps) {
               control is write-only by contract (the value never rides a
               response, and it starts blank), which is also why there is no
               default value to prefill — the key is not in the page to show. */}
-          {keyField("direct")}
-          {/* The way to obtain the key the field above stores. It sits under
-              that field rather than beside the switches, and links out in a
-              new tab: a settings page that navigated away from an unsaved
-              form would silently discard every staged edit. */}
+          {keyField("direct", "")}
+          {/* The direct field's description lives here, in a paragraph this
+              card owns, rather than in the field's hint: the hint prop is a
+              plain string, so sharing one line between the description and
+              the sign-up link is only possible outside the primitive. The
+              reference still prints exactly once, under the field whose save
+              it names — the field's own hint is left empty, which renders
+              zero-height. */}
           <p className="dsh-tf-signup">
+            {t("apiKeyHint")} ({channelRef("direct")}){" "}
             <a
               href={TINYFISH_SIGNUP_URL}
               target="_blank"
