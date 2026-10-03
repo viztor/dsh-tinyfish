@@ -1,5 +1,23 @@
 # Changelog
 
+## [1.0.0](https://github.com/viztor/dsh-tinyfish/compare/v0.7.0...v1.0.0) (2026-10-03)
+
+
+### ⚠ BREAKING CHANGES
+
+* keep the bundle patch additive and declare DSH compatibility
+
+### Features
+
+* keep the bundle patch additive and declare DSH compatibility ([d335629](https://github.com/viztor/dsh-tinyfish/commit/d3356294a572cf72a221588ba5ccee2eb964cf76))
+
+
+### Bug Fixes
+
+* **bundle:** select the web provider by id, without asserting a name ([aa4f75a](https://github.com/viztor/dsh-tinyfish/commit/aa4f75a3487ab503c2cefe8978ceba59f90a2495))
+
+## Changelog
+
 Notable changes to `dsh-tinyfish`, newest first. Deliberately no version
 headings: this describes what the package does, not which release did it.
 
