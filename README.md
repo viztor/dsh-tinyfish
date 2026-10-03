@@ -28,6 +28,7 @@ DeepSeek Harness allows installing plugins directly through the Web interface wi
 3. Search or enter `dsh-tinyfish` (or `@viztor/dsh-tinyfish`).
 4. Click **Install** — DSH automatically fetches the package from npm, builds the bundle patch, and activates it live without restarting!
 5. In **Settings → Plugins → TinyFish**, select your channel (`direct` or `monid`), enter the key for that channel, and hit **Save**!
+6. **Select it** — installing registers the provider, it does not choose it. Point the web path at TinyFish as shown in [Select it](#-select-it) below.
 
 ---
 
@@ -77,7 +78,21 @@ then `npm install @viztor/dsh-tinyfish` resolves from the mirror. Unless npmjs i
 
 > Bundles resolve at boot, so a restart picks it up — reloading the patch alone won't.
 
-**Add a key** — pick a channel below, save the key, and ask your agent to search for something. That's the whole install.
+**Add a key** — pick a channel below, save the key, and ask your agent to search for something.
+
+### Select it
+
+**Installing registers the provider; it does not choose it.** `dsh-web` picks between providers from its own config, and this bundle stays additive — it inserts its own row and touches nothing else. A plugin that reached into another package's row to make itself the default would be choosing on your behalf. So the choice is yours, in the profile's `cordis.patch.yml`:
+
+```yaml
+- id: web
+  name: "@deepseek-ai/dsh-web"
+  config:
+    searchProvider: tinyfish
+    fetchProvider: tinyfish
+```
+
+The two kinds are independent fields, so search can run through TinyFish while fetch stays on the shipped `http` provider, or the other way round. Reverting is the same two words in reverse — `deepseek-official` and `http` — with the plugin still mounted and idle.
 
 ## 🔑 Two channels, one plugin
 
@@ -104,7 +119,7 @@ Both keys can live side by side — saving one never overwrites the other, and s
 
 Both key fields are on the page at once, each labelled with the service it authenticates and each hint naming the reference the save lands on — so you can set the Monid key while Direct is selected, and tell which of the two exists without switching back and forth.
 
-> Going back is two words: set `searchProvider`/`fetchProvider` to `deepseek-official` and `http`. The bundle stays mounted and idle.
+> This row configures how TinyFish behaves; it does not select it. Pointing `searchProvider`/`fetchProvider` at `tinyfish` is a separate step in your profile patch — see [Select it](#-select-it). Reverting is the same two words in reverse.
 
 <details>
 <summary><strong>📖 Full configuration reference</strong></summary>

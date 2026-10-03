@@ -8,6 +8,9 @@
  */
 
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 
 import type { Context } from "@deepseek-ai/cordis";
 // Assertions stay on `node:assert` so that a failure here can only be the runner
@@ -74,6 +77,29 @@ test("the bundle exports what a cordis plugin must", () => {
   );
   assert.equal(plugin.name, "dsh-tinyfish");
   assert.equal(plugin.TINYFISH_PROVIDER_ID, "tinyfish");
+});
+
+test("the bundle patch is additive and names no protected package", () => {
+  // A bundle may insert its own rows. Reaching into another package's row —
+  // naming the web package so as to set `searchProvider` / `fetchProvider` — is
+  // a bundle choosing a provider for the host, and a patch-safety check reads
+  // it as impersonating a protected entry. Selection belongs to the profile,
+  // so the patch file must not carry the protected scope at all, comments
+  // included: a scanner cannot be relied on to skip them.
+  const root = join(dirname(fileURLToPath(import.meta.url)), "..");
+  const patch = readFileSync(join(root, "cordis.patch.yml"), "utf8");
+  assert.ok(
+    !patch.includes("@deepseek-ai/"),
+    "the bundle patch must name no protected package or entry"
+  );
+  // It still does its own job: insert the plugin's row under its own id, and
+  // leave selection to a layer that owns the decision.
+  assert.match(patch, /-\s*insert:/, "the patch inserts the plugin's row");
+  assert.match(patch, /id:\s*dsh-tinyfish/, "and that row is the plugin's own");
+  assert.ok(
+    !/searchProvider|fetchProvider/.test(patch.replaceAll(/^#.*$/gm, "")),
+    "and it selects nothing, since selection is the profile's decision"
+  );
 });
 
 test("it exports a schemastery Config, so the row renders as a settings section", () => {

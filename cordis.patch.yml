@@ -1,17 +1,21 @@
 # Bundle patch for `dsh-tinyfish`.
 #
-# The plugin only *offers* the `tinyfish` provider on both seam kinds. Whether
-# it is actually used is the profile's decision, in `dsh-web`'s config:
+# Additive only. This file inserts the plugin's own row and touches nothing
+# else — in particular it does NOT set the web seam's `searchProvider` /
+# `fetchProvider`. Selecting a provider is the profile's decision, and a bundle
+# that reaches into another package's row to make itself the default is making
+# that decision for the host. This plugin only *offers* `tinyfish`.
+#
+# A host that wants TinyFish on the web path says so in its own patch layer,
+# where the choice is visible and reversible — it targets the web row by id:
 #
 #   - id: web
-#     name: '@deepseek-ai/dsh-web'
 #     config:
 #       searchProvider: tinyfish
 #       fetchProvider: tinyfish
 #
-# Both rows are kept separate from the plugin row so the id is set in one place
-# and swapping back to `deepseek-official` / `http` is a two-word edit rather
-# than a plugin removal. Registering a provider nobody selects is free.
+# Reverting is the same two words pointing back at `deepseek-official` / `http`,
+# with this plugin still mounted and idle.
 #
 # `channel` picks the upstream route and is deliberately NOT set here, so the
 # schema default stands: `direct`, which calls TinyFish's own API with the key
@@ -34,8 +38,3 @@
       name: "dsh-tinyfish"
       config:
         attempts: 3
-- id: web
-  name: "@deepseek-ai/dsh-web"
-  config:
-    searchProvider: tinyfish
-    fetchProvider: tinyfish

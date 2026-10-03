@@ -226,7 +226,11 @@ test("the plugin can be reloaded, which a leaked registration would prevent", ()
 test("the profile's selection resolves to this provider, and back again", () => {
   const { search, fetch } = bootWithHarnessProviders();
 
-  // The bundle's own patch sets these, and that is what makes tinyfish win.
+  // The bundle registers the provider; the profile selects it. What this fake
+  // registry can show is the half the bundle owns — the id exists and is
+  // reachable under the name a profile would put in `searchProvider`. The
+  // bundle deliberately no longer patches dsh-web's row to make itself the
+  // default, so nothing here depends on that patch.
   const selectedSearch = search.get("tinyfish");
   const selectedFetch = fetch.get("tinyfish");
   assert.ok(selectedSearch, "searchProvider: tinyfish resolves");
