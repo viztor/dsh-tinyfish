@@ -1,3 +1,7 @@
+<p align="right">
+  <a href="README.md">English</a> | <a href="README.zh.md">简体中文</a> | <strong>日本語</strong>
+</p>
+
 <div align="center">
   <img src="icon.svg" alt="TinyFish logo" width="120" />
   <h1>dsh-tinyfish</h1>
@@ -14,13 +18,13 @@
 | 変更前 | 変更後 |
 | --- | --- |
 | 検索のたびに課金される | **$0**、ずっと無料 |
-| 取得したページは HTML のまま届き、ぎこちなく変換される | ブラウザー級の抽出エンジンから**クリーンな Markdown**を直接取得 |
+| 取得したページは HTML のまま届き、変換が不格好 | **クリーンな Markdown**、ブラウザー級の抽出エンジンから直接取得 |
 | プロバイダーの切り替えには再インストールが必要 | 設定ファイルの**2ワード**書き換えだけ、再インストール不要 |
 | プロバイダーはクエリしか受け付けない | **常駐のデフォルト** — ドメイン、言語、鮮度、日付範囲、キャッシュ TTL、セレクター |
 
-## 他の手段との比較
+## 📊 他の手段との比較
 
-| 用途 | 使うもの | コスト |
+| ユースケース | 選択肢 | コスト |
 | --- | --- | --- |
 | ネイティブツール内で検索とフェッチを無料で使う | **dsh-tinyfish**、どちらのチャネルでも | **$0** — direct なら TinyFish のキー、Monid ならプラットフォームのキー。ペイロードは同一です |
 | 出荷時デフォルト | `deepseek-official` + `http` | 呼び出しごとに課金。取得した HTML には turndown 変換のコストがかかります |
@@ -33,11 +37,11 @@
 
 DeepSeek Harness では、ターミナルに触れずに Web 画面から直接プラグインをインストールできます。
 
-1. DSH Web を開き、**設定 → プラグイン**へ進みます。
-2. **プラグインをインストール**をクリックします。
+1. DSH Web を開き、**Settings → Plugins**（設定 → プラグイン）へ進みます。
+2. **Install Plugin**（プラグインを追加）をクリックします。
 3. `dsh-tinyfish`（または `@viztor/dsh-tinyfish`）を検索または入力します。
 4. **インストール**をクリックします — DSH が npm からパッケージを自動取得し、バンドルパッチをビルドして、再起動なしでそのまま有効化します！
-5. **設定 → プラグイン → TinyFish**でチャネル（`direct` または `monid`）を選び、キーを入力 — 両方のキーを入力してもかまいません — **保存**を押します！
+5. **Settings → Plugins → TinyFish**（設定 → プラグイン → TinyFish）でチャネル（`direct` または `monid`）を選び、キーを入力（両方のキーを入力しても可）して **Save**（保存）を押します！
 6. インストールはこれで完了です — バンドルが検索・フェッチ両方の Web 経路を TinyFish に向けます。別の選び方は[選択する](#select-it)を参照してください。
 7. エージェントに時事的な質問をしてみましょう。ツール呼び出しが `tinyfish` として返ってくれば成功です。
 
@@ -74,7 +78,7 @@ npm install dsh-tinyfish   # or: npm install @viztor/dsh-tinyfish — same thing
 
 ```jsonc
 {
-  "dependencies": { "dsh-tinyfish": "^0.10.0" },
+  "dependencies": { "dsh-tinyfish": "^0.11.0" },
   "dsh": {
     "profile": {
       "bundles": [
@@ -108,7 +112,7 @@ npm install dsh-tinyfish   # or: npm install @viztor/dsh-tinyfish — same thing
 
 ## 🔑 2つのチャネル、1つのプラグイン
 
-|  | Direct _(デフォルト)_ | Monid 経由 |
+| 項目 | Direct _(デフォルト)_ | Monid 経由 |
 | --- | --- | --- |
 | 背後にあるもの | TinyFish 自身の API | 同じ TinyFish エンドポイントを、Monid ウォレット経由で利用 |
 | 必要なもの | [tinyfish.ai](https://agent.tinyfish.ai/sign-up?ref=v1.dXNlcl8zSnh2TDJGaldOV2FQYWhnaDRqbTIzc0dqZTE.KxSdeNUG14oJKVFVFWLkOwn3-Pia7QI5BuaxiJ_iEVY) の無料キー | [app.monid.ai](https://app.monid.ai) のプラットフォームキー |
@@ -143,21 +147,21 @@ npm install dsh-tinyfish   # or: npm install @viztor/dsh-tinyfish — same thing
 | キー | デフォルト | 意味 |
 | --- | --- | --- |
 | `channel` | `direct` | `monid` または `direct` |
-| `apiKey` | _(unset)_ | どちらのチャネルにも使えるリテラルの資格情報。参照を使うことが推奨されます |
+| `apiKey` | _(未設定)_ | どちらのチャネルにも使えるリテラルの資格情報。参照を使うことが推奨されます |
 | `apiKeyEnv` | `TINYFISH_API_KEY` | `direct` 用の資格情報参照、または環境変数 |
 | `monidKeyEnv` | `MONID_API_KEY` | `monid` 用の資格情報参照、または環境変数 |
-| `purpose` | _(unset)_ | すべての検索・フェッチに添える目的文。TinyFish はこれに基づいてランク付けします。最大2000文字 |
+| `purpose` | _(未設定)_ | すべての検索・フェッチに添える目的文。TinyFish はこれに基づいてランク付けします。最大2000文字 |
 | `attempts` | `3` | 一時的な失敗や空の検索に対するリトライ回数（1–5） |
-| `filters.domainType` | _(unset)_ | `web` \| `news` \| `research_paper` — パッチファイルでのみ指定 |
-| `filters.language` / `.location` | _(unset)_ | 地理ターゲティング — パッチファイルでのみ指定 |
-| `filters.includeDomains` / `.excludeDomains` | _(unset)_ | カンマ区切り — パッチファイルでのみ指定 |
-| `filters.recencyMinutes` | _(unset)_ | 鮮度ウィンドウ（分単位、1–5256000）。上流では `.afterDate` と相互排他 — パッチファイルでのみ指定 |
-| `filters.afterDate` | _(unset)_ | 日付の下限 `YYYY-MM-DD`。`research_paper` には使えません — パッチファイルでのみ指定 |
-| `filters.pubYearMin` | _(unset)_ | 出版年の下限（0–9999）。`research_paper` 専用 — パッチファイルでのみ指定 |
-| `fetchOptions.ttl` | _(unset)_ | キャッシュ許容秒数。`0` はライブフェッチを強制、未設定はあらゆるキャッシュを許容 — パッチファイルでのみ指定 |
-| `fetchOptions.perUrlTimeoutMs` | _(unset)_ | URL ごとの制限時間（ミリ秒、1–110000）— パッチファイルでのみ指定 |
-| `fetchOptions.excludeSelectors` | _(unset)_ | 抽出前に除去するカンマ区切りの CSS セレクター（1–20件 × 各1000文字以内）。直接の PDF/CSV ダウンロードでは拒否されます — パッチファイルでのみ指定 |
-| `monidBase` / `searchBase` / `fetchBase` | upstream | エンドポイントの上書き。ステージング用です |
+| `filters.domainType` | _(未設定)_ | `web` \| `news` \| `research_paper` — パッチファイルでのみ指定 |
+| `filters.language` / `.location` | _(未設定)_ | 地理ターゲティング — パッチファイルでのみ指定 |
+| `filters.includeDomains` / `.excludeDomains` | _(未設定)_ | カンマ区切り — パッチファイルでのみ指定 |
+| `filters.recencyMinutes` | _(未設定)_ | 鮮度ウィンドウ（分単位、1–5256000）。上流では `.afterDate` と相互排他 — パッチファイルでのみ指定 |
+| `filters.afterDate` | _(未設定)_ | 日付の下限 `YYYY-MM-DD`。`research_paper` には使えません — パッチファイルでのみ指定 |
+| `filters.pubYearMin` | _(未設定)_ | 出版年の下限（0–9999）。`research_paper` 専用 — パッチファイルでのみ指定 |
+| `fetchOptions.ttl` | _(未設定)_ | キャッシュ許容秒数。`0` はライブフェッチを強制、未設定はあらゆるキャッシュを許容 — パッチファイルでのみ指定 |
+| `fetchOptions.perUrlTimeoutMs` | _(未設定)_ | URL ごとの制限時間（ミリ秒、1–110000）— パッチファイルでのみ指定 |
+| `fetchOptions.excludeSelectors` | _(未設定)_ | 抽出前に除去するカンマ区切りの CSS セレクター（1–20件 × 各1000文字以内）。直接の PDF/CSV ダウンロードでは拒否されます — パッチファイルでのみ指定 |
+| `monidBase` / `searchBase` / `fetchBase` | 上流規定値 | エンドポイントの上書き。ステージング用です |
 | `search` / `fetch` | `true` | この kind を提供するかどうか。`false` は登録解除せずに利用不可として報告します |
 
 一方をオフにすると _missing_ ではなく _unavailable_ として報告されます — ハーネスは両者を区別し、後者のみが「インストールが壊れている」という意味です。ただし _unavailable_ が黙ってフォールスルーすることはありません。`searchProvider`/`fetchProvider` がまだ TinyFish を指している場合、その呼び出しは失敗します。一方を使うには、そのツールを別のプロバイダーに向けてください。

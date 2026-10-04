@@ -1,3 +1,7 @@
+<p align="right">
+  <a href="README.md">English</a> | <strong>简体中文</strong> | <a href="README.ja.md">日本語</a>
+</p>
+
 <div align="center">
   <img src="icon.svg" alt="TinyFish logo" width="120" />
   <h1>dsh-tinyfish</h1>
@@ -18,9 +22,9 @@
 | 换提供方就要重装 | 改配置文件的**两个单词**即可，不用重装 |
 | 每个提供方要么接受你的原样查询，要么什么都不接受 | **常驻默认值**——域名、语言、时效、日期上下界、缓存 TTL、选择器 |
 
-## 方案对比
+## 📊 方案对比
 
-| 需求 | 用法 | 花费 |
+| 适用场景 | 解决方案 | 费用 |
 | --- | --- | --- |
 | 在原生工具里免费搜索与抓取 | **dsh-tinyfish**，任一通道 | **$0**——直连通道用 TinyFish 密钥，Monid 通道用平台密钥；两种载荷完全一致 |
 | 官方默认 | `deepseek-official` + `http` | 按次计费；抓回的 HTML 还要再付一道 turndown 转换 |
@@ -33,11 +37,11 @@
 
 DeepSeek Harness 支持直接在 Web 界面安装插件，全程不用碰终端：
 
-1. 打开 DSH Web → **Settings → Plugins** (设置 → 插件).
-2. 点击 **Install Plugin** (添加插件).
-3. 搜索或输入 `dsh-tinyfish` (或 `@viztor/dsh-tinyfish`).
+1. 打开 DSH Web → **Settings → Plugins**（设置 → 插件）。
+2. 点击 **Install Plugin**（添加插件）。
+3. 搜索或输入 `dsh-tinyfish`（或 `@viztor/dsh-tinyfish`）。
 4. 点击 **Install**（安装）——DSH 会自动从 npm 拉取软件包、构建 bundle 补丁并实时激活，无需重启！
-5. 在 **Settings → Plugins → TinyFish**（设置 → 插件 → Tinyfish）中选择通道（`direct` 或 `monid`），填入密钥——两个都填也行——然后点击 **Save**（保存）！
+5. 在 **Settings → Plugins → TinyFish**（设置 → 插件 → TinyFish）中选择通道（`direct` 或 `monid`），填入密钥——两个都填也行——然后点击 **Save**（保存）！
 6. 安装到此结束——bundle 已把两条网络链路都指向 TinyFish。若想另行选择，参见[选择提供方](#select-it)。
 7. 问 agent 一个时效性问题；工具调用应以 `tinyfish` 名义返回。
 
@@ -74,7 +78,7 @@ npm install dsh-tinyfish   # or: npm install @viztor/dsh-tinyfish — same thing
 
 ```jsonc
 {
-  "dependencies": { "dsh-tinyfish": "^0.10.0" },
+  "dependencies": { "dsh-tinyfish": "^0.11.0" },
   "dsh": {
     "profile": {
       "bundles": [
@@ -108,7 +112,7 @@ npm install dsh-tinyfish   # or: npm install @viztor/dsh-tinyfish — same thing
 
 ## 🔑 双通道，一个插件
 
-|  | 直连 _(默认)_ | 经 Monid |
+| 特性 | 直连 _(默认)_ | 经 Monid |
 | --- | --- | --- |
 | 背后是什么 | TinyFish 官方 API | 同样的 TinyFish 端点，经你的 Monid 钱包转发 |
 | 需要什么 | [tinyfish.ai](https://agent.tinyfish.ai/sign-up?ref=v1.dXNlcl8zSnh2TDJGaldOV2FQYWhnaDRqbTIzc0dqZTE.KxSdeNUG14oJKVFVFWLkOwn3-Pia7QI5BuaxiJ_iEVY) 的免费密钥 | [app.monid.ai](https://app.monid.ai) 的平台密钥 |
@@ -127,7 +131,7 @@ npm install dsh-tinyfish   # or: npm install @viztor/dsh-tinyfish — same thing
 
 ## ⚙️ 设置页
 
-**Settings → Plugins → TinyFish（设置 → 插件 → Tinyfish）。**所有可编辑项都在这里：TinyFish 是否回答搜索与抓取、通道选择、密钥、搜索排序依据和重试。改动先暂存、一起保存；你输入的密钥由 harness 保管，绝不写入 profile。
+**Settings → Plugins → TinyFish**（设置 → 插件 → TinyFish）。所有可编辑项都在这里：TinyFish 是否回答搜索与抓取、通道选择、密钥、搜索排序依据和重试。改动先暂存、一起保存；你输入的密钥由 harness 保管，绝不写入 profile。
 
 两个密钥框同时摆在页面上，各自标明所鉴权的服务，提示里写清保存落到哪个引用——于是可以在 Direct 选中时配 Monid 密钥，不用来回切换也能看清两个密钥各是否存在。
 

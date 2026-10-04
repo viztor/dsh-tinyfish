@@ -1,3 +1,7 @@
+<p align="right">
+  <strong>English</strong> | <a href="README.zh.md">简体中文</a> | <a href="README.ja.md">日本語</a>
+</p>
+
 <div align="center">
   <img src="icon.svg" alt="TinyFish logo" width="120" />
   <h1>dsh-tinyfish</h1>
@@ -18,7 +22,7 @@ Your agent can already reason. This gives it something to reason _about_: live s
 | Switching providers means reinstalling | **Two words** in a config file, no reinstall |
 | Every provider takes the query or nothing | **Standing defaults** — domain, language, recency, date bounds, cache TTL, selectors |
 
-## How it compares
+## 📊 How it compares
 
 | Need | Use | Cost |
 | --- | --- | --- |
@@ -74,7 +78,7 @@ then `npm install @viztor/dsh-tinyfish` resolves from the mirror. Unless npmjs i
 
 ```jsonc
 {
-  "dependencies": { "dsh-tinyfish": "^0.10.0" },
+  "dependencies": { "dsh-tinyfish": "^0.11.0" },
   "dsh": {
     "profile": {
       "bundles": [
@@ -108,7 +112,7 @@ The two kinds are independent fields, so search can run through TinyFish while f
 
 ## 🔑 Two channels, one plugin
 
-|  | Direct _(default)_ | Via Monid |
+| Feature | Direct _(default)_ | Via Monid |
 | --- | --- | --- |
 | What's behind it | TinyFish's own API | The same TinyFish endpoints, through your Monid wallet |
 | You need | A free key from [tinyfish.ai](https://agent.tinyfish.ai/sign-up?ref=v1.dXNlcl8zSnh2TDJGaldOV2FQYWhnaDRqbTIzc0dqZTE.KxSdeNUG14oJKVFVFWLkOwn3-Pia7QI5BuaxiJ_iEVY) | A platform key from [app.monid.ai](https://app.monid.ai) |
