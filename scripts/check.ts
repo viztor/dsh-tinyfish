@@ -784,6 +784,77 @@ if (!existsSync(clientPath)) {
   }
 }
 
+/* ----------------------------- 12. translations track the English README */
+
+/**
+ * README.zh.md and README.ja.md are translations, not independent documents:
+ * a section added to one side and not the others is a silent fork, and a code
+ * block edited in translation quietly diverges from what the reader can run.
+ * The check compares structure, not prose — heading levels in order, and
+ * fenced code block counts — because prose legitimately differs while
+ * structure must not. Fences are tracked so a `#` comment inside a sample is
+ * not read as a heading.
+ */
+const structureOf = (text: string): string => {
+  const segments: string[] = [];
+  let inFence = false;
+  for (const line of text.split("\n")) {
+    if (line.startsWith("```")) {
+      segments.push("fence");
+      inFence = !inFence;
+      continue;
+    }
+    if (inFence) continue;
+    const level = /^(#{1,6})\s/.exec(line)?.[1]?.length;
+    if (level !== undefined) segments.push(`h${level}`);
+  }
+  return segments.join(" ");
+};
+
+// The matcher earns its place only if it sees what it claims to: a `#`
+// comment inside a fence is not a heading, and a dropped section or an added
+// block changes the sequence. A matcher blind to either would pass a forked
+// translation the way an untested secret scanner passes everything.
+const fencedComment = [
+  "# Title",
+  "```sh",
+  "# a comment, not a heading",
+  "```",
+  "## Body",
+].join("\n");
+if (structureOf(fencedComment) !== "h1 fence fence h2") {
+  fail("the doc-structure matcher counts a fenced comment as a heading");
+}
+const driftedTranslation = [
+  "# Title",
+  "```sh",
+  "```",
+  "## Body",
+  "### Extra",
+].join("\n");
+if (structureOf(driftedTranslation) === structureOf(fencedComment)) {
+  fail("the doc-structure matcher cannot see a drifted translation");
+}
+
+const englishStructure = structureOf(
+  readFileSync(join(ROOT, "README.md"), "utf8")
+);
+for (const name of ["README.zh.md", "README.ja.md"]) {
+  const path = join(ROOT, name);
+  if (!existsSync(path)) {
+    fail(`${name} is missing — translate README.md and keep its structure`);
+    continue;
+  }
+  if (structureOf(readFileSync(path, "utf8")) !== englishStructure) {
+    fail(
+      `${name} no longer tracks README.md: headings or code fences differ, ` +
+        "so one side gained, lost, or re-leveled a section"
+    );
+  } else {
+    ok(`${name} tracks README.md structurally`);
+  }
+}
+
 /* ------------------------------------------------------------------- report */
 
 for (const note of notes) console.log(`  ok   ${note}`);
