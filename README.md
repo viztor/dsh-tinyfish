@@ -18,6 +18,15 @@ Your agent can already reason. This gives it something to reason _about_: live s
 | Switching providers means reinstalling | **Two words** in a config file, no reinstall |
 | Every provider takes the query or nothing | **Standing defaults** — domain, language, recency, date bounds, cache TTL, selectors |
 
+## How it compares
+
+| Need | Use | Cost |
+| --- | --- | --- |
+| Search and fetch inside the native tools, free | **dsh-tinyfish**, either channel | **$0** — a TinyFish key on direct, your platform key on Monid; identical payloads |
+| The shipped defaults | `deepseek-official` + `http` | Bills per call; fetched HTML pays a turndown conversion |
+| Provider-specific SERP detail (geo, volume, rank) or bulk queries | A Monid SERP mirror via `monid_run` | $0.03–$0.12 per call — only when the task needs that detail |
+| Pages `fetch` cannot read (JS-heavy, login, interaction) | `tinyfish agent` / `browser` from the CLI | Metered ($0.016/step, $0.002/min) — escalate only from an empty fetch |
+
 ## 🚀 Quick start
 
 ### Method 1: Direct from Web UI (Recommended)
