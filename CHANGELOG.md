@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.10.0](https://github.com/viztor/dsh-tinyfish/compare/v0.9.1...v0.10.0) (2026-10-04)
+
+
+### Features
+
+* **config:** add standing defaults for search and fetch ([ddbdcfd](https://github.com/viztor/dsh-tinyfish/commit/ddbdcfd82d82cf9694fc72c758d3f50892b06ff6))
+
 ## [0.9.1](https://github.com/viztor/dsh-tinyfish/compare/v0.9.0...v0.9.1) (2026-10-03)
 
 
