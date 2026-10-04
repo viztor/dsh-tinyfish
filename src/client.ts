@@ -46,7 +46,7 @@ const DEFAULT_CREDENTIALS = "~/.config/monid/credentials.yaml";
 /** Where the official `tinyfish` CLI keeps its key (the same file it reads). */
 const DEFAULT_TINYFISH_CONFIG = "~/.tinyfish/config.json";
 
-/** Base backoff between attempts; doubles per attempt. */
+/** Base backoff between attempts; grows linearly with the attempt. */
 const DEFAULT_RETRY_DELAY_MS = 1200;
 
 /** Poll cadence and ceiling for an async Monid run. */
@@ -654,15 +654,15 @@ function requireKey(channel: TinyfishChannel, key: string): void {
   // two do not have to be told apart by reading a message.
   if (channel === "monid") {
     throw new WebError(
-      "The tinyfish provider has no Monid API key. Run `monid keys add` to " +
-        "store one in the local credential file, or export MONID_API_KEY, or " +
+      "The tinyfish provider has no Monid API key. Save one in Settings → Plugins → TinyFish, " +
+        "or run `monid keys add` to store one in the local credential file, or export MONID_API_KEY, or " +
         "set the dsh-tinyfish `apiKeyEnv` row in the profile's cordis.patch.yml.",
       WEB_PROVIDER_CREDENTIAL_MISSING
     );
   }
   throw new WebError(
-    "The tinyfish provider has no TinyFish API key. Run `tinyfish auth " +
-      "login` to save one, or export TINYFISH_API_KEY, or set the " +
+    "The tinyfish provider has no TinyFish API key. Save one in Settings → Plugins → TinyFish, " +
+      "or run `tinyfish auth login` to save one, or export TINYFISH_API_KEY, or set the " +
       "dsh-tinyfish `apiKeyEnv` row in the profile's cordis.patch.yml — or " +
       "switch the provider's channel to 'monid' to use a Monid key instead.",
     WEB_PROVIDER_CREDENTIAL_MISSING
@@ -1031,7 +1031,7 @@ export interface TinyfishSearchOptions extends ResolveApiKeyOptions {
   searchBase?: string;
   signal?: AbortSignal;
   attempts?: number;
-  /** Base backoff between attempts, in ms; doubles per attempt. Default 1200. */
+  /** Base backoff between attempts, in ms; grows linearly with the attempt. Default 1200. */
   delayMs?: number;
   onRetry?: (attempt: number, total: number) => void;
   /** Poll cadence for an async Monid run. */
@@ -1071,7 +1071,7 @@ export interface TinyfishFetchOptions extends ResolveApiKeyOptions {
   fetchBase?: string;
   signal?: AbortSignal;
   attempts?: number;
-  /** Base backoff between attempts, in ms; doubles per attempt. Default 1200. */
+  /** Base backoff between attempts, in ms; grows linearly with the attempt. Default 1200. */
   delayMs?: number;
   onRetry?: (attempt: number, total: number) => void;
   /** Poll cadence for an async Monid run. */
