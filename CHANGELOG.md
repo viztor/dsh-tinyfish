@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.10.1](https://github.com/viztor/dsh-tinyfish/compare/v0.10.0...v0.10.1) (2026-10-04)
+
+
+### Bug Fixes
+
+* **client:** name the Settings path in missing-credential errors ([0fadbf7](https://github.com/viztor/dsh-tinyfish/commit/0fadbf7d26c219761626fc82c630c7c3f3f511f1))
+
 ## [0.10.0](https://github.com/viztor/dsh-tinyfish/compare/v0.9.1...v0.10.0) (2026-10-04)
 
 
