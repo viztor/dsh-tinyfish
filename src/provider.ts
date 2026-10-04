@@ -12,6 +12,7 @@ import {
   type CredentialResolver,
   WEB_PROVIDER_ERROR,
   type TinyfishChannel,
+  type TinyfishFetchDefaults,
   type TinyfishFetchPayload,
   type TinyfishSearchHit,
   type TinyfishSearchPayload,
@@ -65,8 +66,14 @@ export interface TinyfishProviderOptions {
   readonly resolveCredential?: CredentialResolver;
   /** Goal statement forwarded upstream; TinyFish ranks on it. */
   readonly purpose?: string;
-  /** Upstream-named search filters, already snake_case. */
-  readonly filters: Readonly<Record<string, string>>;
+  /** Upstream-named search filters, already snake_case. Values may be numeric
+   * (`recency_minutes`, `pub_year_min` are integers upstream); the direct
+   * channel stringifies them into the query string, the monid channel keeps
+   * them as JSON numbers in `queryParams`. */
+  readonly filters: Readonly<Record<string, string | number>>;
+  /** Upstream-named fetch body defaults, already snake_case; see
+   * {@link TinyfishFetchDefaults}. Always present, possibly empty. */
+  readonly fetchOptions: Readonly<TinyfishFetchDefaults>;
   readonly attempts: number;
   readonly monidBase: string;
   readonly searchBase: string;
@@ -139,8 +146,9 @@ const hasUrl = (
  * TinyFish search through the `ctx.web` search seam.
  *
  * The seam's request is only `{query, maxResults}`; everything else
- * (`domainType`, `location`, `includeDomains`, …) comes from plugin config and
- * applies to every query, which is the shape these filters actually want.
+ * (`domainType`, `location`, `includeDomains`, `purpose`, …) comes from plugin
+ * config and applies to every query, which is the shape these filters
+ * actually want.
  */
 export class TinyfishSearchProvider implements WebSearchProvider {
   readonly id = TINYFISH_PROVIDER_ID;
@@ -204,6 +212,10 @@ export class TinyfishSearchProvider implements WebSearchProvider {
       monidKeyEnv: options.monidKeyEnv,
       resolveCredential: options.resolveCredential,
       query: request.query,
+      // The goal statement rides search as well as fetch: TinyFish uses it as
+      // ranking signal for both, and the seam offers no per-request place to
+      // put one — this is the standing default the config row sets.
+      purpose: options.purpose,
       filters: { ...options.filters },
       monidBase: options.monidBase,
       searchBase: options.searchBase,
@@ -298,6 +310,7 @@ export class TinyfishFetchProvider implements WebFetchProvider {
       resolveCredential: options.resolveCredential,
       urls: [request.url],
       purpose: options.purpose,
+      fetchOptions: options.fetchOptions,
       monidBase: options.monidBase,
       fetchBase: options.fetchBase,
       signal,

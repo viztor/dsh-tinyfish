@@ -135,7 +135,9 @@ test("every schema field has a stated default and a stated junk behaviour", () =
   const declared = Object.keys(validated).toSorted();
 
   assert.deepEqual(
-    declared.filter((k) => k !== "apiKey" && k !== "filters"),
+    declared.filter(
+      (k) => k !== "apiKey" && k !== "filters" && k !== "fetchOptions"
+    ),
     FIELDS.map((f) => f.name).toSorted(),
     "the table covers the schema exactly — a new field must be given a default here"
   );
@@ -184,6 +186,275 @@ test("every schema field has a stated default and a stated junk behaviour", () =
       `${field.name}: an explicit value is honoured, not silently dropped`
     );
   }
+
+  // The one flat member with an upstream length cap. Past it upstream 4xxs
+  // the whole request, and this field rides every search and fetch — so the
+  // schema refuses a validated row, and a raw one drops the sentence rather
+  // than failing every request.
+  assert.throws(() => Config({ purpose: "x".repeat(2001) }), /2000/);
+  assert.equal(
+    resolveOptions({ purpose: "x".repeat(2001) }, undefined, {}).purpose,
+    undefined,
+    "an over-long purpose degrades to unset instead of failing every request"
+  );
+});
+
+test("the nested sections have a stated default and a stated junk behaviour", () => {
+  // The flat table above cannot see *inside* `filters` and `fetchOptions`, so
+  // their members need the same contract it gives top-level fields: unset
+  // yields the empty group, an explicit value round-trips in the upstream's
+  // spelling, and an unusable value degrades to unset rather than travelling
+  // as garbage. The set case runs in both row shapes — a validated row boxes
+  // the *section*, and reading members off the box was how every filter was
+  // once dropped in silence while the raw row beside it resolved.
+  //
+  // The junk cases run raw only — but for two different reasons. The
+  // out-of-range and mistyped values are rejected by the schema itself, so a
+  // validated row carrying them cannot exist (the test below this one pins
+  // that rejection); a blank in a plain string member is schema-valid, and
+  // only `resolveOptions` drops it. Either way the row never reaches a
+  // request as garbage.
+  interface NestedFixture {
+    label: string;
+    section: "filters" | "fetchOptions";
+    /** A row carrying exactly this member with a valid value. */
+    set: Parameters<typeof Config>[0];
+    /** What that row must resolve the section to — the upstream's spelling. */
+    expected: Record<string, unknown>;
+    /** One unusable variant per entry, as an unvalidated raw row. */
+    junk: Record<string, Record<string, unknown>>[];
+  }
+
+  const NESTED: NestedFixture[] = [
+    {
+      label: "filters.domainType",
+      section: "filters",
+      set: { filters: { domainType: "news" } },
+      expected: { domain_type: "news" },
+      junk: [{ filters: { domainType: "" } }],
+    },
+    {
+      label: "filters.language",
+      section: "filters",
+      set: { filters: { language: "fr" } },
+      expected: { language: "fr" },
+      junk: [{ filters: { language: "" } }],
+    },
+    {
+      label: "filters.location",
+      section: "filters",
+      set: { filters: { location: "US" } },
+      expected: { location: "US" },
+      junk: [{ filters: { location: "" } }],
+    },
+    {
+      label: "filters.includeDomains",
+      section: "filters",
+      set: { filters: { includeDomains: "a.com,b.com" } },
+      expected: { include_domains: "a.com,b.com" },
+      junk: [{ filters: { includeDomains: "" } }],
+    },
+    {
+      label: "filters.excludeDomains",
+      section: "filters",
+      set: { filters: { excludeDomains: "c.com" } },
+      expected: { exclude_domains: "c.com" },
+      junk: [{ filters: { excludeDomains: "" } }],
+    },
+    {
+      // Numeric members differ in what zero means: `recency_minutes: 0` is
+      // below the upstream floor of 1 and must be dropped, while
+      // `fetchOptions.ttl: 0` is a meaningful setting and must survive — see
+      // the fetch case below. One shared "falsy is unset" rule would get
+      // either the filters or the cache policy wrong.
+      label: "filters.recencyMinutes",
+      section: "filters",
+      set: { filters: { recencyMinutes: 60 } },
+      expected: { recency_minutes: 60 },
+      // Three unusable forms: below the floor, fractional, and non-numeric.
+      // `readInteger` forwards only in-range integers, so all three degrade
+      // to unset instead of reaching upstream as `0`, `60.5`, or `NaN`.
+      junk: [
+        { filters: { recencyMinutes: 0 } },
+        { filters: { recencyMinutes: 60.5 } },
+        { filters: { recencyMinutes: "60 minutes" } },
+      ],
+    },
+    {
+      label: "filters.afterDate",
+      section: "filters",
+      set: { filters: { afterDate: "2026-01-01" } },
+      expected: { after_date: "2026-01-01" },
+      junk: [{ filters: { afterDate: "soon" } }],
+    },
+    {
+      label: "filters.pubYearMin",
+      section: "filters",
+      set: { filters: { pubYearMin: 2017 } },
+      expected: { pub_year_min: 2017 },
+      junk: [
+        { filters: { pubYearMin: 999_999 } },
+        // Whitespace is blank: untrimmed it becomes the floor of `0`, a
+        // publication-year bound the operator never set.
+        { filters: { pubYearMin: " " } },
+      ],
+    },
+    {
+      // The case the falsy rules exist for: `ttl: 0` means "force a live
+      // fetch" and must ride as the number zero, while a blank `ttl` means
+      // "never set" and must send nothing — `Number("")` is `0`, so without
+      // the blank check an unset row would silently force every fetch live.
+      label: "fetchOptions.ttl",
+      section: "fetchOptions",
+      set: { fetchOptions: { ttl: 0 } },
+      expected: { ttl: 0 },
+      junk: [
+        { fetchOptions: { ttl: "" } },
+        // Whitespace is blank too: without the trim in `readInteger`,
+        // `Number(" ")` is `0` and this row would force every fetch live.
+        { fetchOptions: { ttl: " " } },
+        { fetchOptions: { ttl: -1 } },
+        // `ttl` has no upper bound, so this row is the one where the
+        // non-integer guard matters most: without it `Number("soon")` is
+        // `NaN`, both comparisons fall through, and the body ships
+        // `ttl: NaN` → JSON `null` on every fetch.
+        { fetchOptions: { ttl: "soon" } },
+      ],
+    },
+    {
+      label: "fetchOptions.perUrlTimeoutMs",
+      section: "fetchOptions",
+      set: { fetchOptions: { perUrlTimeoutMs: 30_000 } },
+      expected: { per_url_timeout_ms: 30_000 },
+      junk: [
+        { fetchOptions: { perUrlTimeoutMs: 999_999 } },
+        // `step(1)` is a schema rule; the raw row has no schema, so the
+        // fraction must be dropped here rather than rounded — rounding
+        // would apply a budget the user never set.
+        { fetchOptions: { perUrlTimeoutMs: 30_000.5 } },
+      ],
+    },
+    {
+      // Dropped as a whole set, never trimmed down to fit: an out-of-range
+      // selector list is a mistake in the row, and half a list the user never
+      // wrote would be worse than none.
+      label: "fetchOptions.excludeSelectors",
+      section: "fetchOptions",
+      set: { fetchOptions: { excludeSelectors: "nav, footer" } },
+      expected: { exclude_selectors: ["nav", "footer"] },
+      junk: [
+        { fetchOptions: { excludeSelectors: " , " } },
+        // The length guard, not just the count: 1001 chars is still ONE
+        // entry, so the count check passes and only `every(length <= 1000)`
+        // can drop it — upstream answers 422 to a selector this long.
+        { fetchOptions: { excludeSelectors: "x".repeat(1001) } },
+        {
+          fetchOptions: {
+            excludeSelectors: Array.from(
+              { length: 21 },
+              (_, i) => `.ad-${i}`
+            ).join(","),
+          },
+        },
+      ],
+    },
+  ];
+
+  // One fixture member per member the schema declares — the nested twin of
+  // the flat table's "the table covers the schema exactly". Nested members
+  // are filtered out of that guard (a whole section is one top-level key),
+  // so a member declared here but threaded nowhere — the `attempts` defect
+  // class — would pass every other assertion in this file. The declaration
+  // side comes from the schema node itself, not from a validated output:
+  // an unset section unboxes to `{}` and cannot enumerate what it leaves out.
+  interface ObjectNodeLike {
+    dict?: Record<string, unknown>;
+  }
+  const declaredMembers = (section: "filters" | "fetchOptions"): string[] => {
+    const root = Config as unknown as { dict: Record<string, unknown> };
+    return Object.keys(
+      (root.dict[section] as ObjectNodeLike).dict ?? {}
+    ).toSorted();
+  };
+  for (const section of ["filters", "fetchOptions"] as const) {
+    const covered = NESTED.flatMap((fixture) =>
+      fixture.section === section
+        ? Object.keys(fixture.set?.[section] ?? {})
+        : []
+    ).toSorted();
+    assert.deepEqual(
+      covered,
+      declaredMembers(section),
+      `${section}: one fixture member per schema-declared member`
+    );
+  }
+
+  assert.deepEqual(
+    resolveOptions({}, undefined, {}).filters,
+    {},
+    "filters: an unset row yields the empty group"
+  );
+  assert.deepEqual(
+    resolveOptions({}, undefined, {}).fetchOptions,
+    {},
+    "fetchOptions: an unset row yields the empty group"
+  );
+
+  for (const fixture of NESTED) {
+    assert.deepEqual(
+      resolveOptions(fixture.set, undefined, {})[fixture.section],
+      fixture.expected,
+      `${fixture.label}: an explicit value is honoured, in the upstream's spelling`
+    );
+    assert.deepEqual(
+      resolveOptions(Config(fixture.set), undefined, {})[fixture.section],
+      fixture.expected,
+      `${fixture.label}: a validated section carries its value too`
+    );
+    for (const row of fixture.junk) {
+      assert.deepEqual(
+        resolveOptions(row, undefined, {})[fixture.section],
+        {},
+        `${fixture.label}: an unusable value degrades to the empty group`
+      );
+    }
+  }
+});
+
+test("the schema rejects the nested junk, the other half of the contract", () => {
+  // Every junk row above proves `resolveOptions` drops an unusable value from
+  // a raw row; this proves the stated ranges are schema-enforced too, the
+  // way `attempts` is pinned in `test/plugin.test.ts`. Without it a loosened
+  // bound — someone deleting `.max(9999)` — fails no test while the README
+  // still advertises the range.
+  //
+  // Blanks in the plain string members are deliberately absent: the schema
+  // accepts those and `resolveOptions` drops them, which is the contract the
+  // junk rows above pin. So are the two `excludeSelectors` rows — a long or
+  // empty CSV is a well-typed string, and only the length/count checks in
+  // `resolveOptions` can drop it.
+  // Rows the schema's input type cannot express are the point of the test,
+  // so they are untyped here and cast once at the `Config` boundary — the
+  // same move `test/plugin.test.ts` makes for the bad channel.
+  const rejected: unknown[] = [
+    { filters: { domainType: "" } },
+    { filters: { recencyMinutes: 0 } },
+    { filters: { recencyMinutes: "60 minutes" } },
+    { filters: { afterDate: "soon" } },
+    { filters: { pubYearMin: 999_999 } },
+    { fetchOptions: { ttl: "" } },
+    { fetchOptions: { ttl: -1 } },
+    { fetchOptions: { ttl: "soon" } },
+    { fetchOptions: { perUrlTimeoutMs: 0 } },
+    { fetchOptions: { perUrlTimeoutMs: 999_999 } },
+    { fetchOptions: { perUrlTimeoutMs: 30_000.5 } },
+  ];
+  for (const row of rejected) {
+    assert.throws(
+      () => Config(row as Parameters<typeof Config>[0]),
+      JSON.stringify(row)
+    );
+  }
 });
 
 test("a validated row and a raw row resolve identically", () => {
@@ -197,6 +468,10 @@ test("a validated row and a raw row resolve identically", () => {
     { channel: "monid" },
     { attempts: 5 },
     { apiKeyEnv: "X" },
+    // Both nested sections at once: the shape that used to disagree, because
+    // a validated section boxed its members away from a plain-object read.
+    { filters: { domainType: "news", recencyMinutes: 60 } },
+    { fetchOptions: { ttl: 0, excludeSelectors: "nav" } },
   ];
   for (const row of cases) {
     const label = JSON.stringify(row);

@@ -254,6 +254,9 @@ test("config: harness camelCase filters become upstream snake_case", () => {
       location: "US",
       includeDomains: "a.com,b.com",
       excludeDomains: "c.com",
+      recencyMinutes: 60,
+      afterDate: "2026-01-01",
+      pubYearMin: 2017,
     },
   });
   assert.deepEqual(o.filters, {
@@ -262,7 +265,40 @@ test("config: harness camelCase filters become upstream snake_case", () => {
     location: "US",
     include_domains: "a.com,b.com",
     exclude_domains: "c.com",
+    recency_minutes: 60,
+    after_date: "2026-01-01",
+    pub_year_min: 2017,
   });
+});
+
+test("config: fetchOptions keeps the upstream's own names, and blank means unset", () => {
+  // The camelCase → snake_case translation happened in `resolveOptions`, so
+  // the group crosses the provider and client boundaries already spelled the
+  // way the fetch body wants it — the same contract `filters` has for query
+  // params. The selector list is split here too: one CSV in the row becomes
+  // the string array upstream types, with blank entries dropped.
+  const o = plugin.resolveOptions({
+    fetchOptions: {
+      ttl: 0,
+      perUrlTimeoutMs: 30_000,
+      excludeSelectors: "nav,  footer ,",
+    },
+  });
+  assert.deepEqual(o.fetchOptions, {
+    ttl: 0,
+    per_url_timeout_ms: 30_000,
+    exclude_selectors: ["nav", "footer"],
+  });
+  assert.deepEqual(
+    plugin.resolveOptions({}).fetchOptions,
+    {},
+    "unset yields the empty group"
+  );
+  assert.deepEqual(
+    plugin.resolveOptions({ fetchOptions: { ttl: "" } }).fetchOptions,
+    {},
+    "a blank ttl is unset, not zero — zero would force a live fetch"
+  );
 });
 
 test("config: empty and absent filters contribute nothing", () => {

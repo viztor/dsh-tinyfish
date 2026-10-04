@@ -600,11 +600,12 @@ test("the provide hint does not promise a fallthrough", () => {
   );
 });
 
-test("purpose is a fetch-only field and hides when fetch is off", () => {
-  // `purpose` rides the fetch request, not search (`tinyfishFetch` takes it;
-  // `tinyfishSearch` does not), so it follows the fetch switch. The old gate
-  // read `searchOn`, which hid the field in exactly the state that needed it
-  // (search off, fetch on) and showed it where nothing consumed it.
+test("purpose is a shared field and hides only when both providers are off", () => {
+  // `purpose` rides both requests now (`tinyfishSearch` ranks on it and
+  // `tinyfishFetch` forwards it), so it belongs to the shared config: the
+  // gate follows the block, not the fetch switch. The old gate read
+  // `fetchOn`, which hid the field for a search-only host while search was
+  // consuming it.
   const idsOf = (tree: unknown): string[] =>
     findAll(tree, "SettingsValueField").map((field) => fld(field).id);
   assert.ok(
@@ -618,10 +619,10 @@ test("purpose is a fetch-only field and hides when fetch is off", () => {
     "search off, fetch on: purpose still shows"
   );
   assert.ok(
-    !idsOf(render({ fetch: "false" }).tree).includes(
+    idsOf(render({ fetch: "false" }).tree).includes(
       "plugin-config-tinyfish-purpose"
     ),
-    "fetch off: purpose hides"
+    "fetch off, search on: purpose still shows"
   );
   assert.ok(
     !idsOf(render({ search: "false", fetch: "false" }).tree).includes(

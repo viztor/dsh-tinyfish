@@ -39,6 +39,7 @@ const OPTIONS: TinyfishProviderOptions & { delayMs: number } = {
   apiKeyEnv: "TINYFISH_API_KEY",
   monidKeyEnv: "MONID_API_KEY",
   filters: {},
+  fetchOptions: {},
   attempts: 1,
   delayMs: 1,
   monidBase: "https://api.monid.ai",
@@ -178,6 +179,58 @@ test("search returns no sources when the upstream genuinely has none", async () 
   );
   assert.deepEqual(result.sources, []);
   assert.equal(result.truncated, false);
+});
+
+test("search forwards purpose and filters from config to the request", async () => {
+  // The wiring test for the seam's standing defaults: everything the config
+  // row chose arrives on the request, including the members that were added
+  // long after the provider was written. A field declared in the schema but
+  // never threaded this far would pass every config-level test in the suite.
+  const { calls } = await withStubbedFetch(
+    [{ respond: () => ({ body: searchEnvelope([]) }) }],
+    async () =>
+      new TinyfishSearchProvider(() => ({
+        ...OPTIONS,
+        purpose: "size the market",
+        filters: { domain_type: "news", recency_minutes: 60 },
+      })).search({ query: "q" })
+  );
+  const body = JSON.parse(nth(calls, 0, "request").init.body as string);
+  assert.deepEqual(body.input.queryParams, {
+    query: "q",
+    domain_type: "news",
+    recency_minutes: 60,
+    purpose: "size the market",
+  });
+});
+
+test("fetch forwards purpose and the fetchOptions group to the body", async () => {
+  const { calls } = await withStubbedFetch(
+    [{ respond: () => ({ body: fetchEnvelope([{ url: "https://x" }]) }) }],
+    async () =>
+      new TinyfishFetchProvider(() => ({
+        ...OPTIONS,
+        purpose: "size the market",
+        fetchOptions: {
+          ttl: 0,
+          per_url_timeout_ms: 30_000,
+          exclude_selectors: ["nav"],
+        },
+      })).fetch({ url: "https://x" })
+  );
+  const body = JSON.parse(nth(calls, 0, "request").init.body as string);
+  assert.deepEqual(
+    body.input.body,
+    {
+      urls: ["https://x"],
+      format: "markdown",
+      purpose: "size the market",
+      ttl: 0,
+      per_url_timeout_ms: 30_000,
+      exclude_selectors: ["nav"],
+    },
+    "the group rides as one field, in the upstream's own names"
+  );
 });
 
 test("available() is a local check and never touches the network", async () => {

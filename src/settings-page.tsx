@@ -75,7 +75,8 @@ const en = {
   apiKeyUnset: "No key is configured, so searches fail until one is set.",
   getKey: "Get your TinyFish API key",
   purpose: "Purpose",
-  purposeHint: "Optional goal statement; TinyFish ranks results against it.",
+  purposeHint:
+    "Optional goal statement; TinyFish ranks results against it. Upstream accepts at most 2000 characters.",
   attempts: "Attempts",
   attemptsHint: "Retries for a transient failure or an empty result, 1 to 5.",
   search: "Provide search",
@@ -117,7 +118,8 @@ const zh = {
   apiKeyUnset: "未配置密钥，搜索会失败，直到设置为止。",
   getKey: "获取你的 TinyFish API 密钥",
   purpose: "目标说明",
-  purposeHint: "可选的目标描述；TinyFish 会据此排序结果。",
+  purposeHint:
+    "可选的目标描述；TinyFish 会据此排序结果。上游最多接受 2000 个字符。",
   attempts: "尝试次数",
   attemptsHint: "瞬时失败或结果为空时的重试次数，1 到 5。",
   search: "提供搜索",
@@ -694,17 +696,17 @@ function TinyfishCard(props: CardProps) {
             </a>
           </p>
           {keyField("monid")}
-          {/* `purpose` rides the fetch request, not search, so it follows the
-              fetch switch: search-off + fetch-on still needs it, and
-              fetch-off never does. */}
-          {fetchOn && (
-            <SettingsValueField
-              {...field(FIELD.purpose)}
-              label={t("purpose")}
-              hint={t("purposeHint")}
-              invalidLabel={t("invalidText")}
-            />
-          )}
+          {/* `purpose` rides both requests — `tinyfishSearch` ranks on it and
+              `tinyfishFetch` forwards it — so it is shared config like the
+              channel above it, and hides only when both providers are off
+              with the rest of the block. (The tuning fields that no control
+              renders — `filters` and `fetchOptions` — stay patch-file only.) */}
+          <SettingsValueField
+            {...field(FIELD.purpose)}
+            label={t("purpose")}
+            hint={t("purposeHint")}
+            invalidLabel={t("invalidText")}
+          />
           <SettingsValueField
             {...field(FIELD.attempts)}
             label={t("attempts")}

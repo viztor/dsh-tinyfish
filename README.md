@@ -135,11 +135,17 @@ Everything lives in one row, `dsh-tinyfish`. The row is validated, so an out-of-
 | `apiKey` | _(unset)_ | literal credential for either channel; prefer a ref |
 | `apiKeyEnv` | `TINYFISH_API_KEY` | credential reference, or env var, for `direct` |
 | `monidKeyEnv` | `MONID_API_KEY` | credential reference, or env var, for `monid` |
-| `purpose` | _(unset)_ | goal statement; TinyFish ranks on it |
+| `purpose` | _(unset)_ | goal statement sent with every search and fetch; TinyFish ranks on it; capped at 2000 characters |
 | `attempts` | `3` | retries for a transient failure or an empty search (1–5) |
 | `filters.domainType` | _(unset)_ | `web` \| `news` \| `research_paper` — patch file only |
 | `filters.language` / `.location` | _(unset)_ | geo targeting — patch file only |
 | `filters.includeDomains` / `.excludeDomains` | _(unset)_ | comma-separated — patch file only |
+| `filters.recencyMinutes` | _(unset)_ | freshness window in minutes (1–5256000); mutually exclusive with `.afterDate` upstream — patch file only |
+| `filters.afterDate` | _(unset)_ | lower date bound, `YYYY-MM-DD`; not for `research_paper` — patch file only |
+| `filters.pubYearMin` | _(unset)_ | lower publication-year bound (0–9999), `research_paper` only — patch file only |
+| `fetchOptions.ttl` | _(unset)_ | cache tolerance in seconds; `0` forces a live fetch, unset accepts any cache — patch file only |
+| `fetchOptions.perUrlTimeoutMs` | _(unset)_ | per-URL wall-clock budget in ms (1–110000) — patch file only |
+| `fetchOptions.excludeSelectors` | _(unset)_ | comma-separated CSS selectors pruned before extraction (1–20 × ≤1000 chars); direct PDF/CSV downloads reject it — patch file only |
 | `monidBase` / `searchBase` / `fetchBase` | upstream | endpoint override, for staging |
 | `search` / `fetch` | `true` | provide this kind; `false` reports it unavailable without unregistering |
 
@@ -158,9 +164,9 @@ The manifest also carries `dsh.compatibility`: the Node and DSH ranges stated ex
     fetch: false # TinyFish stays registered but unavailable for fetch; point fetchProvider elsewhere to use another fetch
 ```
 
-### Filters live in the patch file
+### Filters and fetch options live in the patch file
 
-`filters` is a nested object, and the settings form addresses one flat key per field — so search tuning stays operator-level:
+`filters` and `fetchOptions` are nested objects, and the settings form addresses one flat key per field — so search and fetch tuning stays operator-level:
 
 ```yaml
 - id: dsh-tinyfish
@@ -170,7 +176,13 @@ The manifest also carries `dsh.compatibility`: the Node and DSH ranges stated ex
       domainType: research_paper
       language: zh
       includeDomains: arxiv.org,openreview.net
+      pubYearMin: 2023
+    fetchOptions:
+      ttl: 0 # force a live fetch instead of accepting a cached page
+      excludeSelectors: nav, .cookie-banner
 ```
+
+Both sections always resolve: an unset one is an empty group that adds nothing to the request, and an unusable member degrades to unset rather than travelling upstream. Three upstream caveats pass through as documented behaviour instead of being enforced — `recencyMinutes` and `afterDate` are mutually exclusive in TinyFish's API (a row setting both sends both), `excludeSelectors` cannot apply to direct PDF/CSV downloads, which answer `selector_unsupported` while it is set, and each date bound is cross-checked against `domainType`: `recencyMinutes` and `afterDate` are refused for `research_paper`, `pubYearMin` exists only for it, and either wrong pairing rejects the whole search while set.
 
 ### Where a credential comes from
 
@@ -207,7 +219,7 @@ Row, then environment, then built-in default — so staging can retarget without
 - **A blocked run is terminal.** If a Monid workspace control stops a run, the error says why and links to top up. Never retried.
 - **Off means _unavailable_, not gone.** A switched-off kind stays registered and declines. If the profile still pins that tool to Tinyfish, the call fails loudly instead of silently rerouting — point the tool at another provider to use one. With nothing pinned, a withdrawn Tinyfish simply yields: auto-select picks whoever is left, and switching one kind off is how you resolve an "ambiguous provider" standoff down to a single candidate.
 - **_Unavailable_ has three causes and one message.** The seam only sees a boolean, so "switched off", "no credential", and "bad base URL" all read the same downstream. The card can tell them apart — check the switches, the key badges, and the endpoint overrides there.
-- **`purpose` is one sentence for every fetch.** The seam's fetch request carries a URL and nothing else — no goal slot, by design — so a per-call goal is impossible without a harness change. The configured sentence is attached to each fetch verbatim: a standing bias, not a per-task instruction.
+- **`purpose` is one sentence for every request.** The seam's requests carry no goal slot — `{query}` for search, `{url}` for fetch — so a per-call goal is impossible without a harness change. The configured sentence rides every search and fetch verbatim: a standing bias, not a per-task instruction.
 
 TinyFish's `agent` and `browser` surfaces are **not** exposed: metered, wallet-billed, and not a search or a fetch. Use the `tinyfish` CLI directly when a page genuinely needs a real browser.
 

@@ -3,7 +3,7 @@ import { credentialRef } from "@deepseek-ai/dsh-credentials";
 import { launchEnvironmentOf } from "@deepseek-ai/dsh-launch-environment";
 import z from "@deepseek-ai/schemastery";
 
-import type { CredentialResolver } from "./client.ts";
+import type { CredentialResolver, TinyfishFetchDefaults } from "./client.ts";
 import {
   DEFAULT_FETCH_BASE,
   DEFAULT_MONID_BASE,
@@ -38,6 +38,15 @@ import {
 /** Settings namespace, matching the plugin identity. */
 export const TINYFISH_SETTINGS_NAMESPACE = "dsh-tinyfish";
 export const WEB_TINYFISH_SETTINGS_NAMESPACE = TINYFISH_SETTINGS_NAMESPACE;
+
+/**
+ * Upstream's cap on `purpose`, in characters. Both `/search` and `/fetch`
+ * declare `maxLength: 2000` and answer a hard 4xx past it — and this field
+ * rides every search and fetch, so one over-long goal statement would take
+ * both tools down until the row is found. The schema refuses the row; a raw
+ * row that skipped validation loses the sentence instead.
+ */
+const PURPOSE_MAX_CHARS = 2000;
 
 /**
  * The plugin's settings schema.
@@ -97,8 +106,11 @@ export const Config = z.object({
     ),
   purpose: z
     .string()
+    .max(PURPOSE_MAX_CHARS)
     .volatile()
-    .description("Goal statement; TinyFish ranks on it."),
+    .description(
+      "Goal statement sent with every search and fetch; TinyFish ranks on it. Upstream caps it at 2000 characters."
+    ),
   attempts: z
     .number()
     .step(1)
@@ -124,8 +136,53 @@ export const Config = z.object({
       excludeDomains: z
         .string()
         .description("Comma-separated domains to drop."),
+      recencyMinutes: z
+        .number()
+        .step(1)
+        .min(1)
+        .max(5_256_000)
+        .description(
+          "Freshness window in minutes (1–5256000). Mutually exclusive with afterDate upstream — a row setting both sends both. Upstream rejects the whole search while set with domainType research_paper."
+        ),
+      afterDate: z
+        .string()
+        .pattern(/^\d{4}-\d{2}-\d{2}$/)
+        .description(
+          "Lower publication-date bound, YYYY-MM-DD. Mutually exclusive with recencyMinutes upstream; with domainType research_paper, upstream rejects the whole search while it is set (scope by year with pubYearMin instead)."
+        ),
+      pubYearMin: z
+        .number()
+        .step(1)
+        .min(0)
+        .max(9999)
+        .description(
+          "Lower publication-year bound (0–9999); only valid with domainType research_paper — upstream rejects the whole search otherwise."
+        ),
     })
     .description("Search filters applied to every query.")
+    .volatile(),
+  fetchOptions: z
+    .object({
+      ttl: z
+        .number()
+        .step(1)
+        .min(0)
+        .description(
+          "Cache freshness tolerance in seconds; 0 forces a live fetch, unset accepts any cached entry."
+        ),
+      perUrlTimeoutMs: z
+        .number()
+        .step(1)
+        .min(1)
+        .max(110_000)
+        .description("Per-URL wall-clock budget in ms (1–110000)."),
+      excludeSelectors: z
+        .string()
+        .description(
+          "Comma-separated CSS selectors removed before extraction (1–20 entries, each ≤1000 chars); unmatched selectors are a no-op. Direct PDF/CSV downloads have no HTML to prune and fail with selector_unsupported while this is set."
+        ),
+    })
+    .description("Fetch body fields applied to every fetch. Patch file only.")
     .volatile(),
   monidBase: z
     .string()
@@ -216,6 +273,59 @@ function readField(section: Record<string, unknown>, key: string): string {
 }
 
 /**
+ * Read a nested section (`filters`, `fetchOptions`) as a plain record.
+ *
+ * On a validated row the section itself is a boxed schema node — an object
+ * whose members are read through `.get()` — so testing `isRecord` alone finds
+ * a plausible-looking object whose fields are all `undefined`, and every value
+ * the section carries is silently dropped. That is the `attempts` bug one
+ * level down, and it is exactly how a validated `filters` section arrived at
+ * this function producing `{}` while the raw row beside it produced the real
+ * filters. Unbox first, then decide; a garbled member degrades to an empty
+ * section rather than throwing, so one bad key cannot poison the request.
+ */
+function readSection(
+  section: Record<string, unknown>,
+  key: string
+): Record<string, unknown> {
+  const node = section[key];
+  const value = isBoxed(node) ? node.get() : node;
+  return isRecord(value) ? value : {};
+}
+
+/**
+ * Read one integer field, refusing anything unusable.
+ *
+ * Blank means unset: `readField` maps an absent field to `""`, trim makes
+ * a whitespace-only one the same `""`, and `Number("")` is `0` — an unset
+ * `ttl` would silently become "force a live fetch", the same trap the
+ * `normalizeAttempts` comment documents. A
+ * non-integer or an out-of-range value is dropped rather than clamped: the
+ * schema rejects those before anyone sees them, so a value reaching this
+ * path arrived in a raw row unvalidated, and clamping it would apply a
+ * setting the user never made.
+ *
+ * @param key - the config spelling (camelCase).
+ * @param min - inclusive lower bound, per the upstream reference.
+ * @param max - inclusive upper bound; omitted when upstream states none.
+ * @returns the value to forward, or `undefined` when it must not be sent.
+ */
+function readInteger(
+  section: Record<string, unknown>,
+  key: string,
+  min: number,
+  max?: number
+): number | undefined {
+  const text = readField(section, key).trim();
+  if (text === "") return undefined;
+  const n = Number(text);
+  if (!Number.isInteger(n)) return undefined;
+  if (n < min) return undefined;
+  if (max !== undefined && n > max) return undefined;
+  return n;
+}
+
+/**
  * Build the credential lookup for one operation.
  *
  * Two sources, in the harness's own order of trust: the credentials service
@@ -289,14 +399,17 @@ export function resolveOptions(
   env: Record<string, string | undefined> = process.env
 ): TinyfishProviderOptions {
   const section = isRecord(config) ? config : {};
-  const rawFilters = isRecord(section.filters) ? section.filters : {};
+  const rawFilters = readSection(section, "filters");
+  const rawFetch = readSection(section, "fetchOptions");
 
   // The harness spells these camelCase; TinyFish's API wants snake_case. The
   // translation happens here, once, so the client and the providers stay in
   // the upstream's vocabulary.
-  const filters: Record<string, string> = {};
+  const filters: Record<string, string | number> = {};
   const pick = (key: string, upstream: string): void => {
-    const value = asScalar(rawFilters[key]);
+    // Through `readField`, not `asScalar` directly: a member of a validated
+    // section may itself be a boxed node, and the box is read per field.
+    const value = readField(rawFilters, key);
     if (value) filters[upstream] = value;
   };
   pick("domainType", "domain_type");
@@ -304,6 +417,60 @@ export function resolveOptions(
   pick("location", "location");
   pick("includeDomains", "include_domains");
   pick("excludeDomains", "exclude_domains");
+
+  // The three numeric/date bounds ride as numbers where upstream types them
+  // as integers — the monid channel forwards `queryParams` as JSON, and the
+  // direct channel stringifies the same map into its query string — so the
+  // two channels keep sending the identical payload.
+  const pickNumber = (
+    key: string,
+    upstream: string,
+    min: number,
+    max?: number
+  ): void => {
+    const n = readInteger(rawFilters, key, min, max);
+    if (n !== undefined) filters[upstream] = n;
+  };
+  pickNumber("recencyMinutes", "recency_minutes", 1, 5_256_000);
+  pickNumber("pubYearMin", "pub_year_min", 0, 9999);
+
+  // A formatted bound, not a number: forwarded verbatim once it is shaped the
+  // way upstream documents. The schema enforces the pattern for a validated
+  // row; a raw row reaches here unvalidated, and a date-shaped typo must not
+  // ride along on every search until upstream rejects it.
+  const afterDate = readField(rawFilters, "afterDate");
+  if (/^\d{4}-\d{2}-\d{2}$/.test(afterDate)) filters.after_date = afterDate;
+
+  // Fetch body defaults, in the upstream's own field names from here on. The
+  // same blank-is-unset and range rules as the filters apply; the group is
+  // always present (possibly empty) so the provider can pass it through
+  // unconditionally.
+  const fetchOptions: TinyfishFetchDefaults = {};
+  const ttl = readInteger(rawFetch, "ttl", 0);
+  if (ttl !== undefined) fetchOptions.ttl = ttl;
+  const perUrlTimeoutMs = readInteger(rawFetch, "perUrlTimeoutMs", 1, 110_000);
+  if (perUrlTimeoutMs !== undefined) {
+    fetchOptions.per_url_timeout_ms = perUrlTimeoutMs;
+  }
+  const excludeSelectors = readField(rawFetch, "excludeSelectors");
+  if (excludeSelectors !== "") {
+    const entries = excludeSelectors
+      .split(",")
+      .map((entry) => entry.trim())
+      .filter((entry) => entry.length > 0);
+    // Upstream accepts 1–20 selectors of up to 1000 characters each and 422s
+    // outside those limits. A standing default that failed every fetch would
+    // take the whole fetch path down with it, so an out-of-range list is
+    // dropped as if unset: the mistake stays visible in the row instead of
+    // surfacing on every request. Invalid CSS *within* the limits is not
+    // checked here — upstream rejects it with the 422 that names the
+    // selector, which is a better error than a silent local guess.
+    const usable =
+      entries.length >= 1 &&
+      entries.length <= 20 &&
+      entries.every((entry) => entry.length <= 1000);
+    if (usable) fetchOptions.exclude_selectors = entries;
+  }
 
   // Environment and credential fallbacks stay here rather than in the
   // provider: every value the provider reads is already fully defaulted by
@@ -328,8 +495,16 @@ export function resolveOptions(
     // which is the operator escape hatch for a patch file.
     monidKeyEnv: readField(section, "monidKeyEnv") || "MONID_API_KEY",
     resolveCredential: ctx ? credentialLookup(ctx) : undefined,
-    purpose: purpose || undefined,
+    // The schema refuses an over-long row, so this is defence for a raw
+    // one: upstream rejects the whole request past the cap, and this field
+    // rides every search and fetch — losing the sentence fails softer than
+    // failing every request.
+    purpose:
+      purpose === "" || purpose.length > PURPOSE_MAX_CHARS
+        ? undefined
+        : purpose,
     filters,
+    fetchOptions,
     // Through `readField` like every other field. `attempts` is the only
     // numeric one, which is exactly why the omission went unnoticed: on a
     // validated section the value is a boxed schema node, `Number(node)` is
@@ -398,6 +573,7 @@ export {
 } from "./provider.ts";
 export type {
   TinyfishChannel,
+  TinyfishFetchDefaults,
   TinyfishFetchPayload,
   TinyfishSearchPayload,
 } from "./client.ts";

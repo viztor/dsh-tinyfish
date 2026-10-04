@@ -1022,6 +1022,11 @@ export interface TinyfishSearchOptions extends ResolveApiKeyOptions {
   query: string;
   /** Upstream-named filters, already snake_case. */
   filters?: Record<string, string | number>;
+  /**
+   * Goal statement forwarded as the `purpose` query param; TinyFish treats it
+   * as a ranking signal on search just as it does on fetch.
+   */
+  purpose?: string;
   monidBase?: string;
   searchBase?: string;
   signal?: AbortSignal;
@@ -1034,12 +1039,34 @@ export interface TinyfishSearchOptions extends ResolveApiKeyOptions {
   maxPolls?: number;
 }
 
+/**
+ * Fetch body fields that ride every request, in the upstream's vocabulary.
+ *
+ * The names *are* the upstream body names — `ttl`, `per_url_timeout_ms`,
+ * `exclude_selectors` — exactly the way `TinyfishSearchOptions.filters`
+ * carries upstream query names: the camelCase→snake_case translation already
+ * happened in `resolveOptions`, so nothing downstream re-spells a field. An
+ * absent member is omitted from the body rather than sent as `undefined`,
+ * because "unset" and "set to zero" are different upstream answers (`ttl: 0`
+ * forces a live fetch; an omitted `ttl` accepts any cache age).
+ */
+export interface TinyfishFetchDefaults {
+  /** Cache freshness tolerance in seconds; `0` forces a live fetch. */
+  ttl?: number;
+  /** Per-URL wall-clock budget in ms (1–110000). */
+  per_url_timeout_ms?: number;
+  /** CSS selectors removed before extraction (1–20 entries, each ≤1000 chars). */
+  exclude_selectors?: readonly string[];
+}
+
 /** Everything a fetch call can be pointed at. */
 export interface TinyfishFetchOptions extends ResolveApiKeyOptions {
   channel: TinyfishChannel;
   urls: string[];
   /** Goal statement forwarded upstream; TinyFish ranks on it. */
   purpose?: string;
+  /** Config-set body defaults, merged into the request body as given. */
+  fetchOptions?: TinyfishFetchDefaults;
   monidBase?: string;
   fetchBase?: string;
   signal?: AbortSignal;
@@ -1069,6 +1096,7 @@ export async function tinyfishSearch(
     credentialsPath,
     tinyfishConfigPath,
     filters = {},
+    purpose,
     monidBase = DEFAULT_MONID_BASE,
     searchBase = DEFAULT_SEARCH_BASE,
     signal,
@@ -1096,7 +1124,12 @@ export async function tinyfishSearch(
     signal,
   });
   requireKey(channel, key);
+  // One params map feeds both channels: the direct channel stringifies it
+  // into the query string, the monid channel wraps it as `queryParams`, and
+  // neither branch decides membership. `purpose` joins the map the same way
+  // filters do — empty is dropped, so an unset goal statement sends nothing.
   const params: Record<string, string | number> = { query, ...filters };
+  if (purpose !== undefined && purpose !== "") params.purpose = purpose;
 
   return withRetry<TinyfishSearchPayload>(
     async (): Promise<TinyfishSearchPayload> =>
@@ -1146,6 +1179,10 @@ export async function tinyfishFetch(
     credentialsPath,
     tinyfishConfigPath,
     purpose,
+    // Defaults to an empty object so the spread below is unconditional: the
+    // config layer always sends a group (possibly empty), and a caller that
+    // sends none gets the historical body exactly.
+    fetchOptions = {},
     monidBase = DEFAULT_MONID_BASE,
     fetchBase = DEFAULT_FETCH_BASE,
     signal,
@@ -1167,7 +1204,11 @@ export async function tinyfishFetch(
     signal,
   });
   requireKey(channel, key);
-  const body: Record<string, unknown> = { urls, format: "markdown" };
+  const body: Record<string, unknown> = {
+    urls,
+    format: "markdown",
+    ...fetchOptions,
+  };
   if (purpose !== undefined && purpose !== "") body.purpose = purpose;
 
   return withRetry<TinyfishFetchPayload>(

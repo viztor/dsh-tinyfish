@@ -202,7 +202,11 @@ The scratch directory has to sit inside the project at the same depth as `lib/`.
 
 Validated sections hand back **boxed schema nodes**, not plain values, and not uniformly: a `union` of consts resolves to a bare value while a `default(...).volatile()` field stays a node. `readField` in `src/index.ts` handles both and refuses to stringify an object — a typo'd key must not become `"[object Object]"` in a request.
 
-The schema **rejects** out-of-range values rather than clamping, which is better: a silently clamped `attempts: 99` looks applied and is not. The clamp in `resolveOptions` is defence for a raw row that reached it unvalidated.
+A **nested** section is boxed one level deeper. On a validated row `filters` and `fetchOptions` hand back a node whose members are boxes again, so an `isRecord` test alone finds a plausible-looking object whose every field reads `undefined` — and the section resolves to `{}` while the raw row beside it produces the real values. `readSection` unboxes first and then decides, and members are read one at a time through `readField`.
+
+Numeric members go through `readInteger`, not the string `pick`, because a falsy check would drop a legitimate `0` — `ttl: 0` forces a live fetch, and `pub_year_min: 0` is a real bound. An unusable value **degrades to unset rather than being clamped**, for the reason below: the schema rejects it before anyone sees it, so anything reaching that path came in unvalidated, and clamping it would apply a setting nobody made. `readInteger` trims first, because blank is unconfigured (invariant 5) and `Number(" ") === 0` would otherwise turn a whitespace `ttl` into "force every fetch live".
+
+The schema **rejects** out-of-range values rather than clamping, which is better: a silently clamped `attempts: 99` looks applied and is not. The clamp in `resolveOptions` is defence for a raw row that reached it unvalidated. The same reasoning is why `purpose` is capped rather than truncated: it rides every search _and_ fetch, so a standing default that upstream refused would take both tools down with it — the schema refuses the row, and a raw one loses the sentence.
 
 ## Docs
 

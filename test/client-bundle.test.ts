@@ -765,10 +765,11 @@ test("search and fetch render as switches, not text fields", () => {
   assert.ok(!treeText.includes("boolHint"), "no boolean hint text remains");
 });
 
-test("purpose hides when fetch is off", () => {
-  // `purpose` rides the fetch request, not search, so it follows the fetch
-  // switch. The old test gated it on search, which hid the field in exactly
-  // the state that needed it (search off, fetch on).
+test("purpose hides only when both providers are off", () => {
+  // `purpose` rides both requests — search ranks on it, fetch forwards it —
+  // so it is shared config: it hides with the block, not with one switch.
+  // The previous gate read `fetch`, which hid the field for a search-only
+  // host while search was consuming it.
   const hasPurpose = (tree: unknown): boolean =>
     findByType(tree, "SettingsValueField").some(
       (f) => f.props.id === "plugin-config-tinyfish-purpose"
@@ -779,8 +780,8 @@ test("purpose hides when fetch is off", () => {
     "purpose still shows when only search is off"
   );
   assert.ok(
-    !hasPurpose(renderCard({ fetch: false })),
-    "purpose hides when fetch is off"
+    hasPurpose(renderCard({ fetch: false })),
+    "purpose still shows when only fetch is off"
   );
   assert.ok(
     !hasPurpose(renderCard({ search: false, fetch: false })),
@@ -868,9 +869,16 @@ test("the field specs cover every editable key in the host schema", () => {
   // does spell it is a stale exemption, and a key the page misses is a control
   // that never renders.
   const declared = Object.keys(Config({})).toSorted();
-  // No control on the page: the endpoint bases and the nested filters are
-  // retargeted from a patch file, not from the settings form.
-  const configOnly = ["fetchBase", "filters", "monidBase", "searchBase"];
+  // No control on the page: the endpoint bases and the two tuning sections
+  // (`filters`, `fetchOptions`) are retargeted from a patch file, not from
+  // the settings form.
+  const configOnly = [
+    "fetchBase",
+    "fetchOptions",
+    "filters",
+    "monidBase",
+    "searchBase",
+  ];
   const withoutControl = declared
     .filter((key) => !SOURCE.includes(`"${key}"`))
     .toSorted();

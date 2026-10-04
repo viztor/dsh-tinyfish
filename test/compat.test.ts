@@ -303,8 +303,16 @@ test("a settings row from another patch layer still resolves", () => {
   // object, if another layer wrote the row before the loader validated it. Both
   // have to work, and the difference is invisible until a value silently comes
   // out wrong.
-  const validated = plugin.Config({ channel: "direct", attempts: 5 });
-  const raw = { channel: "direct", attempts: 5 };
+  const validated = plugin.Config({
+    channel: "direct",
+    attempts: 5,
+    filters: { domainType: "news", language: "fr" },
+  });
+  const raw = {
+    channel: "direct",
+    attempts: 5,
+    filters: { domainType: "news", language: "fr" },
+  };
 
   const pairs: [string, unknown][] = [
     ["validated", validated],
@@ -322,6 +330,16 @@ test("a settings row from another patch layer still resolves", () => {
     assert.equal(options.searchBase, "https://api.search.tinyfish.ai");
   }
 
+  // This comparison used to pass *vacuously*: neither row carried `filters`,
+  // so both sides were `{}` while a validated section was in fact silently
+  // dropping every filter — `section.filters` on a validated row is a boxed
+  // schema node, and reading members off the node finds nothing. Setting the
+  // field here is what makes the assertion able to fail.
+  assert.deepEqual(
+    plugin.resolveOptions(validated).filters,
+    { domain_type: "news", language: "fr" },
+    "a validated section carries its filters — the nested node is unboxed"
+  );
   assert.deepEqual(
     plugin.resolveOptions(raw).filters,
     plugin.resolveOptions(validated).filters,

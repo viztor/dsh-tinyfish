@@ -363,7 +363,12 @@ test("monid search posts the provider, endpoint and queryParams", async () => {
         channel: "monid",
         apiKey: "k",
         query: "cloudflare d1",
-        filters: { domain_type: "news", include_domains: "a.com" },
+        purpose: "why we are here",
+        filters: {
+          domain_type: "news",
+          include_domains: "a.com",
+          recency_minutes: 60,
+        },
       })
   );
   const body = JSON.parse(nth(calls, 0, "request").init.body as string);
@@ -373,6 +378,10 @@ test("monid search posts the provider, endpoint and queryParams", async () => {
     query: "cloudflare d1",
     domain_type: "news",
     include_domains: "a.com",
+    // Arrives here as a JSON number: upstream types it an integer, and the
+    // monid envelope forwards `queryParams` verbatim.
+    recency_minutes: 60,
+    purpose: "why we are here",
   });
   assert.equal(nth(calls, 0, "request").url, `${DEFAULT_MONID_BASE}/v1/run`);
   assert.equal(nth(calls, 0, "request").headers.Authorization, "Bearer k");
@@ -386,11 +395,13 @@ test("direct search GETs the upstream with only non-empty params", async () => {
         channel: "direct",
         apiKey: "k",
         query: "a b",
+        purpose: "why we are here",
         filters: {
           language: "",
           // Deliberately untyped: the client must drop an `undefined` filter.
           location: undefined as unknown as string,
           after_date: "2026-01-01",
+          recency_minutes: 60,
         },
       })
   );
@@ -399,6 +410,16 @@ test("direct search GETs the upstream with only non-empty params", async () => {
   assert.equal(url.searchParams.get("query"), "a b");
   assert.equal(url.searchParams.get("after_date"), "2026-01-01");
   assert.equal(
+    url.searchParams.get("purpose"),
+    "why we are here",
+    "the goal statement rides search as well as fetch"
+  );
+  assert.equal(
+    url.searchParams.get("recency_minutes"),
+    "60",
+    "the same integer the monid channel keeps as JSON, stringified here"
+  );
+  assert.equal(
     url.searchParams.has("language"),
     false,
     "empty string is dropped"
@@ -406,6 +427,25 @@ test("direct search GETs the upstream with only non-empty params", async () => {
   assert.equal(url.searchParams.has("location"), false, "undefined is dropped");
   assert.equal(nth(calls, 0, "request").headers["X-API-Key"], "k");
   assert.equal(nth(calls, 0, "request").headers.Authorization, undefined);
+});
+
+test("search drops a blank purpose instead of sending an empty param", async () => {
+  const { calls } = await withStubbedFetch(
+    [{ respond: () => ({ body: { results: [hit()] } }) }],
+    async () =>
+      tinyfishSearch({
+        channel: "direct",
+        apiKey: "k",
+        query: "q",
+        purpose: "",
+      })
+  );
+  const url = new URL(nth(calls, 0, "request").url);
+  assert.equal(
+    url.searchParams.has("purpose"),
+    false,
+    "unset means no param, not an empty one"
+  );
 });
 
 test("both channels send a browser user-agent, which Monid's Cloudflare requires", async () => {
@@ -433,6 +473,11 @@ test("monid fetch posts markdown format and the url list", async () => {
         apiKey: "k",
         urls: ["https://x"],
         purpose: "why we are here",
+        fetchOptions: {
+          ttl: 0,
+          per_url_timeout_ms: 30_000,
+          exclude_selectors: ["nav", "footer"],
+        },
       })
   );
   const body = JSON.parse(nth(calls, 0, "request").init.body as string);
@@ -441,10 +486,15 @@ test("monid fetch posts markdown format and the url list", async () => {
     urls: ["https://x"],
     format: "markdown",
     purpose: "why we are here",
+    // `ttl: 0` is a real setting — force a live fetch — and must survive as
+    // the number zero rather than be treated as an unset falsy.
+    ttl: 0,
+    per_url_timeout_ms: 30_000,
+    exclude_selectors: ["nav", "footer"],
   });
 });
 
-test("direct fetch hits the upstream base with an X-API-Key header", async () => {
+test("direct fetch sends the identical body the monid channel wraps", async () => {
   const { calls } = await withStubbedFetch(
     [
       {
@@ -454,10 +504,26 @@ test("direct fetch hits the upstream base with an X-API-Key header", async () =>
       },
     ],
     async () =>
-      tinyfishFetch({ channel: "direct", apiKey: "k", urls: ["https://x"] })
+      tinyfishFetch({
+        channel: "direct",
+        apiKey: "k",
+        urls: ["https://x"],
+        fetchOptions: { ttl: 0, exclude_selectors: ["nav"] },
+      })
   );
   assert.equal(nth(calls, 0, "request").url, DEFAULT_FETCH_BASE);
   assert.equal(nth(calls, 0, "request").headers["X-API-Key"], "k");
+  const body = JSON.parse(nth(calls, 0, "request").init.body as string);
+  assert.deepEqual(
+    body,
+    {
+      urls: ["https://x"],
+      format: "markdown",
+      ttl: 0,
+      exclude_selectors: ["nav"],
+    },
+    "one body builder serves both channels — the transport decides nothing"
+  );
 });
 
 /* ------------------------------------------------------------- async polls */
