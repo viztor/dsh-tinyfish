@@ -16,6 +16,7 @@ Your agent can already reason. This gives it something to reason _about_: live s
 | Search bills per call | **$0**, forever |
 | Fetched pages arrive as HTML, converted clumsily | **Clean Markdown**, straight from a browser-grade extractor |
 | Switching providers means reinstalling | **Two words** in a config file, no reinstall |
+| Every provider takes the query or nothing | **Standing defaults** — domain, language, recency, date bounds, cache TTL, selectors |
 
 ## 🚀 Quick start
 
@@ -29,6 +30,7 @@ DeepSeek Harness allows installing plugins directly through the Web interface wi
 4. Click **Install** — DSH automatically fetches the package from npm, builds the bundle patch, and activates it live without restarting!
 5. In **Settings → Plugins → TinyFish**, select your channel (`direct` or `monid`), enter the key for that channel, and hit **Save**!
 6. That is the whole install — the bundle points the web path at TinyFish on both kinds. See [Select it](#-select-it) to choose otherwise.
+7. Ask your agent something current; the tool call should come back as `tinyfish`.
 
 ---
 
@@ -63,7 +65,7 @@ then `npm install @viztor/dsh-tinyfish` resolves from the mirror. Unless npmjs i
 
 ```jsonc
 {
-  "dependencies": { "dsh-tinyfish": "^0.5.0" },
+  "dependencies": { "dsh-tinyfish": "^0.10.0" },
   "dsh": {
     "profile": {
       "bundles": [
@@ -78,7 +80,7 @@ then `npm install @viztor/dsh-tinyfish` resolves from the mirror. Unless npmjs i
 
 > Bundles resolve at boot, so a restart picks it up — reloading the patch alone won't.
 
-**Add a key** — pick a channel below, save the key, and ask your agent to search for something.
+**Add a key** — pick a channel below and save it, then ask your agent something current (_who won the last Formula 1 race?_). The tool call should come back as `tinyfish`; that name is the proof the row validated, a credential resolved, and the profile pins this provider.
 
 ### Select it
 
@@ -236,7 +238,7 @@ The toolchain is [Vite+](https://viteplus.dev): `vp pack` builds with tsdown, `v
 pnpm install
 pnpm test               # hermetic — no network, no credential
 pnpm run check          # format + lint + types
-pnpm run release:gate   # build, then the full gate incl. 18 package checks
+pnpm run release:gate   # build, then the full gate incl. the package checks
 pnpm run test:live      # the real APIs, still $0, needs credentials
 ```
 
