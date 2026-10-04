@@ -28,8 +28,8 @@ DeepSeek Harness allows installing plugins directly through the Web interface wi
 2. Click **Install Plugin** (添加插件).
 3. Search or enter `dsh-tinyfish` (or `@viztor/dsh-tinyfish`).
 4. Click **Install** — DSH automatically fetches the package from npm, builds the bundle patch, and activates it live without restarting!
-5. In **Settings → Plugins → TinyFish**, select your channel (`direct` or `monid`), enter the key for that channel, and hit **Save**!
-6. That is the whole install — the bundle points the web path at TinyFish on both kinds. See [Select it](#-select-it) to choose otherwise.
+5. In **Settings → Plugins → TinyFish**, select your channel (`direct` or `monid`), enter the key — or both keys — and hit **Save**!
+6. That is the whole install — the bundle points the web path at TinyFish on both kinds. See [Select it](#select-it) to choose otherwise.
 7. Ask your agent something current; the tool call should come back as `tinyfish`.
 
 ---
@@ -78,7 +78,7 @@ then `npm install @viztor/dsh-tinyfish` resolves from the mirror. Unless npmjs i
 }
 ```
 
-> Bundles resolve at boot, so a restart picks it up — reloading the patch alone won't.
+> Bundles installed through `package.json` resolve at boot, so restart DSH here — reloading the patch alone won't load them.
 
 **Add a key** — pick a channel below and save it, then ask your agent something current (_who won the last Formula 1 race?_). The tool call should come back as `tinyfish`; that name is the proof the row validated, a credential resolved, and the profile pins this provider.
 
@@ -122,7 +122,7 @@ Both keys can live side by side — saving one never overwrites the other, and s
 
 Both key fields are on the page at once, each labelled with the service it authenticates and each hint naming the reference the save lands on — so you can set the Monid key while Direct is selected, and tell which of the two exists without switching back and forth.
 
-> This row configures how TinyFish behaves; it does not select it. Pointing `searchProvider`/`fetchProvider` at `tinyfish` is a separate step in your profile patch — see [Select it](#-select-it). Reverting is the same two words in reverse.
+> This row configures how TinyFish behaves; it does not select it. Pointing `searchProvider`/`fetchProvider` at `tinyfish` is a separate step in your profile patch — see [Select it](#select-it). Reverting is the same two words in reverse.
 
 <details>
 <summary><strong>📖 Full configuration reference</strong></summary>
@@ -134,7 +134,7 @@ Everything lives in one row, `dsh-tinyfish`. The row is validated, so an out-of-
 | key | default | meaning |
 | --- | --- | --- |
 | `channel` | `direct` | `monid` or `direct` |
-| `apiKey` | _(unset)_ | literal credential for either channel; prefer a ref |
+| `apiKey` | _(unset)_ | literal credential for either channel; prefer a reference |
 | `apiKeyEnv` | `TINYFISH_API_KEY` | credential reference, or env var, for `direct` |
 | `monidKeyEnv` | `MONID_API_KEY` | credential reference, or env var, for `monid` |
 | `purpose` | _(unset)_ | goal statement sent with every search and fetch; TinyFish ranks on it; capped at 2000 characters |
@@ -153,18 +153,18 @@ Everything lives in one row, `dsh-tinyfish`. The row is validated, so an out-of-
 
 Turning one off reports _unavailable_ rather than _missing_ — the harness tells those apart, and only the second means "the install is broken". But _unavailable_ is not a silent fall-through: if `searchProvider`/`fetchProvider` still names TinyFish, the call fails. Point that tool at another provider to use one.
 
-#### Manifest metadata, not configuration
-
-The manifest also carries `dsh.compatibility`: the Node and DSH ranges stated explicitly, plus a per-release verdict — `compatible`, `incompatible`, or `unknown` — for the DSH versions a catalog checks.
-
-**DSH itself never reads it.** Neither `compatibility` nor `dshReleases` appears anywhere in the harness, so these fields cannot change how the plugin loads, registers, or behaves. They exist so a listing can state what has actually been verified, and the verdicts here are honest rather than aspirational: `0.2.0-rc.2` is what every build and test in this repository runs against, `0.2.0-rc.1` is admitted by the peer range but never exercised, and `0.1.7-rc.2` sits below that floor.
-
 ```yaml
 - id: dsh-tinyfish
   config:
     search: true
     fetch: false # TinyFish stays registered but unavailable for fetch; point fetchProvider elsewhere to use another fetch
 ```
+
+#### Manifest metadata, not configuration
+
+The manifest also carries `dsh.compatibility`: the Node and DSH ranges stated explicitly, plus a per-release verdict — `compatible`, `incompatible`, or `unknown` — for the DSH versions a catalog checks.
+
+**DSH itself never reads it.** Neither `compatibility` nor `dshReleases` appears anywhere in the harness, so these fields cannot change how the plugin loads, registers, or behaves. They exist so a listing can state what has actually been verified, and the verdicts here are honest rather than aspirational: `0.2.0-rc.2` is what every build and test in this repository runs against, `0.2.0-rc.1` is admitted by the peer range but never exercised, and `0.1.7-rc.2` sits below that floor.
 
 ### Filters and fetch options live in the patch file
 
@@ -184,7 +184,11 @@ The manifest also carries `dsh.compatibility`: the Node and DSH ranges stated ex
       excludeSelectors: nav, .cookie-banner
 ```
 
-Both sections always resolve: an unset one is an empty group that adds nothing to the request, and an unusable member degrades to unset rather than travelling upstream. Three upstream caveats pass through as documented behaviour instead of being enforced — `recencyMinutes` and `afterDate` are mutually exclusive in TinyFish's API (a row setting both sends both), `excludeSelectors` cannot apply to direct PDF/CSV downloads, which answer `selector_unsupported` while it is set, and each date bound is cross-checked against `domainType`: `recencyMinutes` and `afterDate` are refused for `research_paper`, `pubYearMin` exists only for it, and either wrong pairing rejects the whole search while set.
+Both sections always resolve: an unset one is an empty group that adds nothing to the request, and an unusable member degrades to unset rather than travelling upstream. Three upstream caveats pass through as documented behaviour instead of being enforced:
+
+- `recencyMinutes` and `afterDate` are mutually exclusive in TinyFish's API; a row setting both sends both.
+- `excludeSelectors` cannot apply to direct PDF/CSV downloads, which answer `selector_unsupported` while it is set.
+- Each date bound is cross-checked against `domainType`: `recencyMinutes` and `afterDate` are refused for `research_paper`, `pubYearMin` exists only for it, and either wrong pairing rejects the whole search while set.
 
 ### Where a credential comes from
 
@@ -193,7 +197,7 @@ Resolved **per call** — a rotated key takes effect on the next search, no rest
 1. the `apiKey` literal in the row (a secret in config; prefer 2–3)
 2. the credentials service — `apiKeyEnv` (direct) or `monidKeyEnv` (monid), saved from the settings UI
 3. the launch environment (exported before DSH started)
-4. the live environment (`MONID_API_KEY` / `TINYFISH_API_KEY`)
+4. the live environment (`MONID_API_KEY` / `MONID_MCP_TOKEN` / `TINYFISH_API_KEY`; either Monid variable covers the `monid` channel)
 5. the channel's CLI store (`monid keys add` / `tinyfish auth login`)
 
 A failing service falls through to the next source rather than failing the search.
