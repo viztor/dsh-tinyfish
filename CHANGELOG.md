@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.11.0](https://github.com/viztor/dsh-tinyfish/compare/v0.10.1...v0.11.0) (2026-10-04)
+
+
+### Features
+
+* **readme:** ship Chinese and Japanese READMEs with a pairing guard ([7432ab6](https://github.com/viztor/dsh-tinyfish/commit/7432ab6782111a4e821eb30dae47ab03ccc17d9a))
+
 ## [0.10.1](https://github.com/viztor/dsh-tinyfish/compare/v0.10.0...v0.10.1) (2026-10-04)
 
 
