@@ -872,7 +872,7 @@ test("a missing credential fails with a routable code and a real fix", async () 
       assert.doesNotMatch(error.message, /--source/, "no invented flags");
       assert.match(
         error.message,
-        /Settings → Plugins → TinyFish/,
+        /Plugins → Tinyfish/,
         "the GUI path is named, not just CLI and env"
       );
       return true;
@@ -897,7 +897,7 @@ test("a missing credential fails with a routable code and a real fix", async () 
       );
       assert.match(
         error.message,
-        /Settings → Plugins → TinyFish/,
+        /Plugins → Tinyfish/,
         "the GUI path is named, not just CLI and env"
       );
       return true;

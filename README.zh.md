@@ -27,8 +27,8 @@
 | 适用场景 | 解决方案 | 费用 |
 | --- | --- | --- |
 | 在原生工具里免费搜索与抓取 | **dsh-tinyfish**，任一通道 | **$0**——直连通道用 TinyFish 密钥，Monid 通道用平台密钥；两种载荷完全一致 |
-| 官方默认 | `deepseek-official` + `http` | 按次计费；抓回的 HTML 还要再付一道 turndown 转换 |
-| 需要提供方特有的 SERP 细节（地理、流量、排名）或批量查询 | 经 `monid_run` 调用的 Monid SERP 镜像 | 每次 $0.03–$0.12——只在任务真需要这些细节时用 |
+| 官方默认 | `deepseek-official` + `http` | 搜索按次计费；抓回的 HTML 还要再付一道 turndown 转换 |
+| 需要提供方特有的 SERP 细节（地理、流量、排名）或批量查询 | 经 `monid_run` 调用的 Monid SERP 镜像 | 每次约 $0.002–$0.18，随提供方而定——只在任务真需要这些细节时用 |
 | `fetch` 读不了的页面（重 JS、需登录、要交互） | CLI 里的 `tinyfish agent` / `browser` | 按量计费（$0.016/step，$0.002/min）——只在抓取落空后果断升级 |
 
 ## 🚀 快速上手
@@ -37,13 +37,13 @@
 
 DeepSeek Harness 支持直接在 Web 界面安装插件，全程不用碰终端：
 
-1. 打开 DSH Web → **Settings → Plugins**（设置 → 插件）。
-2. 点击 **Install Plugin**（添加插件）。
-3. 搜索或输入 `dsh-tinyfish`（或 `@viztor/dsh-tinyfish`）。
-4. 点击 **Install**（安装）——DSH 会自动从 npm 拉取软件包、构建 bundle 补丁并实时激活，无需重启！
-5. 在 **Settings → Plugins → TinyFish**（设置 → 插件 → TinyFish）中选择通道（`direct` 或 `monid`），填入密钥——两个都填也行——然后点击 **Save**（保存）！
+1. 打开 DSH Web，在侧边栏选择 **Plugins**（插件）。
+2. 点击 **Add plugin**（添加插件）。
+3. 输入包名 `dsh-tinyfish`（或 `@viztor/dsh-tinyfish`）——这是自由输入框，不是仓库搜索。
+4. 点击 **Install**（安装）——DSH 会从 npm 拉取软件包，并加载它声明的 bundle 补丁。live profile（官方 Web profile 挂载了 HMR）会立即生效；否则 DSH 会提示下次启动时生效。
+5. 在该 **Plugins** 页面打开 **Tinyfish** 卡片：选择通道（`direct` 或 `monid`），填入密钥——两个都填也行——然后点击 **Save**（保存）！
 6. 安装到此结束——bundle 已把两条网络链路都指向 TinyFish。若想另行选择，参见[选择提供方](#select-it)。
-7. 问 agent 一个时效性问题；工具调用应以 `tinyfish` 名义返回。
+7. 问 agent 一个时效性问题；会返回实时来源。结果本身不会标明提供方——失败信息会，并会写出 `tinyfish`。
 
 ---
 
@@ -56,7 +56,7 @@ cd ~/.dsh/profiles/web
 npm install dsh-tinyfish   # or: npm install @viztor/dsh-tinyfish — same thing
 ```
 
-认准**一个**名字装一次。两个 tarball 的代码逐字节一致，读取同一份设置（提供方注册为 `tinyfish`，配置挂在行 id `dsh-tinyfish` 下，凭证共用同一对引用）——所以之后改名不丢任何东西，但两个都挂会把 bundle 加载两遍。`dsh-tinyfish` 是 DSH 约定用的名字，本文档也用它。
+认准**一个**名字装一次。两个 tarball 打包的是同一份构建产物、读取同一份设置（提供方注册为 `tinyfish`，配置挂在行 id `dsh-tinyfish` 下，凭证共用同一对引用）——所以之后改名不丢任何东西，但两个都挂会把 bundle 加载两遍。带 scope 的 tarball 其 manifest 与补丁的 `name` 不同，好让 loader 在 scope 下解析它。`dsh-tinyfish` 是 DSH 约定用的名字，本文档也用它。
 
 <details>
 <summary><strong>📦 改从 GitHub Packages 安装</strong></summary>
@@ -93,7 +93,7 @@ npm install dsh-tinyfish   # or: npm install @viztor/dsh-tinyfish — same thing
 
 > 经 `package.json` 安装的 bundle 在启动时解析，所以这里要重启 DSH——只重载补丁加载不了它们。
 
-**配一把密钥**——从下面的通道里选一个存好，然后问 agent 一个时效性问题（_who won the last Formula 1 race?_）。工具调用应以 `tinyfish` 名义返回；这个名字本身就是证明：该行已校验通过、凭证已解析、profile 也确实指向了这个提供方。
+**配一把密钥**——从下面的通道里选一个存好，然后问 agent 一个时效性问题（_who won the last Formula 1 race?_）。能返回实时来源，就证明该行已校验通过、凭证已解析；结果本身不会标明提供方，所以请到 profile 补丁里确认指向（`searchProvider` / `fetchProvider`）——或者故意触发一次失败，错误信息里会写出 `tinyfish`。
 
 ### 选择提供方
 
@@ -108,7 +108,7 @@ npm install dsh-tinyfish   # or: npm install @viztor/dsh-tinyfish — same thing
     fetchProvider: http
 ```
 
-搜索和抓取是两个独立字段，所以搜索走 TinyFish、抓取留在官方 `http` 提供方可以，反过来也行。插件保持挂载、静默待命。主机也可以改设 `DSH_WEB_SEARCH_PROVIDER` / `DSH_WEB_FETCH_PROVIDER`——它们喂给同一对字段，两边都设时以配置文件为准。
+搜索和抓取是两个独立字段，所以搜索走 TinyFish、抓取留在官方 `http` 提供方可以，反过来也行。插件保持挂载、静默待命。主机也可以改设 `DSH_WEB_SEARCH_PROVIDER` / `DSH_WEB_FETCH_PROVIDER`——它们喂给同一对字段，两边都设时以配置文件为准，因此在官方 profile 上始终是基础补丁胜出。
 
 ## 🔑 双通道，一个插件
 
@@ -129,13 +129,13 @@ npm install dsh-tinyfish   # or: npm install @viztor/dsh-tinyfish — same thing
 
 两把密钥可以并存——存一个永远不会覆盖另一个，切换通道也不丢任何东西。
 
-## ⚙️ 设置页
+## ⚙️ 插件卡片
 
-**Settings → Plugins → TinyFish**（设置 → 插件 → TinyFish）。所有可编辑项都在这里：TinyFish 是否回答搜索与抓取、通道选择、密钥、搜索排序依据和重试。改动先暂存、一起保存；你输入的密钥由 harness 保管，绝不写入 profile。
+**Plugins → Tinyfish**（插件 → Tinyfish）。GUI 里能改的东西都在这里：TinyFish 是否回答搜索与抓取、通道选择、密钥、搜索排序依据和尝试次数。改动先暂存、一起保存；你输入的密钥由 harness 保管，绝不写入 profile。
 
-两个密钥框同时摆在页面上，各自标明所鉴权的服务，提示里写清保存落到哪个引用——于是可以在 Direct 选中时配 Monid 密钥，不用来回切换也能看清两个密钥各是否存在。
+两个密钥框同时摆在页面上，各自标明所鉴权的服务；Monid 框的提示里写着它的引用，Direct 框的引用则印在它下方那行说明里——于是可以在 Direct 选中时配 Monid 密钥，不用来回切换也能看清两个密钥各是否存在。
 
-> 这一行只管 TinyFish 的行为，不管选中它。把 `searchProvider`/`fetchProvider` 指向 `tinyfish` 是 profile 补丁里的另一步——参见[选择提供方](#select-it)。改回去也是同样两个单词的事。
+> 这一行只管 TinyFish 的行为，不管选中它。bundle 已经把 `searchProvider`/`fetchProvider` 指向 `tinyfish`，所以全新安装无需改补丁就在 Web 路径上——想用别的，就在你自己的补丁层里覆盖这两个字段。参见[选择提供方](#select-it)。
 
 <details>
 <summary><strong>📖 完整配置参考</strong></summary>
@@ -151,7 +151,7 @@ npm install dsh-tinyfish   # or: npm install @viztor/dsh-tinyfish — same thing
 | `apiKeyEnv` | `TINYFISH_API_KEY` | `direct` 的凭证引用或环境变量 |
 | `monidKeyEnv` | `MONID_API_KEY` | `monid` 的凭证引用或环境变量 |
 | `purpose` | _(未设置)_ | 随每次搜索与抓取发送的目标说明；TinyFish 据此排序；最多 2000 个字符 |
-| `attempts` | `3` | 瞬时失败或搜索落空时的重试次数（1–5） |
+| `attempts` | `3` | 瞬时失败或搜索落空时的总尝试次数（1–5）；`3` 即最多重试 2 次 |
 | `filters.domainType` | _(未设置)_ | `web` \| `news` \| `research_paper`——仅补丁文件 |
 | `filters.language` / `.location` | _(未设置)_ | 地域定向——仅补丁文件 |
 | `filters.includeDomains` / `.excludeDomains` | _(未设置)_ | 逗号分隔——仅补丁文件 |
@@ -177,7 +177,7 @@ npm install dsh-tinyfish   # or: npm install @viztor/dsh-tinyfish — same thing
 
 manifest 里还带着 `dsh.compatibility`：显式声明的 Node 与 DSH 范围，外加每个发版的实测结论——`compatible`、`incompatible` 或 `unknown`——供目录核验各 DSH 版本。
 
-**DSH 本体从不读它。**`compatibility` 与 `dshReleases` 在 harness 里无处引用，所以这些字段改变不了插件的加载、注册与行为。它们的存在，是让列表页能如实写清“哪些已被验证”，这里的结论也的确是实测而非期望：`0.2.0-rc.2` 是本仓库每次构建与测试所跑的版本，`0.2.0-rc.1` 虽在 peer 范围内但从未实际跑过，`0.1.7-rc.2` 则低于下限。
+**DSH 本体从不读它。**harness 里没有任何代码读 `dsh.compatibility`，`dshReleases` 映射也全无引用，所以这些字段改变不了插件的加载、注册与行为。DSH 自己的兼容机制是另一回事：loader 检查的是 `peerDependencies`，豁免记录在 profile 的 `compatibility.json` 里。这些字段的存在，是让列表页能如实写清“哪些已被验证”，这里的结论也的确是实测而非期望：`0.2.0-rc.2` 是本仓库每次构建与测试所跑的版本，`0.2.0-rc.1` 虽在 peer 范围内但从未实际跑过，`0.1.7-rc.2` 则低于下限。
 
 ### 过滤器与抓取选项写在补丁文件里
 
@@ -201,7 +201,7 @@ manifest 里还带着 `dsh.compatibility`：显式声明的 Node 与 DSH 范围�
 
 - `recencyMinutes` 与 `afterDate` 在 TinyFish API 里互斥；一行里两个都写就两个都发。
 - `excludeSelectors` 对直接下载的 PDF/CSV 无效，带上它会答 `selector_unsupported`。
-- 每个日期边界都会按 `domainType` 交叉核验：`recencyMinutes` 与 `afterDate` 不接受 `research_paper`，`pubYearMin` 只属于它，配错任一一对都会让整个搜索被拒绝。
+- 上游会按 `domainType` 交叉核验每个日期边界：`recencyMinutes` 与 `afterDate` 不接受 `research_paper`，`pubYearMin` 只属于它，配错任一一对都会让整个搜索被拒绝。
 
 ### 凭证从哪里来
 
@@ -210,7 +210,7 @@ manifest 里还带着 `dsh.compatibility`：显式声明的 Node 与 DSH 范围�
 1. 行里的 `apiKey` 字面量（写在配置里的秘密；优先用 2–3）
 2. 凭证服务——`apiKeyEnv`（直连）或 `monidKeyEnv`（Monid），从设置界面保存
 3. 启动环境（DSH 启动前 export 的）
-4. 实时环境（`MONID_API_KEY` / `MONID_MCP_TOKEN` / `TINYFISH_API_KEY`；任一 Monid 变量都覆盖 `monid` 通道）
+4. 实时环境——先读配置的引用名（`apiKeyEnv` / `monidKeyEnv`，可以是你自己的变量名），再读 `MONID_API_KEY` / `MONID_MCP_TOKEN` / `TINYFISH_API_KEY`（任一 Monid 变量都覆盖 `monid` 通道）
 5. 各通道的 CLI 存储（`monid keys add` / `tinyfish auth login`）
 
 凭证服务挂了就落到下一个来源，而不是让搜索失败。
@@ -233,11 +233,11 @@ manifest 里还带着 `dsh.compatibility`：显式声明的 Node 与 DSH 范围�
 <br />
 
 - **404 是结果，不是错误。**单个 URL 抓取失败会带着状态码回来，因为那是模型需要的资源状态。
-- **`publishedAt` 诚实。**TinyFish 报的是人类日期（`"Apr 30, 2026"`、`"1 year ago"`）。能解析的转成 ISO-8601，解析不了的直接丢掉，绝不编造。无时区日期按 UTC 读，所以同一页面在全球报的是同一天。
-- **空搜索会重试。**上游大约三跑空一——对合法查询也可能什么都不回；在认定之前，会按 `attempts` 重试空白结果。
+- **`publishedAt` 诚实。**TinyFish 报的是人类日期（`"Apr 30, 2026"`、`"1 year ago"`）。能解析的转成 ISO-8601，解析不了的直接丢掉，绝不编造。只有不含时刻、也不带时区的日期按 UTC 读，所以同一页面在全球报的是同一天；带时刻的值按原样解析。
+- **空搜索会重试。**上游大约三跑空一——对合法查询也可能什么都不回；在认定之前，会一直重试到用尽尝试预算（`attempts`，总尝试次数）。
 - **被拦的 run 是终态。**若 Monid 工作区控制拦停一次运行，错误里会写原因并附充值链接。永不重试。
 - **关闭意味着“不可用”，不是“没了”。**关掉的种类保持注册、只是谢绝。若 profile 还把对应工具钉在 Tinyfish 上，调用会大声失败，而不会悄悄改道——想用别的提供方就把工具指向它。什么都没钉时，退出的 Tinyfish 只管让路：自动选择用剩下的人选，关掉其中一种正是把“多提供方歧义”收敛到唯一候选的办法。
-- **“不可用”三种成因、一种面孔。**seam 只看到一个布尔值，所以“开关关了”“没凭证”“base URL 写错”在下游读起来一模一样。卡片分得清——去看开关、密钥徽标和端点覆盖。
+- **“不可用”三种成因、一种面孔。**seam 只看到一个布尔值，所以“开关关了”“没凭证”“base URL 写错”在下游读起来一模一样。卡片分得清——去看卡片上的开关和密钥徽标，端点覆盖则在行里或环境里看。
 - **`purpose` 是每次请求的一句话。**seam 的请求没有目标槽位——搜索只有 `{query}`，抓取只有 `{url}`——不动 harness 就不可能有按调用的目标。配置里的那句话会逐字跟随每次搜索与抓取：常驻偏置，而非按任务指令。
 
 TinyFish 的 `agent` 与 `browser` 界面**没有**暴露：按量计费、走钱包，既不是搜索也不是抓取。页面真需要开浏览器时，直接用 `tinyfish` CLI。

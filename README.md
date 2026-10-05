@@ -27,8 +27,8 @@ Your agent can already reason. This gives it something to reason _about_: live s
 | Need | Use | Cost |
 | --- | --- | --- |
 | Search and fetch inside the native tools, free | **dsh-tinyfish**, either channel | **$0** — a TinyFish key on direct, your platform key on Monid; identical payloads |
-| The shipped defaults | `deepseek-official` + `http` | Bills per call; fetched HTML pays a turndown conversion |
-| Provider-specific SERP detail (geo, volume, rank) or bulk queries | A Monid SERP mirror via `monid_run` | $0.03–$0.12 per call — only when the task needs that detail |
+| The shipped defaults | `deepseek-official` + `http` | Search bills per call; fetched HTML pays a turndown conversion |
+| Provider-specific SERP detail (geo, volume, rank) or bulk queries | A Monid SERP mirror via `monid_run` | Roughly $0.002–$0.18 per call, provider-dependent — only when the task needs that detail |
 | Pages `fetch` cannot read (JS-heavy, login, interaction) | `tinyfish agent` / `browser` from the CLI | Metered ($0.016/step, $0.002/min) — escalate only from an empty fetch |
 
 ## 🚀 Quick start
@@ -37,13 +37,13 @@ Your agent can already reason. This gives it something to reason _about_: live s
 
 DeepSeek Harness allows installing plugins directly through the Web interface without touching a terminal:
 
-1. Open DSH Web → **Settings → Plugins** (设置 → 插件).
-2. Click **Install Plugin** (添加插件).
-3. Search or enter `dsh-tinyfish` (or `@viztor/dsh-tinyfish`).
-4. Click **Install** — DSH automatically fetches the package from npm, builds the bundle patch, and activates it live without restarting!
-5. In **Settings → Plugins → TinyFish**, select your channel (`direct` or `monid`), enter the key — or both keys — and hit **Save**!
+1. Open DSH Web and choose **Plugins** in the sidebar (插件).
+2. Click **Add plugin** (添加插件).
+3. Enter the package name `dsh-tinyfish` (or `@viztor/dsh-tinyfish`) — it is a free-text field, not a registry search.
+4. Click **Install** — DSH fetches the package from npm and loads the bundle patch it declares. A live profile (the shipped Web one mounts HMR) applies the change at once; otherwise DSH says it takes effect at the next start.
+5. On that **Plugins** page, open the **Tinyfish** card: select your channel (`direct` or `monid`), enter the key — or both keys — and hit **Save**!
 6. That is the whole install — the bundle points the web path at TinyFish on both kinds. See [Select it](#select-it) to choose otherwise.
-7. Ask your agent something current; the tool call should come back as `tinyfish`.
+7. Ask your agent something current; live sources come back. The result does not name the provider — a failure does, and names `tinyfish`.
 
 ---
 
@@ -56,7 +56,7 @@ cd ~/.dsh/profiles/web
 npm install dsh-tinyfish   # or: npm install @viztor/dsh-tinyfish — same thing
 ```
 
-Pick **one** name and install it once. Both tarballs carry byte-identical code and read the same settings (providers register as `tinyfish`, configuration lives under the row id `dsh-tinyfish`, credentials under the same two refs) — so switching names later loses nothing, but mounting both loads the bundle twice. `dsh-tinyfish` is the name DSH convention and these docs use.
+Pick **one** name and install it once. Both tarballs ship the same built code and read the same settings (providers register as `tinyfish`, configuration lives under the row id `dsh-tinyfish`, credentials under the same two refs) — so switching names later loses nothing, but mounting both loads the bundle twice. The scoped tarball's manifest and patch `name` differ, so the loader can resolve it under the scope. `dsh-tinyfish` is the name DSH convention and these docs use.
 
 <details>
 <summary><strong>📦 Installing from GitHub Packages instead</strong></summary>
@@ -93,7 +93,7 @@ then `npm install @viztor/dsh-tinyfish` resolves from the mirror. Unless npmjs i
 
 > Bundles installed through `package.json` resolve at boot, so restart DSH here — reloading the patch alone won't load them.
 
-**Add a key** — pick a channel below and save it, then ask your agent something current (_who won the last Formula 1 race?_). The tool call should come back as `tinyfish`; that name is the proof the row validated, a credential resolved, and the profile pins this provider.
+**Add a key** — pick a channel below and save it, then ask your agent something current (_who won the last Formula 1 race?_). Live sources coming back is the proof the row validated and a credential resolved; the result itself does not name the provider, so confirm the pin in your profile patch (`searchProvider` / `fetchProvider`) — or provoke a failure, whose message does name `tinyfish`.
 
 ### Select it
 
@@ -108,7 +108,7 @@ To choose differently, override it in the profile's `cordis.patch.yml`, which ap
     fetchProvider: http
 ```
 
-The two kinds are independent fields, so search can run through TinyFish while fetch stays on the shipped `http` provider, or the other way round. The plugin stays mounted and idle either way. A host can also set `DSH_WEB_SEARCH_PROVIDER` / `DSH_WEB_FETCH_PROVIDER` instead — those feed the same fields, with the config value winning when both are present.
+The two kinds are independent fields, so search can run through TinyFish while fetch stays on the shipped `http` provider, or the other way round. The plugin stays mounted and idle either way. A host can also set `DSH_WEB_SEARCH_PROVIDER` / `DSH_WEB_FETCH_PROVIDER` — those feed the same fields, with the config value winning when both are present, which on a stock profile means the shipped base patch always wins.
 
 ## 🔑 Two channels, one plugin
 
@@ -129,13 +129,13 @@ The default is `direct`, because the package is named for TinyFish — a fresh i
 
 Both keys can live side by side — saving one never overwrites the other, and switching channels loses nothing.
 
-## ⚙️ Settings page
+## ⚙️ Plugins card
 
-**Settings → Plugins → TinyFish.** Everything editable lives here: whether TinyFish answers search and fetch, the channel picker, your keys, what the search ranks on, and retries. Changes stage and save together; a key you type is stored by the harness, never in your profile.
+**Plugins → Tinyfish.** Everything you can edit from the GUI lives here: whether TinyFish answers search and fetch, the channel picker, your keys, what the search ranks on, and attempts. Changes stage and save together; a key you type is stored by the harness, never in your profile.
 
-Both key fields are on the page at once, each labelled with the service it authenticates and each hint naming the reference the save lands on — so you can set the Monid key while Direct is selected, and tell which of the two exists without switching back and forth.
+Both key fields are on the page at once, each labelled with the service it authenticates; the Monid field's hint names its reference, and the Direct field's reference is printed on the description line beneath it — so you can set the Monid key while Direct is selected, and tell which of the two exists without switching back and forth.
 
-> This row configures how TinyFish behaves; it does not select it. Pointing `searchProvider`/`fetchProvider` at `tinyfish` is a separate step in your profile patch — see [Select it](#select-it). Reverting is the same two words in reverse.
+> This row configures how TinyFish behaves; it does not select it. The bundle already points `searchProvider`/`fetchProvider` at `tinyfish`, so a fresh install is on the web path with no patch editing — override those two fields in your own patch layer to use something else. See [Select it](#select-it).
 
 <details>
 <summary><strong>📖 Full configuration reference</strong></summary>
@@ -151,7 +151,7 @@ Everything lives in one row, `dsh-tinyfish`. The row is validated, so an out-of-
 | `apiKeyEnv` | `TINYFISH_API_KEY` | credential reference, or env var, for `direct` |
 | `monidKeyEnv` | `MONID_API_KEY` | credential reference, or env var, for `monid` |
 | `purpose` | _(unset)_ | goal statement sent with every search and fetch; TinyFish ranks on it; capped at 2000 characters |
-| `attempts` | `3` | retries for a transient failure or an empty search (1–5) |
+| `attempts` | `3` | total tries for a transient failure or an empty search (1–5); `3` means at most 2 retries |
 | `filters.domainType` | _(unset)_ | `web` \| `news` \| `research_paper` — patch file only |
 | `filters.language` / `.location` | _(unset)_ | geo targeting — patch file only |
 | `filters.includeDomains` / `.excludeDomains` | _(unset)_ | comma-separated — patch file only |
@@ -177,7 +177,7 @@ Turning one off reports _unavailable_ rather than _missing_ — the harness tell
 
 The manifest also carries `dsh.compatibility`: the Node and DSH ranges stated explicitly, plus a per-release verdict — `compatible`, `incompatible`, or `unknown` — for the DSH versions a catalog checks.
 
-**DSH itself never reads it.** Neither `compatibility` nor `dshReleases` appears anywhere in the harness, so these fields cannot change how the plugin loads, registers, or behaves. They exist so a listing can state what has actually been verified, and the verdicts here are honest rather than aspirational: `0.2.0-rc.2` is what every build and test in this repository runs against, `0.2.0-rc.1` is admitted by the peer range but never exercised, and `0.1.7-rc.2` sits below that floor.
+**DSH itself never reads it.** No harness code reads `dsh.compatibility`, and the `dshReleases` map appears nowhere in the harness, so these fields cannot change how the plugin loads, registers, or behaves. DSH's own compatibility machinery is a separate thing: the loader checks `peerDependencies`, and exemptions live in the profile's `compatibility.json`. These fields exist so a listing can state what has actually been verified, and the verdicts here are honest rather than aspirational: `0.2.0-rc.2` is what every build and test in this repository runs against, `0.2.0-rc.1` is admitted by the peer range but never exercised, and `0.1.7-rc.2` sits below that floor.
 
 ### Filters and fetch options live in the patch file
 
@@ -201,7 +201,7 @@ Both sections always resolve: an unset one is an empty group that adds nothing t
 
 - `recencyMinutes` and `afterDate` are mutually exclusive in TinyFish's API; a row setting both sends both.
 - `excludeSelectors` cannot apply to direct PDF/CSV downloads, which answer `selector_unsupported` while it is set.
-- Each date bound is cross-checked against `domainType`: `recencyMinutes` and `afterDate` are refused for `research_paper`, `pubYearMin` exists only for it, and either wrong pairing rejects the whole search while set.
+- Upstream cross-checks each date bound against `domainType`: `recencyMinutes` and `afterDate` are refused for `research_paper`, `pubYearMin` exists only for it, and either wrong pairing rejects the whole search while set.
 
 ### Where a credential comes from
 
@@ -210,7 +210,7 @@ Resolved **per call** — a rotated key takes effect on the next search, no rest
 1. the `apiKey` literal in the row (a secret in config; prefer 2–3)
 2. the credentials service — `apiKeyEnv` (direct) or `monidKeyEnv` (monid), saved from the settings UI
 3. the launch environment (exported before DSH started)
-4. the live environment (`MONID_API_KEY` / `MONID_MCP_TOKEN` / `TINYFISH_API_KEY`; either Monid variable covers the `monid` channel)
+4. the live environment — the configured ref name first (`apiKeyEnv` / `monidKeyEnv`, which may name a variable of your own), then `MONID_API_KEY` / `MONID_MCP_TOKEN` / `TINYFISH_API_KEY` (either Monid variable covers the `monid` channel)
 5. the channel's CLI store (`monid keys add` / `tinyfish auth login`)
 
 A failing service falls through to the next source rather than failing the search.
@@ -233,11 +233,11 @@ Row, then environment, then built-in default — so staging can retarget without
 <br />
 
 - **A 404 is a result, not an error.** A per-URL fetch failure comes back carrying its status, because that is resource state the model needs.
-- **`publishedAt` is honest.** TinyFish reports human dates (`"Apr 30, 2026"`, `"1 year ago"`). What parses becomes ISO-8601; what doesn't is dropped, never invented. Unzoned dates read as UTC, so the same page reports the same day everywhere.
-- **Empty searches retry.** The upstream answers a valid query with nothing about one run in three — a blank result is retried up to `attempts` before it is believed.
+- **`publishedAt` is honest.** TinyFish reports human dates (`"Apr 30, 2026"`, `"1 year ago"`). What parses becomes ISO-8601; what doesn't is dropped, never invented. A date-only value with no zone reads as UTC, so the same page reports the same day everywhere; a value carrying a clock time is parsed as given.
+- **Empty searches retry.** The upstream answers a valid query with nothing about one run in three — a blank result is retried until the attempt budget (`attempts`, total tries) runs out before it is believed.
 - **A blocked run is terminal.** If a Monid workspace control stops a run, the error says why and links to top up. Never retried.
 - **Off means _unavailable_, not gone.** A switched-off kind stays registered and declines. If the profile still pins that tool to Tinyfish, the call fails loudly instead of silently rerouting — point the tool at another provider to use one. With nothing pinned, a withdrawn Tinyfish simply yields: auto-select picks whoever is left, and switching one kind off is how you resolve an "ambiguous provider" standoff down to a single candidate.
-- **_Unavailable_ has three causes and one message.** The seam only sees a boolean, so "switched off", "no credential", and "bad base URL" all read the same downstream. The card can tell them apart — check the switches, the key badges, and the endpoint overrides there.
+- **_Unavailable_ has three causes and one message.** The seam only sees a boolean, so "switched off", "no credential", and "bad base URL" all read the same downstream. The card can tell them apart — check the switches and the key badges there, and the endpoint overrides in the row or the environment.
 - **`purpose` is one sentence for every request.** The seam's requests carry no goal slot — `{query}` for search, `{url}` for fetch — so a per-call goal is impossible without a harness change. The configured sentence rides every search and fetch verbatim: a standing bias, not a per-task instruction.
 
 TinyFish's `agent` and `browser` surfaces are **not** exposed: metered, wallet-billed, and not a search or a fetch. Use the `tinyfish` CLI directly when a page genuinely needs a real browser.
