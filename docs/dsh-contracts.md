@@ -25,7 +25,7 @@ and `dsh-client-modules` documents the second as "an optional string-array field
 The bundle contract itself:
 
 - The loader resolves a bundle by **bare name** from a profile's `node_modules`, so the package must stay unscoped and the exported `name` must equal the manifest `name`. `scripts/check.ts` enforces both.
-- Bundles resolve at **boot**. `patchReload: live` covers a patch change, not a newly mounted bundle, so installing one needs a restart.
+- Bundles resolve from `dsh.profile.bundles`, re-read on every composition rather than frozen at boot. `dsh-plugin-manager`'s `reload()` calls `reconcileProfilePatches` with a fresh `readProfilePatches`, which goes through `loadProfileDirectory` and so re-reads the bundle list and each bundle's patch; on a live profile (HMR mounted) an install therefore mounts without a restart and reports `application: "applied"`, and only a host without HMR reports `restart-required`. Two things still need a restart: a `package.json` edit made outside the manager, which nothing watches, and a package _replacement_, which needs a fresh module generation.
 - Patch lists apply in `dsh.profile.bundles` order over an empty entry list, then the profile's own patches, then any launch patch. **Later layers win**, which is what makes a host row able to override a bundle's default.
 
 ### A patch `name` is an assertion, not a label

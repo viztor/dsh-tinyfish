@@ -143,6 +143,18 @@ try {
     console.log(
       `${existsSync(join(scratch, "locale", "en.json")) ? "ships" : "does not ship"} locale/en.json`
     );
+    // The rewrite is what makes the alias point at itself, and printing it here
+    // is what lets `scripts/check.ts` assert it at gate time rather than
+    // discovering it at a tag. Asserting on output the script already produces
+    // beats a second copy of the transform living in the check.
+    console.log(
+      `patch row name: ${
+        scopedPatch
+          .split("\n")
+          .map((line) => line.trim())
+          .find((line) => line.startsWith("name:")) ?? "none"
+      }`
+    );
     process.exit(0);
   }
 

@@ -751,6 +751,50 @@ if (!releaseYml.includes("scripts/publish-scoped.ts")) {
   ok("release.yml publishes @viztor/dsh-tinyfish from the same tree");
 }
 
+/**
+ * The alias is only equivalent if its own patch points at the scoped name. A
+ * scoped package whose patch still inserts `name: "dsh-tinyfish"` installs
+ * cleanly and then mounts a plugin that is not there — the failure `src/index.ts`
+ * cites `@viztor/dsh-opencode` for avoiding.
+ *
+ * `publish-scoped.ts` already asserts that rewrite, but only at publish time:
+ * the discovery would arrive with a tag push. Running its dry run here moves
+ * that to every gate, and it exercises the real transform rather than a second
+ * copy of it, which is the copy that would drift.
+ */
+const SCOPED_ALIAS = "@viztor/dsh-tinyfish";
+try {
+  const dryRun = execFileSync(process.execPath, ["scripts/publish-scoped.ts"], {
+    cwd: ROOT,
+    encoding: "utf8",
+    // `PUBLISH_DRY_RUN` builds the scratch tree and stops before the network.
+    env: { ...CHILD_ENV, PUBLISH_DRY_RUN: "1" },
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  const missing = [
+    [`"name": "${SCOPED_ALIAS}"`, "the scoped manifest name"],
+    [`name: "${SCOPED_ALIAS}"`, "the rewritten patch row name"],
+    ["ships lib/client.js", "lib/client.js"],
+    ["ships locale/en.json", "locale/en.json"],
+  ]
+    .filter(([needle]) => !dryRun.includes(needle ?? ""))
+    .map(([, label]) => label);
+  if (missing.length > 0) {
+    fail(`the scoped alias would publish without ${missing.join(", ")}`);
+  } else {
+    ok("the scoped alias repacks under its own name in manifest and patch");
+  }
+} catch (error: unknown) {
+  const err = error as { stderr?: string; message?: string };
+  const detail = [err.stderr, err.message]
+    .filter(Boolean)
+    .join("\n")
+    .split("\n")
+    .slice(0, 3)
+    .join(" | ");
+  fail(`the scoped alias dry run failed: ${detail}`);
+}
+
 /* ------------------------------------------ 11. the client stays lean */
 
 /**
