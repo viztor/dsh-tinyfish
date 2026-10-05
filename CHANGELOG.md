@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.11.1](https://github.com/viztor/dsh-tinyfish/compare/v0.11.0...v0.11.1) (2026-10-05)
+
+
+### Bug Fixes
+
+* correct the README and the missing-key errors against the current build ([08b6237](https://github.com/viztor/dsh-tinyfish/commit/08b62378a092970fe9c10ac6e8c403a804f6bf18))
+
 ## [0.11.0](https://github.com/viztor/dsh-tinyfish/compare/v0.10.1...v0.11.0) (2026-10-04)
 
 
