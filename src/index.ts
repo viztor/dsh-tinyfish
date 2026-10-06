@@ -219,8 +219,15 @@ export const inject = ["web"];
 /**
  * The bundle name, as the code calls itself.
  *
- * This does NOT have to equal the manifest `name`: `dsh-opencode` ships as
- * `@viztor/dsh-opencode` while exporting `dsh-opencode`, and mounts fine.
+ * The exported `name` is this plugin's identity — log lines, the settings
+ * namespace, the service scope — and it stays `dsh-tinyfish` even when the
+ * package is installed as `@viztor/dsh-tinyfish`. What must match the
+ * installed package name is the cordis row `name` in `cordis.patch.yml`,
+ * because the host resolves row names to `node_modules` paths;
+ * `scripts/publish-scoped.ts` rewrites that row for the alias, and
+ * `dsh-opencode-patch` shipped the failure this avoids — an unscoped row name
+ * under a scoped package answers "failed to import".
+ *
  * Package identity is the install path (`node_modules/dsh-tinyfish` vs
  * `node_modules/@viztor/dsh-tinyfish`); the providers register as `tinyfish`
  * and the settings live under the row id `dsh-tinyfish`, so either install

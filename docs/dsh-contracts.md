@@ -24,7 +24,7 @@ and `dsh-client-modules` documents the second as "an optional string-array field
 
 The bundle contract itself:
 
-- The loader resolves a bundle by **bare name** from a profile's `node_modules`, so the package must stay unscoped and the exported `name` must equal the manifest `name`. `scripts/check.ts` enforces both.
+- The loader resolves a bundle entry, and every patch row's `name`, to a path under the profile's `node_modules` — so the name that must equal the installed package name is the **row** name, not the exported one. `dsh-opencode-patch` shipped that failure: its row named the unscoped `dsh-opencode` under a scoped package, and the entry answered "failed to import" until the row name matched. The exported `name` is the plugin's own identity and need not match the manifest — `@viztor/dsh-tinyfish` exports `dsh-tinyfish`. This tree stays unscoped, which `scripts/check.ts` enforces, and the scoped alias works because `scripts/publish-scoped.ts` rewrites the row name to the scoped package name.
 - Bundles resolve from `dsh.profile.bundles`, re-read on every composition rather than frozen at boot. `dsh-plugin-manager`'s `reload()` calls `reconcileProfilePatches` with a fresh `readProfilePatches`, which goes through `loadProfileDirectory` and so re-reads the bundle list and each bundle's patch; on a live profile (HMR mounted) an install therefore mounts without a restart and reports `application: "applied"`, and only a host without HMR reports `restart-required`. Two things still need a restart: a `package.json` edit made outside the manager, which nothing watches, and a package _replacement_, which needs a fresh module generation.
 - Patch lists apply in `dsh.profile.bundles` order over an empty entry list, then the profile's own patches, then any launch patch. **Later layers win**, which is what makes a host row able to override a bundle's default.
 
@@ -165,7 +165,7 @@ Slot declarations are `declare module` augmentations of `SlotMap`, and declaring
 
 ### Package artwork _is_ reachable: declare `icon` in the manifest
 
-The correction to the blanket claim above. The Plugins page renders `pkg.meta?.icon` through `PackageArtwork` on cards, rows, and detail headers, with a default fallback when absent — and the manifest `icon` field (`"icon": "./icon.svg"`, shipped in `files`) is how a third-party package populates it. `dsh-opencode` has done this all along; `dsh-tinyfish` did not until the fish moved from `assets/` to root `icon.svg`. So: names stay raw, artwork renders. The two `meta` sub-paths really are independent — one dead, one live — and any future claim about "no third-party mechanism" needs to name which one.
+The correction to the blanket claim above. The Plugins page renders `pkg.meta?.icon` through `PackageArtwork` on cards, rows, and detail headers, with a default fallback when absent — and the manifest `icon` field (`"icon": "./icon.svg"`, shipped in `files`) is how a third-party package populates it. `dsh-opencode-patch` has done this all along; `dsh-tinyfish` did not until the fish moved from `assets/` to root `icon.svg`. So: names stay raw, artwork renders. The two `meta` sub-paths really are independent — one dead, one live — and any future claim about "no third-party mechanism" needs to name which one.
 
 ### The form API
 

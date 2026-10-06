@@ -157,12 +157,14 @@ for (const field of ["main", "types"]) {
 }
 
 /**
- * A DSH bundle is resolved by **bare name** out of the profile's
- * `node_modules`, which makes `name` a runtime contract rather than a label:
- * add an org prefix and the loader never looks for it — the package installs
- * cleanly, the plugin registers nowhere, and nothing in the run says why.
- * `docs/dsh-contracts.md` states that the exported `name` must equal the
- * manifest `name`, and this is where that is made true rather than assumed.
+ * A DSH bundle resolves through the profile's `node_modules`, keyed by the
+ * name in `dsh.profile.bundles` and by each patch row's `name` — so the
+ * manifest `name` is a runtime contract, not a label. This package's primary
+ * name is the bare `dsh-tinyfish`: it is what the docs, the row id and the
+ * loader's default route all use, and renaming it would be a runtime break
+ * rather than a relabel. The scoped alias is a second published name, and it
+ * works because `scripts/publish-scoped.ts` rewrites the row name to match
+ * it; the exported `name` stays `dsh-tinyfish` either way.
  *
  * The repository URL is the other half of what those docs claimed. npm draws
  * the package page, the source link and the provenance from it, and a wrong
@@ -754,8 +756,9 @@ if (!releaseYml.includes("scripts/publish-scoped.ts")) {
 /**
  * The alias is only equivalent if its own patch points at the scoped name. A
  * scoped package whose patch still inserts `name: "dsh-tinyfish"` installs
- * cleanly and then mounts a plugin that is not there — the failure `src/index.ts`
- * cites `@viztor/dsh-opencode` for avoiding.
+ * cleanly and then mounts a plugin that is not there — the host resolves a row
+ * name to a `node_modules` path, and `dsh-opencode-patch` shipped exactly that
+ * failure ("failed to import") when its row kept the unscoped name.
  *
  * `publish-scoped.ts` already asserts that rewrite, but only at publish time:
  * the discovery would arrive with a tag push. Running its dry run here moves
