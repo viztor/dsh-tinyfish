@@ -47,7 +47,7 @@ A non-insert patch is matched by **`id`**. `name` is optional, and when present 
 
 ### `dsh.compatibility` is metadata, not a contract
 
-`dsh.compatibility` — and the `dshReleases` map inside it — appears **nowhere in the harness**. It is not read by `dsh-app-boot`, the loader, or any `@deepseek-ai` package. It is consumer-facing metadata for catalogs that want an explicit per-release verdict instead of a peer range. No behaviour in this package depends on it, and a wrong verdict there cannot break an install: the peer range plus `scripts/check.ts` are what actually guard compatibility.
+`dsh.compatibility` — and the `dshReleases` map inside it — is read **nowhere in the harness**: no code reads the field, and `dshReleases` appears nowhere in it. DSH's own compatibility machinery is a separate mechanism — `evaluatePluginCompatibility` checks `peerDependencies`, and exemptions are recorded in the profile's `compatibility.json` — so the two are not to be confused. It is consumer-facing metadata for catalogs that want an explicit per-release verdict instead of a peer range. No behaviour in this package depends on it, and a wrong verdict there cannot break an install: the peer range plus `scripts/check.ts` are what actually guard compatibility.
 
 ## The web seam
 
