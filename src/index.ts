@@ -486,6 +486,20 @@ export function resolveOptions(
   const apiKey = readField(section, "apiKey").trim();
   const purpose = readField(section, "purpose").trim();
 
+  // One three-rung shape for all three endpoints: config row, then a
+  // package-scoped environment variable, then the built-in default — the same
+  // rungs the shipped providers use for `$DEEPSEEK_SEARCH_BASE_URL`, so a
+  // deployment can retarget the endpoints without writing a patch file. A
+  // value that does not parse is dropped by `available()` rather than trusted,
+  // which is what makes accepting one from the environment safe. It used to be
+  // spelled out three times, each reading the row once to compare it against
+  // `""` and again to use it; one helper keeps the rungs in step and reads
+  // each row once.
+  const base = (field: string, variable: string, fallback: string): string => {
+    const value = readField(section, field);
+    return value.length > 0 ? value : (env[variable] ?? fallback);
+  };
+
   return {
     // Inverted from the obvious form on purpose: anything that is not an
     // explicit `"monid"` is `direct`, so an unset or garbled value takes the
@@ -518,24 +532,13 @@ export function resolveOptions(
     // NaN, and `normalizeAttempts` silently returned the default — so
     // `attempts: 5` in the settings row had no effect at all.
     attempts: normalizeAttempts(readField(section, "attempts")),
-    // Config row, then a package-scoped environment variable, then the built-in
-    // default — the same three-rung shape the shipped providers use for
-    // `$DEEPSEEK_SEARCH_BASE_URL`, so a deployment can retarget the endpoints
-    // without writing a patch file. A value that does not parse is dropped by
-    // `available()` rather than trusted, which is what makes accepting one from
-    // the environment safe.
-    monidBase:
-      readField(section, "monidBase").length > 0
-        ? readField(section, "monidBase")
-        : (env.TINYFISH_MONID_BASE_URL ?? DEFAULT_MONID_BASE),
-    searchBase:
-      readField(section, "searchBase").length > 0
-        ? readField(section, "searchBase")
-        : (env.TINYFISH_SEARCH_BASE_URL ?? DEFAULT_SEARCH_BASE),
-    fetchBase:
-      readField(section, "fetchBase").length > 0
-        ? readField(section, "fetchBase")
-        : (env.TINYFISH_FETCH_BASE_URL ?? DEFAULT_FETCH_BASE),
+    monidBase: base("monidBase", "TINYFISH_MONID_BASE_URL", DEFAULT_MONID_BASE),
+    searchBase: base(
+      "searchBase",
+      "TINYFISH_SEARCH_BASE_URL",
+      DEFAULT_SEARCH_BASE
+    ),
+    fetchBase: base("fetchBase", "TINYFISH_FETCH_BASE_URL", DEFAULT_FETCH_BASE),
     // A switch is off only when it says so. Anything absent or unusable means
     // "on", so a malformed value cannot silently disable a provider — the same
     // rule the channel default follows.
