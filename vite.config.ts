@@ -302,16 +302,16 @@ export default defineConfig({
       // A floor, not a target. A threshold nobody fails is a check that cannot
       // fail, which is worth less than no threshold at all: it reads as
       // "covered" on the dashboard. These sit just under what the suite
-      // actually reaches today (92.8 / 85.0 / 93.8 / 94.7), so a real
-      // regression fails and closing a gap lets them be raised. Widening one
-      // is a deliberate act visible in the diff — which is the point.
-      // `branches` is the tight one on purpose: 85 against a measured 85.01
-      // means the first untested branch fails it.
+      // actually reaches today (93.7 / 86.7 / 95.8 / 95.5 on vitest 5.0.3), so
+      // a real regression fails and closing a gap lets them be raised.
+      // Widening one is a deliberate act visible in the diff — which is the
+      // point. `branches` stays the tight one on purpose: 86 against a
+      // measured 86.65 means the first untested branch fails it.
       thresholds: {
-        statements: 90,
-        branches: 85,
-        functions: 88,
-        lines: 90,
+        statements: 92,
+        branches: 86,
+        functions: 94,
+        lines: 94,
       },
     },
   },
