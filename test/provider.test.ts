@@ -497,6 +497,51 @@ test("a 404 is a result carrying its status, not a thrown error", async () => {
   assert.match(result.body.content, /404/);
 });
 
+test("a 404 whose status arrives as a string is still a result", async () => {
+  // The shape test rejects a wrong-typed field by dropping the whole row, so a
+  // `status: "404"` left the provider with neither a page nor a failure and it
+  // threw WEB_PROVIDER_ERROR — a 404 reported as a provider fault. The row is
+  // the resource state; its status is a number upstream *documents*, not one it
+  // guarantees.
+  const { result } = await withStubbedFetch(
+    [
+      {
+        respond: () => ({
+          body: fetchEnvelope(
+            [],
+            [{ url: "https://x", error: "page_not_found", status: "404" }]
+          ),
+        }),
+      },
+    ],
+    async () => fetchp().fetch({ url: "https://x" })
+  );
+  assert.equal(result.statusCode, 404);
+  assert.match(result.body.content, /page_not_found/);
+  assert.match(result.body.content, /404/);
+});
+
+test("a failure whose status is unreadable keeps the row and degrades the status", async () => {
+  // The other half of the same rule: a status that cannot be read is not a
+  // reason to discard the failure. `Number("") === 0`, so blank has to be
+  // treated as absent rather than as a status code.
+  const { result } = await withStubbedFetch(
+    [
+      {
+        respond: () => ({
+          body: fetchEnvelope(
+            [],
+            [{ url: "https://x", error: "gone", status: "" }]
+          ),
+        }),
+      },
+    ],
+    async () => fetchp().fetch({ url: "https://x" })
+  );
+  assert.equal(result.statusCode, 502);
+  assert.match(result.body.content, /gone/);
+});
+
 test("a fetch error for a different URL does not poison this one", async () => {
   const { result } = await withStubbedFetch(
     [

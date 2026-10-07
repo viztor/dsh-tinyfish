@@ -181,11 +181,46 @@ const FETCH_PAGE_SHAPE = {
   latency_ms: isNumber,
 } satisfies Record<keyof TinyfishFetchPage, (value: unknown) => boolean>;
 
+/**
+ * A failure row as upstream sends it, which is not quite the decoded payload.
+ *
+ * `status` is documented as a number and has been sent as a string. Dropping
+ * the row over that would leave the caller with neither a page nor a failure
+ * and turn a 404 into a thrown provider error, so the row is read as this and
+ * the status is normalised on the way out.
+ */
+type TinyfishFailureWire = Omit<TinyfishFetchFailure, "status"> & {
+  status?: number | string;
+};
+
+/** A status in either form it arrives: a number, or a string to be coerced. */
+const isStatus = (value: unknown): boolean =>
+  isNumber(value) || isString(value);
+
 const FETCH_FAILURE_SHAPE = {
   url: isString,
   error: isString,
-  status: isNumber,
-} satisfies Record<keyof TinyfishFetchFailure, (value: unknown) => boolean>;
+  status: isStatus,
+} satisfies Record<keyof TinyfishFailureWire, (value: unknown) => boolean>;
+
+/**
+ * One failure row with its status as the number the payload promises.
+ *
+ * An unreadable status degrades to absent instead of discarding the row: the
+ * provider already answers an absent status with 502, so the failure still
+ * reaches the model. Blank is the case that matters — `Number("")` is `0`, and
+ * a blank would otherwise be reported as a status code.
+ */
+function decodeFailure(row: TinyfishFailureWire): TinyfishFetchFailure {
+  // A number is left exactly as it arrived, `0` included: deciding a status is
+  // unusable is the provider's call, not this decoder's.
+  if (!isString(row.status)) return { ...row, status: row.status };
+  const status = Number(row.status);
+  return {
+    ...row,
+    status: Number.isFinite(status) && status > 0 ? status : undefined,
+  };
+}
 
 /** True for a row whose declared fields all arrived as their declared type. */
 function rowFits(value: unknown, shape: RowShape): boolean {
@@ -205,8 +240,8 @@ const isSearchHit = (value: unknown): value is TinyfishSearchHit =>
 const isFetchPage = (value: unknown): value is TinyfishFetchPage =>
   rowFits(value, FETCH_PAGE_SHAPE);
 
-/** A per-URL failure. */
-const isFetchFailure = (value: unknown): value is TinyfishFetchFailure =>
+/** A per-URL failure, still carrying whatever form its status arrived in. */
+const isFetchFailure = (value: unknown): value is TinyfishFailureWire =>
   rowFits(value, FETCH_FAILURE_SHAPE);
 
 /** An array of rows, kept `undefined` when upstream sent no array at all. */
@@ -233,7 +268,7 @@ function decodeFetch(raw: unknown): TinyfishFetchPayload {
   if (!isRecord(raw)) return {};
   return {
     results: rows(raw.results, isFetchPage),
-    errors: rows(raw.errors, isFetchFailure),
+    errors: rows(raw.errors, isFetchFailure)?.map(decodeFailure),
   };
 }
 
