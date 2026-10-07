@@ -361,29 +361,44 @@ export class TinyfishFetchProvider implements WebFetchProvider {
 }
 
 /**
- * True when this configuration can produce a credential without a network
- * call: a literal key, the environment, or a credential the CLIs already
- * stored. A `credential-ref` resolved by the harness service is not visible
- * from here, so a plugin that relies on one stays available through the
- * service-backed path in the client.
+ * True when this configuration can produce a credential, answering the way
+ * the request that follows it will.
+ *
+ * The synchronous rungs — a literal key, the environment, the credential the
+ * CLI already stored — go through `resolveApiKey` with the real environment,
+ * so the check and the request cannot disagree about them. The harness
+ * credentials service is the one rung this cannot consult: `resolve` is async
+ * and `available()` must answer synchronously, because `dsh-web` calls it to
+ * choose between providers. A wired resolver therefore answers "possibly"
+ * rather than the "no" a local miss would give.
+ *
+ * That matters because the service is the documented home for both keys
+ * (README's second rung, and where the settings page saves one). Reporting a
+ * Settings-saved key as absent made `dsh-web` throw
+ * WEB_PROVIDER_CONFIGURED_UNAVAILABLE before `resolveApiKeyAsync` ever got the
+ * chance to resolve it — a hard failure on a working configuration. A
+ * genuinely absent key is still reported, and reported better: `requireKey`
+ * raises WEB_PROVIDER_CREDENTIAL_MISSING, which names where to save the key,
+ * where "registered but unavailable" reads as a broken install.
  */
 function hasCredential(options: TinyfishProviderOptions): boolean {
-  // The active channel's ref, not a shared one: a direct-channel check that
-  // consulted the monid ref would report "configured" off a Monid key.
-  const ref =
-    options.channel === "monid" ? options.monidKeyEnv : options.apiKeyEnv;
-  return Boolean(
-    resolveApiKey(options.channel, {
-      apiKey: options.apiKey,
-      monidKeyEnv: options.monidKeyEnv,
-      env: {
-        // The channel's ref is checked under both the harness convention and
-        // the per-channel variable, because a ref may name either.
-        TINYFISH_API_KEY: process.env[ref],
-        MONID_API_KEY: process.env[ref],
-        MONID_MCP_TOKEN: process.env[ref],
-      },
-    })
+  // Forwarded, never rebuilt: `resolveApiKey` picks the active channel's ref
+  // itself (`monidKeyEnv` for monid, `apiKeyEnv` otherwise), reads that ref
+  // first, and then the channel's conventional names. Deriving a synthetic env
+  // instead dropped the configured-ref rung and looked each conventional name
+  // up under the wrong variable — two rungs the request path honours and this
+  // check could not see.
+  return (
+    Boolean(
+      resolveApiKey(options.channel, {
+        apiKey: options.apiKey,
+        apiKeyEnv: options.apiKeyEnv,
+        monidKeyEnv: options.monidKeyEnv,
+      })
+    ) ||
+    // Presence, not a value: the resolver is never invoked here, because a
+    // lookup this function cannot await would be a promise nobody settles.
+    options.resolveCredential !== undefined
   );
 }
 

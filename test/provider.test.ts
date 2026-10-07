@@ -10,6 +10,9 @@
  */
 
 import assert from "node:assert/strict";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 // Assertions stay on `node:assert` so that a failure here can only be the runner
 // swap, never an assertion-library rewrite.
@@ -246,6 +249,145 @@ test("available() is a local check and never touches the network", async () => {
   assert.equal(result.a, true);
   assert.equal(result.b, true);
   assert.equal(calls.length, 0, "available() must not make network calls");
+});
+
+/**
+ * Run `body` where no credential can leak in from this machine: every
+ * conventional variable unset and `$HOME` pointing at a directory that holds
+ * nothing, so the CLI stores behind `~/.tinyfish` and `~/.config/monid` read
+ * as absent.
+ *
+ * Without it, a test that means "there is no key here" is really asking
+ * whether *this* host has one — which is why `available()`'s answer for a
+ * keyless configuration could not be pinned at all before.
+ */
+function withoutAmbientCredential(body: () => void): void {
+  // Saved and restored one name at a time rather than through a list: deleting
+  // a computed key is a lint gate (`typescript/no-dynamic-delete`), and these
+  // four names *are* the rungs this helper exists to switch off, so naming
+  // each is clearer than an array that walks around the rule.
+  const homeBefore = process.env.HOME;
+  const tinyfish = process.env.TINYFISH_API_KEY;
+  const monidKey = process.env.MONID_API_KEY;
+  const monidToken = process.env.MONID_MCP_TOKEN;
+  const custom = process.env.MY_TINY_KEY;
+  const home = mkdtempSync(join(tmpdir(), "tf-home-"));
+  try {
+    delete process.env.TINYFISH_API_KEY;
+    delete process.env.MONID_API_KEY;
+    delete process.env.MONID_MCP_TOKEN;
+    delete process.env.MY_TINY_KEY;
+    process.env.HOME = home;
+    body();
+  } finally {
+    // `process.env.X = undefined` would store the *string* "undefined" — a
+    // credential-shaped nothing, which is the one outcome this helper must not
+    // produce — so an originally absent name is deleted back to absent.
+    if (homeBefore === undefined) delete process.env.HOME;
+    else process.env.HOME = homeBefore;
+    if (tinyfish === undefined) delete process.env.TINYFISH_API_KEY;
+    else process.env.TINYFISH_API_KEY = tinyfish;
+    if (monidKey === undefined) delete process.env.MONID_API_KEY;
+    else process.env.MONID_API_KEY = monidKey;
+    if (monidToken === undefined) delete process.env.MONID_MCP_TOKEN;
+    else process.env.MONID_MCP_TOKEN = monidToken;
+    if (custom === undefined) delete process.env.MY_TINY_KEY;
+    else process.env.MY_TINY_KEY = custom;
+    rmSync(home, { recursive: true, force: true });
+  }
+}
+
+test("available() reads the same credential rungs as the request path", () => {
+  // `hasCredential` built a synthetic env that mapped *every* conventional
+  // name to `process.env[ref]` and never forwarded `apiKeyEnv`, so neither of
+  // the two rungs `resolveApiKey` documents was visible to the check: the
+  // configured reference was skipped outright, and a conventional name was
+  // read under the wrong variable. `dsh-web` asks `available()` before it
+  // dispatches, so the disagreement reached the user as
+  // WEB_PROVIDER_CONFIGURED_UNAVAILABLE — on a configuration the request
+  // path resolves without complaint.
+  withoutAmbientCredential(() => {
+    // The configured reference of the user's own choosing, absent, with the
+    // channel's conventional name exported: the request path reads the ref
+    // first, finds nothing, and falls through to `TINYFISH_API_KEY`.
+    process.env.TINYFISH_API_KEY = "conventional";
+    const configured = new TinyfishSearchProvider(() => ({
+      ...OPTIONS,
+      channel: "direct",
+      apiKey: undefined,
+      apiKeyEnv: "MY_TINY_KEY",
+    }));
+    assert.equal(
+      configured.available(),
+      true,
+      "the channel's conventional name counts"
+    );
+
+    // …and the same ref when it *is* exported, which is the rung the
+    // synthetic env skipped entirely.
+    delete process.env.TINYFISH_API_KEY;
+    process.env.MY_TINY_KEY = "named";
+    assert.equal(
+      configured.available(),
+      true,
+      "the configured reference counts"
+    );
+    delete process.env.MY_TINY_KEY;
+
+    // The monid channel's second conventional name — `MONID_MCP_TOKEN`, the
+    // fallthrough `resolveApiKey` keeps both rungs for — exported on its own.
+    process.env.MONID_MCP_TOKEN = "mcp";
+    const monid = new TinyfishSearchProvider(() => ({
+      ...OPTIONS,
+      apiKey: undefined,
+    }));
+    assert.equal(monid.available(), true, "MONID_MCP_TOKEN counts");
+    delete process.env.MONID_MCP_TOKEN;
+
+    // Nothing at all still reads `false`. The rule under test is "never
+    // disagree with the request path", not "always available".
+    const keyless = new TinyfishSearchProvider(() => ({
+      ...OPTIONS,
+      apiKey: undefined,
+    }));
+    assert.equal(keyless.available(), false, "no credential, no provider");
+  });
+});
+
+test("available() counts a credential the harness service may hold", () => {
+  // The credentials service is the documented home for both keys — README
+  // rung 2, and the settings page is where a key gets saved into it — but
+  // `resolve` is async while `available()` must answer synchronously. A key
+  // saved *only* from Settings therefore read as "no credential" here, and
+  // `dsh-web` gates on `available()` before dispatching, so the search failed
+  // with WEB_PROVIDER_CONFIGURED_UNAVAILABLE even though `resolveApiKeyAsync`
+  // resolves that very key on the request path.
+  withoutAmbientCredential(() => {
+    let consulted = false;
+    const options: TinyfishProviderOptions = {
+      ...OPTIONS,
+      apiKey: undefined,
+      resolveCredential: async () => {
+        consulted = true;
+        return "service-key";
+      },
+    };
+    assert.equal(
+      new TinyfishSearchProvider(() => options).available(),
+      true,
+      "a wired resolver means a key may exist"
+    );
+    assert.equal(
+      new TinyfishFetchProvider(() => options).available(),
+      true,
+      "for both kinds"
+    );
+    assert.equal(
+      consulted,
+      false,
+      "and the check still never starts a lookup it cannot await"
+    );
+  });
 });
 
 test("available() is always a strict boolean, even from a malformed row", () => {
