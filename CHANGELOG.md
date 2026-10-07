@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.11.3](https://github.com/viztor/dsh-tinyfish/compare/v0.11.2...v0.11.3) (2026-10-07)
+
+
+### Bug Fixes
+
+* read a failure row whose status arrived as a string ([47bc534](https://github.com/viztor/dsh-tinyfish/commit/47bc534f4f95f30ee11883d03724e8778d0fcd11))
+
 ## [0.11.2](https://github.com/viztor/dsh-tinyfish/compare/v0.11.1...v0.11.2) (2026-10-07)
 
 
