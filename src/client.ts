@@ -488,8 +488,9 @@ function readMonidCredentials(path: string): string {
   // happened to be first would pick a rotated-out one.
   //
   // Two capture groups, so the split array is
-  // [before, indent, name, body, indent, name, body, …] and entry names land on
-  // the odd indices.
+  // [before, indent, name, body, indent, name, body, …] and entry names land
+  // on every third index starting at 2 — which is why the loop steps in
+  // threes from 1 and reads them as `i + 1`.
   const active = /^active_key:\s*(\S+)\s*$/m.exec(text)?.[1];
   const parts = text.split(/^(\s{2,})(\S+):\s*$/m);
   const entries = new Map<string, string>();
@@ -499,8 +500,11 @@ function readMonidCredentials(path: string): string {
     if (name !== undefined && body !== undefined) entries.set(name, body);
   }
 
+  // `*`, not `+`, before `key:`: an entry body is indented, but the flat file
+  // this falls back to need not be, and requiring whitespace at column 0 read
+  // a perfectly good `key:` as no key at all.
   const keyIn = (body?: string): string | undefined =>
-    /^\s+key:\s*(\S+)\s*$/m.exec(body ?? "")?.[1];
+    /^\s*key:\s*(\S+)\s*$/m.exec(body ?? "")?.[1];
 
   // `undefined` is the distinct answer from `""`: no `active_key` line means
   // "pick the only entry", while one that names nothing we have is "retry on

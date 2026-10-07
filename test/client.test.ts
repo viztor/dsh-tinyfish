@@ -112,6 +112,25 @@ test("resolveApiKey: reads the monid CLI credential file", () => {
   }
 });
 
+test("resolveApiKey: reads a flat file whose key: sits at column 0", () => {
+  // `keyIn` required whitespace *before* the `key:`, so the flat-file
+  // fallback — no entry headers, one value to read — could only ever answer
+  // "no credential" for a file that says otherwise. A missing key is not a
+  // neutral answer: it sends the lookup on to the next rung, or raises
+  // WEB_PROVIDER_CREDENTIAL_MISSING for a key sitting right there.
+  const dir = mkdtempSync(join(tmpdir(), "tf-monid-"));
+  try {
+    const file = join(dir, "credentials.yaml");
+    writeFileSync(file, ["key: monid_live_flat", ""].join("\n"));
+    assert.equal(
+      resolveApiKey("monid", { env: NO_ENV, credentialsPath: file }),
+      "monid_live_flat"
+    );
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test("resolveApiKey: prefers the entry named by active_key", () => {
   const dir = mkdtempSync(join(tmpdir(), "tf-monid-"));
   try {
