@@ -3,7 +3,8 @@
 # The @deepseek-ai/* devDependencies are prereleases that move fast — 0.1.7-rc.2
 # became 0.2.0-rc.1 — and moving them is the single most likely thing to break
 # this package. Bumping one to a version whose contract moved is a real task
-# (run the gate, read `contract:check`), so these are opened as pull requests
+# (run the gate: `pnpm run release:gate`, and read what the harness-surface
+# check inside `scripts/check.ts` says), so these are opened as pull requests
 # rather than merged automatically. An unattended bump that silently breaks the
 # seam is worse than a bump that waits.
 version: 2
@@ -20,6 +21,18 @@ updates:
     labels: [dependencies, dsh-runtime]
     commit-message:
       prefix: "deps"
+    ignore:
+      # React is never shipped from here: the browser half leaves `react` and
+      # `react/jsx-runtime` to the host's module loader (`deps.neverBundle`),
+      # and the host is React 18 — `dsh-web-frontend` declares `^18.2.0` and
+      # `@types/react ~18.3.1`. A devDependency on 19 would run the suite
+      # against a React line the harness does not have: green tests answering
+      # a question the runtime never asks. Move both together, on the day the
+      # host does.
+      - dependency-name: "react"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@types/react"
+        update-types: ["version-update:semver-major"]
     groups:
       # One PR for the whole harness set. They are released together, so
       # bumping one without the others produces a lockfile that resolves a
