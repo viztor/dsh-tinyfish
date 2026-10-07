@@ -686,6 +686,40 @@ test("retries are bounded, and a genuinely empty result still resolves", async (
   assert.deepEqual(result.results, []);
 });
 
+test("onRetry fires once per retry taken, never on the attempt that succeeds", async () => {
+  // `withRetry` had three call sites for one loop. Besides the retry decision
+  // and the error path, it fired on *every* attempt above the first — before
+  // deciding whether to return the value it had just got. Two empties and a
+  // real answer therefore reported four times for two retries: `(1, 3)`,
+  // `(2, 3)`, `(2, 3)`, `(3, 3)` — a duplicate, and a "retrying" signal on the
+  // very attempt that produced the result. A caller counting retries, or
+  // logging the error that caused one, was told about attempts that never
+  // failed.
+  const seen: [number, number][] = [];
+  await withStubbedFetch(
+    [
+      { respond: () => ({ body: searchEnvelope([]) }) },
+      { respond: () => ({ body: searchEnvelope([]) }) },
+      { respond: () => ({ body: searchEnvelope([hit()]) }) },
+    ],
+    async () =>
+      tinyfishSearch({
+        channel: "monid",
+        apiKey: "k",
+        query: "q",
+        attempts: 3,
+        delayMs: 1,
+        onRetry: (attempt, total) => {
+          seen.push([attempt, total]);
+        },
+      })
+  );
+  assert.deepEqual(seen, [
+    [1, 3],
+    [2, 3],
+  ]);
+});
+
 test("a COMPLETED run with null output and a 5xx is treated as transient", async () => {
   const { calls, result } = await withStubbedFetch(
     [

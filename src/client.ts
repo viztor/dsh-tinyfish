@@ -994,7 +994,6 @@ async function withRetry<T>(
   for (let attempt = 1; attempt <= attempts; attempt += 1) {
     try {
       const value = await operation();
-      if (attempt > 1) onRetry?.(attempt, attempts, lastError);
       if (
         retryWhen === undefined ||
         !retryWhen(value) ||
@@ -1002,6 +1001,12 @@ async function withRetry<T>(
       ) {
         return value;
       }
+      // One callback per retry actually taken: this one for a value not worth
+      // believing, the catch below for the attempt that failed. Nothing fires
+      // for the attempt that ends up returning — an earlier version also
+      // reported on every attempt past the first, before it knew whether it
+      // was about to return, so two retries arrived as four callbacks and the
+      // final one claimed the successful attempt was being retried.
       onRetry?.(attempt, attempts);
     } catch (error) {
       // A cancelled attempt is not a failed attempt: retrying it would spend
