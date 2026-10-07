@@ -281,6 +281,16 @@ const DEFAULT_MONID_KEY_REF = "MONID_API_KEY";
 const TINYFISH_SIGNUP_URL =
   "https://agent.tinyfish.ai/sign-up?ref=v1.dXNlcl8zSnh2TDJGaldOV2FQYWhnaDRqbTIzc0dqZTE.KxSdeNUG14oJKVFVFWLkOwn3-Pia7QI5BuaxiJ_iEVY";
 
+/** What each accepted boolean draft stages. Anything absent blocks the save. */
+const BOOLEAN_DRAFTS: Record<
+  string,
+  { kind: "set"; value: boolean } | { kind: "clear" }
+> = {
+  "": { kind: "clear" },
+  true: { kind: "set", value: true },
+  false: { kind: "set", value: false },
+};
+
 /**
  * A boolean field.
  *
@@ -293,16 +303,6 @@ const TINYFISH_SIGNUP_URL =
  * @param field - field name inside the namespace section.
  * @returns the field's conversion spec.
  */
-/** What each accepted boolean draft stages. Anything absent blocks the save. */
-const BOOLEAN_DRAFTS: Record<
-  string,
-  { kind: "set"; value: boolean } | { kind: "clear" }
-> = {
-  "": { kind: "clear" },
-  true: { kind: "set", value: true },
-  false: { kind: "set", value: false },
-};
-
 function settingsBooleanField(field: string): SettingsFieldSpec {
   return {
     field,
@@ -457,13 +457,6 @@ const formLabels = (t: Translate) => ({
 });
 
 /**
- * Render the Plugins list's one-line summary, or the settings form.
- *
- * @param props - the view asked for, locale copy, the form snapshot, its
- * actions, and the credential's configured state.
- * @returns the summary, or the form.
- */
-/**
  * Resolve a boolean switch to its effective value.
  *
  * The draft text is authoritative when present; a blank draft means untouched,
@@ -477,6 +470,13 @@ function switchValue(text: string): boolean {
   return true;
 }
 
+/**
+ * Render the Plugins list's one-line summary, or the settings form.
+ *
+ * @param props - the view asked for, locale copy, the form snapshot, its
+ * actions, and the credential's configured state.
+ * @returns the summary, or the form.
+ */
 function TinyfishCard(props: CardProps) {
   const { t } = props;
   if (props.view === "summary") return t("description");
