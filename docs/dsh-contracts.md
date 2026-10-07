@@ -36,7 +36,12 @@ Read out of `dsh-app-boot`'s patch merge (`lib/index.js`):
 const { id, insert, name, ...overrides } = patch;
 // …
 if (name && name !== target.name) {
-  warn("patch: name mismatch for %C (expected %C, got %C), skipping", id, target.name, name);
+  warn(
+    "patch: name mismatch for %C (expected %C, got %C), skipping",
+    id,
+    target.name,
+    name
+  );
   continue;
 }
 ```

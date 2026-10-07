@@ -75,14 +75,14 @@
     "@deepseek-ai/dsh-credentials": "0.2.0-rc.2",
     "@deepseek-ai/dsh-launch-environment": "0.2.0-rc.2",
     "@deepseek-ai/dsh-web": "0.2.0-rc.2",
-    "@types/node": "^26.6.3",
+    "@types/node": "^26.6.4",
     "@types/react": "^18.3.31",
-    "@vitest/coverage-v8": "5.0.1",
+    "@vitest/coverage-v8": "5.0.3",
     "react": "^18.3.1",
     "typescript": "^7.0.2",
-    "ultracite": "^7.12.2",
+    "ultracite": "^7.12.4",
     "vite-plus": "catalog:",
-    "vitest": "5.0.1"
+    "vitest": "5.0.3"
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "~4.0.4",
@@ -94,7 +94,7 @@
   "engines": {
     "node": ">=24"
   },
-  "packageManager": "pnpm@12.6.0",
+  "packageManager": "pnpm@12.10.1",
   "dsh": {
     "bundle": {
       "patch": "./cordis.patch.yml"

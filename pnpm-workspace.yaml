@@ -1,6 +1,25 @@
 catalog:
-  vite: npm:@voidzero-dev/vite-plus-core@1.0.0
-  vite-plus: 1.0.0
+  vite: npm:@voidzero-dev/vite-plus-core@1.1.0
+  vite-plus: 1.1.0
+# pnpm refuses any version published inside the last 24h (its default
+# `minimumReleaseAge`), and a toolchain cut hours ago lands squarely in that
+# window. These are the exact versions that window was lifted for — pinned,
+# not wildcards, so the next bump has to make its own case — and every one is
+# the Voidzero toolchain this repo already builds with. What proves them is
+# `pnpm run release:gate`, not their age: a fresh resolution of this tree runs
+# the formatter, the type-aware linter, the suite and the package checks
+# before anything can be tagged.
+minimumReleaseAgeExclude:
+  - "@voidzero-dev/vite-plus-core@1.1.0"
+  - "@voidzero-dev/vite-plus-darwin-arm64@1.1.0"
+  - "@voidzero-dev/vite-plus-darwin-x64@1.1.0"
+  - "@voidzero-dev/vite-plus-linux-arm64-gnu@1.1.0"
+  - "@voidzero-dev/vite-plus-linux-arm64-musl@1.1.0"
+  - "@voidzero-dev/vite-plus-linux-x64-gnu@1.1.0"
+  - "@voidzero-dev/vite-plus-linux-x64-musl@1.1.0"
+  - "@voidzero-dev/vite-plus-win32-arm64-msvc@1.1.0"
+  - "@voidzero-dev/vite-plus-win32-x64-msvc@1.1.0"
+  - vite-plus@1.1.0
 overrides:
   vite@*: "catalog:"
 peerDependencyRules:
