@@ -4,8 +4,10 @@
 
 ```sh
 pnpm install
-pnpm run build        # produces lib/, which the tests read
+pnpm run build        # produces lib/ — one test below evaluates it; the rest read src/
 pnpm run ci           # tsc --noEmit && vp check && vp test --coverage && node scripts/check.ts
+pnpm run release:gate # build, then ci — what a commit touching src/, cordis.patch.yml
+                      # or package.json has to pass before it is committed
 ```
 
 The build is not optional before testing: `test/client-bundle.test.ts` evaluates the built `lib/client.js` under `node:vm`, because proving the shipped artifact registers itself correctly is worth more than proving the source compiles.
