@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.11.2](https://github.com/viztor/dsh-tinyfish/compare/v0.11.1...v0.11.2) (2026-10-07)
+
+
+### Bug Fixes
+
+* make available() answer the way the request path does ([d1acc7e](https://github.com/viztor/dsh-tinyfish/commit/d1acc7e6d8770a5a44a87bea3eb12a27e33bc6c0))
+* read a monid key written at column 0 ([1300dbd](https://github.com/viztor/dsh-tinyfish/commit/1300dbd35d787ef6352a293066408f79b2efd493))
+* report each retry once instead of twice ([56ddf93](https://github.com/viztor/dsh-tinyfish/commit/56ddf93b7b02731dc0e64a21d121db57053c0ae3))
+
 ## [0.11.1](https://github.com/viztor/dsh-tinyfish/compare/v0.11.0...v0.11.1) (2026-10-05)
 
 
