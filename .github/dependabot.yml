@@ -33,6 +33,25 @@ updates:
         update-types: ["version-update:semver-major"]
       - dependency-name: "@types/react"
         update-types: ["version-update:semver-major"]
+      # The Voidzero toolchain moves as one lever, by hand. `vite-plus`
+      # bundles its own Vitest at an exact version, so the two below are not
+      # independent choices: a pull request moving `vitest` alone leaves the
+      # suite importing a different Vitest than the one running it, and
+      # `@vitest/coverage-v8` has to match `vitest` exactly or
+      # `vp test --coverage` stops resolving a provider. A `vite-plus` bump by
+      # pull request is red on arrival for a second reason — pnpm rejects any
+      # version published inside the last 24h, so the new exact version has to
+      # be listed under `minimumReleaseAgeExclude` in pnpm-workspace.yaml
+      # before an install can succeed, and whether a bump deserves that
+      # exemption is a judgement no bot can make.
+      #
+      # So: add `vite-plus`, `vitest` and `@vitest/coverage-v8` at one version
+      # together, commit the lockfile with them, and run `release:gate`. The
+      # tooling group below still covers ultracite, oxlint, oxfmt, typescript
+      # and @types/node, none of which vite-plus bundles.
+      - dependency-name: "vite-plus"
+      - dependency-name: "vitest"
+      - dependency-name: "@vitest/coverage-v8"
     groups:
       # One PR for the whole harness set. They are released together, so
       # bumping one without the others produces a lockfile that resolves a
