@@ -73,6 +73,8 @@ const en = {
     "Stored separately from the TinyFish key. `monid keys add` also works and takes precedence over this.",
   apiKeySet: "A key is configured.",
   apiKeyUnset: "No key is configured, so searches fail until one is set.",
+  apiKeyReadOnly:
+    "This key is supplied outside this form, so it cannot be changed here.",
   getKey: "Get your TinyFish API key",
   purpose: "Purpose",
   purposeHint:
@@ -116,6 +118,7 @@ const zh = {
     "与 TinyFish 密钥分开保存。也可运行 `monid keys add`，其优先级高于此项。",
   apiKeySet: "已配置密钥。",
   apiKeyUnset: "未配置密钥，搜索会失败，直到设置为止。",
+  apiKeyReadOnly: "该密钥由此表单之外提供，无法在此修改。",
   getKey: "获取你的 TinyFish API 密钥",
   purpose: "目标说明",
   purposeHint:
@@ -211,8 +214,17 @@ interface CardState {
    * one a request will send; it does not decide which one the page may be
    * edited — hiding the other would mean the only way to set a key for the
    * channel you are not using is to change the channel you are using.
+   *
+   * `writable` is the Host's answer to "could `credentials.set` succeed for
+   * this reference", which is a different question from the shell's own
+   * `writable` (whether the settings document accepts writes at all). It is
+   * carried per channel because the two keys can differ: one reference can be
+   * shadowed by a read-only source while the other is still editable.
    */
-  keys: Record<string, { text: string; named: boolean; ref: string }>;
+  keys: Record<
+    string,
+    { text: string; named: boolean; ref: string; writable: boolean }
+  >;
 }
 
 /** What the slot hands the card: the view asked for, copy, state, and actions. Exported so tests stay in sync by construction. */
@@ -536,8 +548,24 @@ function TinyfishCard(props: CardProps) {
       text: "",
       named: false,
       ref: channelRef(side),
+      writable: true,
     };
     const name = side === "monid" ? FIELD.monidApiKey : FIELD.apiKey;
+    // A reference the Host reports as unwritable cannot be saved — `set`
+    // rejects while a read-only source shadows it, and a key in the
+    // environment is a documented rung of the credential order, not an
+    // unusual setup. Rendering an editable field for it offered a save that
+    // could only fail, with the form's own failed state as the only
+    // explanation. The Host already told us; this is where it gets used.
+    const keyWritable = entry.writable;
+    let stateLabel: string;
+    if (!keyWritable) {
+      stateLabel = t("apiKeyReadOnly");
+    } else if (entry.named) {
+      stateLabel = t("apiKeySet");
+    } else {
+      stateLabel = t("apiKeyUnset");
+    }
     return (
       <SettingsSecretField
         id={`plugin-config-tinyfish-${name}`}
@@ -547,9 +575,9 @@ function TinyfishCard(props: CardProps) {
           `${side === "monid" ? t("monidApiKeyHint") : t("apiKeyHint")} (${entry.ref})`
         }
         text={entry.text}
-        disabled={disabled}
+        disabled={disabled || !keyWritable}
         configured={entry.named}
-        stateLabel={entry.named ? t("apiKeySet") : t("apiKeyUnset")}
+        stateLabel={stateLabel}
         onEdit={(text: string) => {
           props.edit(name, text);
         }}
@@ -803,11 +831,13 @@ export function apply(ctx: ClientContext) {
         text: model.field(FIELD.apiKey).text,
         named: credentialsState.direct.configured,
         ref: credentialsState.direct.ref,
+        writable: credentialsState.direct.writable,
       },
       monid: {
         text: model.field(FIELD.monidApiKey).text,
         named: credentialsState.monid.configured,
         ref: credentialsState.monid.ref,
+        writable: credentialsState.monid.writable,
       },
     },
   });

@@ -44,7 +44,10 @@ interface TestState {
     failed: boolean;
   };
   fields: Record<string, TestField>;
-  keys: Record<string, { text: string; named: boolean; ref: string }>;
+  keys: Record<
+    string,
+    { text: string; named: boolean; ref: string; writable: boolean }
+  >;
 }
 
 /** One staged edit the card records. */
@@ -98,6 +101,7 @@ interface SecretProps {
   hint: string;
   stateLabel: string;
   configured: boolean;
+  disabled: boolean;
   onEdit: (text: string) => void;
 }
 
@@ -374,7 +378,8 @@ function state(
   {
     writable = true,
     configured = false,
-  }: { writable?: boolean; configured?: boolean } = {}
+    keyWritable = true,
+  }: { writable?: boolean; configured?: boolean; keyWritable?: boolean } = {}
 ): TestState {
   const field = (value: unknown): TestField => {
     const text =
@@ -405,8 +410,18 @@ function state(
     },
     fields,
     keys: {
-      direct: { text: "", named: configured, ref: "TINYFISH_API_KEY" },
-      monid: { text: "", named: false, ref: "MONID_API_KEY" },
+      direct: {
+        text: "",
+        named: configured,
+        ref: "TINYFISH_API_KEY",
+        writable: keyWritable,
+      },
+      monid: {
+        text: "",
+        named: false,
+        ref: "MONID_API_KEY",
+        writable: true,
+      },
     },
   };
 }
@@ -414,7 +429,11 @@ function state(
 /** Render the card's page view. */
 function render(
   section: Record<string, unknown>,
-  options: { writable?: boolean; configured?: boolean } = {}
+  options: {
+    writable?: boolean;
+    configured?: boolean;
+    keyWritable?: boolean;
+  } = {}
 ): { edits: TestEdit[]; tree: unknown } {
   const { component } = mount(section);
   const edits: TestEdit[] = [];
@@ -1020,8 +1039,13 @@ test("a configured monid key reads as set", () => {
           channel: { text: "monid", overridden: false, invalid: false },
         },
         keys: {
-          direct: { text: "", named: false, ref: "TINYFISH_API_KEY" },
-          monid: { text: "", named: true, ref: "MY_PLATFORM" },
+          direct: {
+            text: "",
+            named: false,
+            ref: "TINYFISH_API_KEY",
+            writable: true,
+          },
+          monid: { text: "", named: true, ref: "MY_PLATFORM", writable: true },
         },
       }),
     edit: () => {},
@@ -1123,6 +1147,27 @@ test("credentials.describe marks configured keys as set in the UI", async () => 
     true,
     "configured direct key is set"
   );
+});
+
+test("a key the Host reports as unwritable is disabled, and says why", () => {
+  // `credentials.describe` answers whether the active provider can write each
+  // reference, and `set` rejects while a read-only source shadows it — a key
+  // in the environment is rung four of the documented credential order, not an
+  // unusual setup. The page read that flag into `credentialsState` and then
+  // never used it, so a shadowed reference rendered an editable field whose
+  // save could only fail, with the form's generic failed state as the only
+  // explanation. The Host had already said so.
+  const field = secretBy(render({}, { keyWritable: false }).tree, "apiKey");
+  assert.equal(field.disabled, true, "an unwritable reference is not editable");
+  assert.equal(field.stateLabel, "apiKeyReadOnly");
+});
+
+test("a writable key field stays editable", () => {
+  // The other direction, so the fix cannot disable every credential field and
+  // call the first test passing.
+  const field = secretBy(render({}).tree, "apiKey");
+  assert.equal(field.disabled, false);
+  assert.equal(field.stateLabel, "apiKeyUnset");
 });
 
 test("credentials/reference-updated invalidation re-reads credentials", async () => {
