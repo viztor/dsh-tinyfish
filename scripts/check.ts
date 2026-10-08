@@ -784,7 +784,7 @@ if (!attempts || !interval) {
  * rather than the underlying binaries, which would bypass the entry point that
  * reads the config at all.
  */
-const TOOLCHAIN = ["build", "check", "format", "lint", "test"];
+const TOOLCHAIN = ["build", "check", "fix", "format", "lint", "test"];
 const UNBYPASSED = /(?:^|[\s(])(oxlint|oxfmt|tsdown|vitest|tsc)(?:[\s)]|$)/;
 
 if (!pkg.devDependencies?.["vite-plus"]) {

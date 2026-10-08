@@ -227,7 +227,7 @@ interface CardState {
   >;
 }
 
-/** What the slot hands the card: the view asked for, copy, state, and actions. Exported so tests stay in sync by construction. */
+/** What the slot hands the card: the view asked for, copy, state, and actions. Exported because it types the card's entry point. */
 export interface CardProps {
   view?: "summary" | "page";
   t: Translate;
@@ -238,7 +238,8 @@ export interface CardProps {
   discard: () => void;
 }
 
-/** The client services this page reaches for, by shape. Exported so tests stay in sync by construction. */
+/** The client services this page reaches for, by shape. Exported because
+ * `apply` takes one, so whatever loads this half needs the type. */
 export interface ClientContext {
   effect: (body: () => (() => void) | undefined, label: string) => void;
   locale: {
