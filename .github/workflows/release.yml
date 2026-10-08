@@ -194,8 +194,15 @@ jobs:
             echo "::error::Read the two publish steps above before touching any credential: both green with a target missing here means npm is still processing that name. Re-check with: npm view <name>@$version version"
             echo "::error::The scoped alias step is continue-on-error, so if that one is the red one, its log names the real cause — a scoped package is a separate registry entry and needs its own Trusted Publisher."
           fi
-          if [ -n "$mirrorPending" ]; then
+          if [ -n "$mirrorPending" ] && [ -z "$pendingNpmjs" ]; then
             echo "::error::the npmjs release shipped; the GitHub Packages mirror did not — $mirrorPending is still unreadable after $((attempts * interval))s"
             echo "::error::Re-run this job to repair it: publish-scoped.ts checks the target registry first, so npmjs is skipped and only the mirror is retried."
+          elif [ -n "$mirrorPending" ]; then
+            # Both are missing, so the mirror is not the story and saying
+            # "the npmjs release shipped" here would be false. The block above
+            # already named the release as incomplete, which is the actionable
+            # fact; the mirror reports itself once npmjs lands and this is
+            # re-run.
+            echo "::error::the GitHub Packages mirror is missing too, but so is the release itself — repair npmjs first, then re-run this job for the mirror."
           fi
           exit 1

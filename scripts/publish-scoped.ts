@@ -45,6 +45,38 @@ const registry =
   process.env.PUBLISH_REGISTRY?.trim() || "https://registry.npmjs.org";
 const host = new URL(registry).host;
 
+// Authentication, exactly one route per registry:
+//
+// - npmjs: OIDC via the workflow's id-token. No secret exists to pass, so
+//   there is nothing to configure here — the trust lives on npmjs.com.
+// - GitHub Packages mirror: the workflow token (`NODE_AUTH_TOKEN`), because
+//   GHP has no trusted-publisher concept and this is the only route.
+// - Locally: nothing. Both names exist and CI publishes both, so there is
+//   no manual publish left to support. A run outside CI with no mirror token
+//   lets npm say what it needs rather than failing on a stale secret.
+//
+// An earlier version also accepted pasted tokens and OTP codes for the
+// manual first-publish of each name. Both names are out now, OIDC and the
+// workflow token cover every repeat, and keeping those paths would be
+// options nobody exercises — which is how a secret-handling branch survives
+// untested until the day it mishandles one.
+//
+// Built here rather than beside the publish because the idempotency guard
+// below needs it too: GitHub Packages answers an *unauthenticated* metadata
+// request with a 401, and the guard's bare catch cannot tell that apart from
+// "not published yet". Without the token the guard silently never fires for
+// the mirror, and a re-run tries to republish a version that is already
+// there — leaving npm's error wording as the only thing standing between a
+// retried tag and a red release.
+const mirrorToken =
+  registry === "https://registry.npmjs.org"
+    ? undefined
+    : process.env.NODE_AUTH_TOKEN?.trim();
+const authArgs: string[] =
+  mirrorToken !== undefined && mirrorToken !== ""
+    ? [`--//${host}/:_authToken=${mirrorToken}`]
+    : [];
+
 // `PUBLISH_DRY_RUN=1` inspects the scratch tree without touching the network,
 // so it must not consult the registry either — otherwise a version that is
 // already published short-circuits before the transform is ever shown.
@@ -59,7 +91,13 @@ try {
   if (dryRun) throw new Error("dry run");
   const published = execFileSync(
     "npm",
-    ["view", `${SCOPED}@${version}`, "version", `--registry=${registry}`],
+    [
+      "view",
+      `${SCOPED}@${version}`,
+      "version",
+      `--registry=${registry}`,
+      ...authArgs,
+    ],
     { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }
   ).trim();
   if (published === version) {
@@ -74,6 +112,14 @@ try {
 // the unscoped name that DSH, the docs, and release-please all read; the
 // scoped name exists only inside this tarball.
 const scratch = mkdtempSync(join(tmpdir(), "dsh-tinyfish-scoped-"));
+// `process.exit` does not unwind, so the dry-run branch below — which is what
+// `scripts/check.ts` runs on every gate — has to clean up explicitly or it
+// leaves a scratch tree in the temp directory on every run. Named once so that
+// branch and the `finally` cannot drift apart; `rmSync` with `force` is safe to
+// call twice.
+const removeScratch = (): void => {
+  rmSync(scratch, { recursive: true, force: true });
+};
 try {
   // `files` lists what ships, but `package.json` itself is implied by npm
   // rather than listed — so it is copied explicitly, or there is nothing to
@@ -155,6 +201,8 @@ try {
           .find((line) => line.startsWith("name:")) ?? "none"
       }`
     );
+    // Explicit, because `process.exit` below never runs the `finally`.
+    removeScratch();
     process.exit(0);
   }
 
@@ -165,29 +213,6 @@ try {
   // it matters and the failure would return.
   const inCI =
     process.env.CI === "true" || process.env.GITHUB_ACTIONS === "true";
-  // Authentication, exactly one route per registry:
-  //
-  // - npmjs: OIDC via the workflow's id-token. No secret exists to pass, so
-  //   there is nothing to configure here — the trust lives on npmjs.com.
-  // - GitHub Packages mirror: the workflow token (`NODE_AUTH_TOKEN`), because
-  //   GHP has no trusted-publisher concept and this is the only route.
-  // - Locally: nothing. Both names exist and CI publishes both, so there is
-  //   no manual publish left to support. A run outside CI with no mirror token
-  //   lets npm say what it needs rather than failing on a stale secret.
-  //
-  // An earlier version also accepted pasted tokens and OTP codes for the
-  // manual first-publish of each name. Both names are out now, OIDC and the
-  // workflow token cover every repeat, and keeping those paths would be
-  // options nobody exercises — which is how a secret-handling branch survives
-  // untested until the day it mishandles one.
-  const mirrorToken =
-    registry === "https://registry.npmjs.org"
-      ? undefined
-      : process.env.NODE_AUTH_TOKEN?.trim();
-  const npmrc: string[] =
-    mirrorToken !== undefined && mirrorToken !== ""
-      ? [`--//${host}/:_authToken=${mirrorToken}`]
-      : [];
   // Provenance attests to npmjs via the workflow's OIDC identity. The mirror
   // gets none: GitHub Packages accepts no attestation, and asserting one for
   // the wrong registry would fail the publish it is meant to protect.
@@ -214,7 +239,7 @@ try {
         scratch,
         `--registry=${registry}`,
         ...attest,
-        ...npmrc,
+        ...authArgs,
         "--access",
         "public",
         "--ignore-scripts",
@@ -246,5 +271,5 @@ try {
     }
   }
 } finally {
-  rmSync(scratch, { recursive: true, force: true });
+  removeScratch();
 }
