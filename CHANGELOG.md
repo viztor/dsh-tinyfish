@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.11.5](https://github.com/viztor/dsh-tinyfish/compare/v0.11.4...v0.11.5) (2026-10-08)
+
+
+### Bug Fixes
+
+* disable a credential field the Host cannot write ([194046c](https://github.com/viztor/dsh-tinyfish/commit/194046cdcc9865360d53ec3b748f413cc86ed2dc))
+* five behavioural defects the audit turned up ([160f82c](https://github.com/viztor/dsh-tinyfish/commit/160f82c302b027791ba65495eb6ed6ca72dcb847))
+* four gate checks that could not fail for the right reason ([cd45bc4](https://github.com/viztor/dsh-tinyfish/commit/cd45bc43a06dad5d01f87084704de445e245e903))
+* make the mirror's idempotency guard work, and stop lying in two messages ([19053fe](https://github.com/viztor/dsh-tinyfish/commit/19053fef5105a4f8bd9bf591336c3c5478391e7c))
+* read a fetched page whose unextractable fields arrived as null ([37b0779](https://github.com/viztor/dsh-tinyfish/commit/37b07792f89c5eb2ba938ea2e3f4112e6a42cac1))
+* scope the peer-range green line to its own section ([2396534](https://github.com/viztor/dsh-tinyfish/commit/2396534ab38db2ace8e87016eb00b5f361e356ca))
+* three latent script paths, and two workflow hazards ([72027e5](https://github.com/viztor/dsh-tinyfish/commit/72027e514e8986eb7001446e7cef8e22c50f7428))
+
 ## [0.11.4](https://github.com/viztor/dsh-tinyfish/compare/v0.11.3...v0.11.4) (2026-10-08)
 
 
