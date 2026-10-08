@@ -922,6 +922,11 @@ test("a missing credential fails with a routable code and a real fix", async () 
         "a missing key is routable, not an opaque provider error"
       );
       assert.match(error.message, /tinyfish auth login/);
+      assert.match(
+        error.message,
+        /`apiKeyEnv`/,
+        "the direct channel's own row, named as such"
+      );
       assert.doesNotMatch(error.message, /--source/, "no invented flags");
       assert.match(
         error.message,
@@ -943,6 +948,17 @@ test("a missing credential fails with a routable code and a real fix", async () 
       assert.ok(error instanceof WebError);
       assert.equal(error.code, WEB_PROVIDER_CREDENTIAL_MISSING);
       assert.match(error.message, /monid keys add/);
+      // The row that configures *this* channel's reference. The message named
+      // `apiKeyEnv`, which is the direct channel's row, so a monid user
+      // following it configured the other reference and stayed broken with the
+      // same error. This test already asserted the CLI commands and the GUI
+      // path and simply never checked the row, which is how it survived.
+      assert.match(error.message, /monidKeyEnv/);
+      assert.doesNotMatch(
+        error.message,
+        /`apiKeyEnv`/,
+        "apiKeyEnv configures the direct channel, not this one"
+      );
       assert.doesNotMatch(
         error.message,
         /monid login/,
