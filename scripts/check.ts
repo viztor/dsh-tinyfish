@@ -791,6 +791,59 @@ if (!releaseYml.includes("scripts/publish-scoped.ts")) {
 }
 
 /**
+ * The mirror is a second registry, and publishing is not shipping. GitHub
+ * Packages indexes on its own schedule, and README.md promises this name as the
+ * fallback when npmjs.org is unreachable — a promise that only holds if the
+ * step runs at all.
+ *
+ * Nothing else in this gate knows the mirror exists: `scripts/publish-scoped.ts`
+ * appears in the workflow for the npmjs alias too, so the check above is
+ * satisfied with the mirror step deleted. That is the shape of the gap this
+ * closes — the claim in README.md, the sidebar, and the fallback all rest on a
+ * step no assertion mentioned.
+ */
+if (
+  !/PUBLISH_REGISTRY=https:\/\/npm\.pkg\.github\.com[^\n]*publish-scoped\.ts/.test(
+    releaseYml
+  )
+) {
+  fail(
+    "release.yml does not mirror @viztor/dsh-tinyfish to GitHub Packages; " +
+      "README.md promises that name as a fallback and the repository sidebar " +
+      "reads from it"
+  );
+} else {
+  ok("release.yml mirrors @viztor/dsh-tinyfish to GitHub Packages");
+}
+
+/**
+ * And the mirror is verified, not assumed — the other half of the same gap.
+ * The verification step read back both npmjs names and never looked at the
+ * registry the fallback actually lives on, so a mirror that failed to index was
+ * reported as a successful release.
+ *
+ * The token is asserted alongside the registry rather than left to review.
+ * GitHub Packages answers an unauthenticated request with a 404 that does not
+ * distinguish "absent" from "not allowed to look", so a verification that lost
+ * the token would poll for ten minutes and then report a healthy mirror as
+ * missing — the false red the npmjs budget was fixed for, moved to a second
+ * registry.
+ */
+if (
+  !/npm view [^\n]*--registry=https:\/\/npm\.pkg\.github\.com[^\n]*_authToken=/.test(
+    releaseYml
+  )
+) {
+  fail(
+    "release.yml publishes to GitHub Packages but never verifies it, or " +
+      "verifies it without the token that registry requires — an " +
+      "unauthenticated check 404s and reports a healthy mirror as missing"
+  );
+} else {
+  ok("release.yml verifies the GitHub Packages mirror");
+}
+
+/**
  * The alias is only equivalent if its own patch points at the scoped name. A
  * scoped package whose patch still inserts `name: "dsh-tinyfish"` installs
  * cleanly and then mounts a plugin that is not there — the host resolves a row

@@ -122,8 +122,9 @@ jobs:
           PUBLISH_REGISTRY=https://npm.pkg.github.com node scripts/publish-scoped.ts
 
       # The release claim, checked instead of assumed. Both names are advertised
-      # as equivalent in README.md, so a mirror that silently lags the canonical
-      # package is a broken promise the run has to surface.
+      # as equivalent in README.md, and the scoped name is separately promised
+      # as a GitHub Packages fallback, so any target that silently lags is a
+      # broken promise the run has to surface.
       #
       # It polls, because a successful `npm publish` does not mean the version
       # is readable yet: npm answers "Your package is being processed and may
@@ -131,38 +132,70 @@ jobs:
       # returns nothing. Checking once reported a healthy release as failed.
       #
       # The budget is ten minutes, and the canonical name is what needs it. The
-      # two targets do not become readable in parallel — for v0.11.3,
+      # npmjs targets do not become readable in parallel — for v0.11.3,
       # `dsh-tinyfish` published first and took 4m18s to appear, while the
       # scoped alias, published ten seconds later, took 2m13s. The old budget,
       # twelve attempts at 15s, gave up at 3m06s and failed a release that had
       # in fact succeeded a minute earlier.
+      #
+      # Three targets, two registries, one loop. The mirror indexes on its own
+      # schedule, so checking it after the npmjs wait would serialize two
+      # ten-minute budgets for no reason. It also carries a token while the
+      # others do not: GitHub Packages authenticates even for a public package,
+      # and answers an unauthenticated request with a 404 that does not
+      # distinguish "absent" from "not allowed to look". The token rides the
+      # command line on the same line as the registry, matching the mirror
+      # publish step — and so that the gate can assert the two travel together,
+      # which is the difference between a check and a ten-minute false red.
+      #
+      # The two failures are reported apart because they mean different things.
+      # An npmjs target missing is a release that did not land. A missing mirror
+      # is a release that landed without its fallback — and it cannot be a
+      # publish failure reaching this point, since the mirror step is not
+      # continue-on-error: if its publish had failed, the job would have stopped
+      # there. So the mirror message names the repair instead of a credential.
       - name: Verify every published target
         run: |
           version=$(node -p "require('./package.json').version")
-          targets="dsh-tinyfish@$version @viztor/dsh-tinyfish@$version"
+          npmjs="dsh-tinyfish@$version @viztor/dsh-tinyfish@$version"
+          mirror="@viztor/dsh-tinyfish@$version"
           attempts=40
           interval=15
 
           for attempt in $(seq 1 $attempts); do
-            pending=""
-            for spec in $targets; do
+            pendingNpmjs=""
+            for spec in $npmjs; do
               if npm view "$spec" version --registry=https://registry.npmjs.org >/dev/null 2>&1; then
                 echo "ok      $spec  (npmjs.org)  attempt $attempt/$attempts"
               else
-                pending="$pending $spec"
+                pendingNpmjs="$pendingNpmjs $spec"
               fi
             done
-            if [ -z "$pending" ]; then
-              echo "every published target is live on npmjs.org"
+
+            if npm view "$mirror" version --registry=https://npm.pkg.github.com "--//npm.pkg.github.com/:_authToken=${{ secrets.GITHUB_TOKEN }}" >/dev/null 2>&1; then
+              mirrorPending=""
+              echo "ok      $mirror  (npm.pkg.github.com)  attempt $attempt/$attempts"
+            else
+              mirrorPending="$mirror"
+            fi
+
+            if [ -z "$pendingNpmjs$mirrorPending" ]; then
+              echo "every published target is live"
               exit 0
             fi
             if [ "$attempt" -lt "$attempts" ]; then
-              echo "attempt $attempt/$attempts: waiting for npm to index:$pending"
+              echo "attempt $attempt/$attempts: waiting for npm to index:$pendingNpmjs$mirrorPending"
               sleep $interval
             fi
           done
 
-          echo "::error::these targets are still unreadable on npmjs.org after $((attempts * interval))s:$pending"
-          echo "::error::Read the two publish steps above before touching any credential: both green with a target missing here means npm is still processing that name. Re-check with: npm view <name>@$version version"
-          echo "::error::The scoped alias step is continue-on-error, so if that one is the red one, its log names the real cause — a scoped package is a separate registry entry and needs its own Trusted Publisher."
+          if [ -n "$pendingNpmjs" ]; then
+            echo "::error::the release is incomplete: still unreadable on npmjs.org after $((attempts * interval))s:$pendingNpmjs"
+            echo "::error::Read the two publish steps above before touching any credential: both green with a target missing here means npm is still processing that name. Re-check with: npm view <name>@$version version"
+            echo "::error::The scoped alias step is continue-on-error, so if that one is the red one, its log names the real cause — a scoped package is a separate registry entry and needs its own Trusted Publisher."
+          fi
+          if [ -n "$mirrorPending" ]; then
+            echo "::error::the npmjs release shipped; the GitHub Packages mirror did not — $mirrorPending is still unreadable after $((attempts * interval))s"
+            echo "::error::Re-run this job to repair it: publish-scoped.ts checks the target registry first, so npmjs is skipped and only the mirror is retried."
+          fi
           exit 1
