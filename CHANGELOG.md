@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.11.6](https://github.com/viztor/dsh-tinyfish/compare/v0.11.5...v0.11.6) (2026-10-08)
+
+
+### Bug Fixes
+
+* let a blank endpoint setting fall through instead of disabling the provider ([c1b9b11](https://github.com/viztor/dsh-tinyfish/commit/c1b9b11465b601c41d5e16e53459a43353d05b74))
+* name the right config row in the missing-credential error ([d7c7c67](https://github.com/viztor/dsh-tinyfish/commit/d7c7c6759b57d62ab333d93810bf98cb373ad004))
+
 ## [0.11.5](https://github.com/viztor/dsh-tinyfish/compare/v0.11.4...v0.11.5) (2026-10-08)
 
 
