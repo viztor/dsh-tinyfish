@@ -129,28 +129,40 @@ jobs:
       # is readable yet: npm answers "Your package is being processed and may
       # take a few minutes to become available", and an immediate `npm view`
       # returns nothing. Checking once reported a healthy release as failed.
+      #
+      # The budget is ten minutes, and the canonical name is what needs it. The
+      # two targets do not become readable in parallel — for v0.11.3,
+      # `dsh-tinyfish` published first and took 4m18s to appear, while the
+      # scoped alias, published ten seconds later, took 2m13s. The old budget,
+      # twelve attempts at 15s, gave up at 3m06s and failed a release that had
+      # in fact succeeded a minute earlier.
       - name: Verify every published target
         run: |
           version=$(node -p "require('./package.json').version")
-          pending="dsh-tinyfish@$version @viztor/dsh-tinyfish@$version"
+          targets="dsh-tinyfish@$version @viztor/dsh-tinyfish@$version"
+          attempts=40
+          interval=15
 
-          for attempt in $(seq 1 12); do
-            still=""
-            for spec in $pending; do
+          for attempt in $(seq 1 $attempts); do
+            pending=""
+            for spec in $targets; do
               if npm view "$spec" version --registry=https://registry.npmjs.org >/dev/null 2>&1; then
-                echo "ok      $spec  (npmjs.org)"
+                echo "ok      $spec  (npmjs.org)  attempt $attempt/$attempts"
               else
-                still="$still $spec"
+                pending="$pending $spec"
               fi
             done
-            pending=$(echo "$still" | xargs)
             if [ -z "$pending" ]; then
               echo "every published target is live on npmjs.org"
               exit 0
             fi
-            echo "attempt $attempt/12: waiting for npm to index:$pending"
-            sleep 15
+            if [ "$attempt" -lt "$attempts" ]; then
+              echo "attempt $attempt/$attempts: waiting for npm to index:$pending"
+              sleep $interval
+            fi
           done
 
-          echo "::error::these targets did not publish:$pending — register a Trusted Publisher for each at https://www.npmjs.com/package/<name>/access (repository viztor/dsh-tinyfish, workflow release.yml)"
+          echo "::error::these targets are still unreadable on npmjs.org after $((attempts * interval))s:$pending"
+          echo "::error::Read the two publish steps above before touching any credential: both green with a target missing here means npm is still processing that name. Re-check with: npm view <name>@$version version"
+          echo "::error::The scoped alias step is continue-on-error, so if that one is the red one, its log names the real cause — a scoped package is a separate registry entry and needs its own Trusted Publisher."
           exit 1

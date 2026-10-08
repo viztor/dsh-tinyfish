@@ -685,6 +685,43 @@ if (!/npm view .* version 2>\/dev\/null/.test(release)) {
   ok("release.yml skips a version that is already on the registry");
 }
 
+/**
+ * How long the release waits for npm to make a published version readable.
+ *
+ * This is the one release setting that has to be measured rather than guessed:
+ * the two published names do not become readable in parallel, and the canonical
+ * one — published first, and the popular one — is the slower. For v0.11.3 it
+ * took 4m18s against the alias's 2m13s, and a three-minute budget failed a
+ * release that had succeeded a minute earlier, naming Trusted Publishing as the
+ * cause. Nobody reads that message as "wait longer" the first time.
+ *
+ * So the budget is asserted here rather than left to be tightened by someone
+ * who assumes the shorter one was measured. Ten minutes is roughly twice the
+ * worst observation, which is the margin a value nobody can query needs: there
+ * is no API that answers "how long will this take".
+ */
+const INDEX_BUDGET_SECONDS = 10 * 60;
+const attempts = Number(/^\s*attempts=(\d+)/m.exec(release)?.[1]);
+const interval = Number(/^\s*interval=(\d+)/m.exec(release)?.[1]);
+if (!attempts || !interval) {
+  fail(
+    "release.yml's publish verification does not declare attempts and " +
+      "interval, so its budget cannot be asserted here"
+  );
+} else if (attempts * interval < INDEX_BUDGET_SECONDS) {
+  fail(
+    `release.yml gives npm ${attempts * interval}s to make a published ` +
+      `version readable, under the ${INDEX_BUDGET_SECONDS}s budget — the ` +
+      "canonical name has taken longer than that and the run reported a " +
+      "successful release as failed"
+  );
+} else {
+  ok(
+    `release.yml waits up to ${attempts * interval}s for npm to index a ` +
+      "published version"
+  );
+}
+
 /* --------------------------------------------------- 9. the toolchain is Vite+ */
 
 /**
