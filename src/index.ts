@@ -496,8 +496,16 @@ export function resolveOptions(
   // `""` and again to use it; one helper keeps the rungs in step and reads
   // each row once.
   const base = (field: string, variable: string, fallback: string): string => {
-    const value = readField(section, field);
-    return value.length > 0 ? value : (env[variable] ?? fallback);
+    // Blank counts as unset on both rungs, the rule the credential rungs
+    // already follow. `length > 0` let a whitespace-only row through and `??`
+    // accepted an exported-but-empty variable; `URL.canParse` is false for
+    // both, so `available()` reported the provider unavailable over a value
+    // nobody set — with an error naming neither the row nor the variable, and
+    // the built-in default sitting right there.
+    const value = readField(section, field).trim();
+    if (value.length > 0) return value;
+    const fromEnv = env[variable]?.trim();
+    return fromEnv !== undefined && fromEnv !== "" ? fromEnv : fallback;
   };
 
   return {

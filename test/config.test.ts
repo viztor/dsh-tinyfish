@@ -765,6 +765,33 @@ test("a host patch row overrides the bundle default", () => {
   );
 });
 
+test("a blank endpoint setting is unset, not a value that disables the provider", () => {
+  // Invariant 5, which both rungs of the three-rung shape violated: a
+  // whitespace-only row passed `length > 0`, and `??` accepted an
+  // exported-but-empty variable. `URL.canParse` is false for either, so
+  // `available()` answered false and dsh-web raised
+  // WEB_PROVIDER_CONFIGURED_UNAVAILABLE for a provider whose default was
+  // sitting right there — with an error naming neither the row nor the
+  // variable, so the cause was invisible from the message.
+  assert.equal(
+    resolveOptions({ searchBase: "   " }, undefined, {}).searchBase,
+    "https://api.search.tinyfish.ai",
+    "a whitespace-only row falls through to the default"
+  );
+  assert.equal(
+    resolveOptions({}, undefined, { TINYFISH_SEARCH_BASE_URL: "" }).searchBase,
+    "https://api.search.tinyfish.ai",
+    "an exported-but-empty variable falls through to the default"
+  );
+  assert.equal(
+    resolveOptions({ searchBase: "   " }, undefined, {
+      TINYFISH_SEARCH_BASE_URL: "https://env.example",
+    }).searchBase,
+    "https://env.example",
+    "and a blank row lets the environment through"
+  );
+});
+
 test("endpoints resolve config row, then environment, then built-in default", () => {
   // The three-rung shape the shipped providers use for
   // `$DEEPSEEK_SEARCH_BASE_URL`. A deployment can retarget without a patch file.
