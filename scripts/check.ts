@@ -118,6 +118,7 @@ if (!existsSync(lib)) {
  * An exact pin is the other failure: it satisfies npm and orphans the plugin
  * on every DSH prerelease, with a per-machine exemption as the only remedy.
  */
+const peersBefore = failures.length;
 for (const [name, range] of Object.entries(
   (pkg.peerDependencies ?? {}) as Record<string, unknown>
 )) {
@@ -137,10 +138,14 @@ for (const [name, range] of Object.entries(
     );
   }
 }
-if (!failures.length)
-  ok(
-    `${Object.keys(pkg.peerDependencies ?? {}).length} peer ranges npm can resolve`
-  );
+// Scoped to this section, like the surface check. The global count meant an
+// unrelated failure earlier in the run suppressed this green line, so a clean
+// peer set was reported as nothing at all — noise in the other direction from
+// a false green, but the same cause: a check answering for work it did not do.
+okIfClean(
+  peersBefore,
+  `${Object.keys(pkg.peerDependencies ?? {}).length} peer ranges npm can resolve`
+);
 
 /* ------------------------------------------- 3. it is a bundle, and it loads */
 
