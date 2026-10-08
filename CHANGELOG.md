@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.11.4](https://github.com/viztor/dsh-tinyfish/compare/v0.11.3...v0.11.4) (2026-10-08)
+
+
+### Bug Fixes
+
+* stop reporting a slow npm index as an unregistered publisher ([b742ad2](https://github.com/viztor/dsh-tinyfish/commit/b742ad2d6918b4be85bfc9fd513e9ebbf8b3bac3))
+
 ## [0.11.3](https://github.com/viztor/dsh-tinyfish/compare/v0.11.2...v0.11.3) (2026-10-07)
 
 
