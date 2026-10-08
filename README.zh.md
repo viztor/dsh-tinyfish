@@ -177,7 +177,7 @@ npm install dsh-tinyfish   # or: npm install @viztor/dsh-tinyfish — same thing
 
 manifest 里还带着 `dsh.compatibility`：显式声明的 Node 与 DSH 范围，外加每个发版的实测结论——`compatible`、`incompatible` 或 `unknown`——供目录核验各 DSH 版本。
 
-**DSH 本体从不读它。**harness 里没有任何代码读 `dsh.compatibility`，`dshReleases` 映射也全无引用，所以这些字段改变不了插件的加载、注册与行为。DSH 自己的兼容机制是另一回事：loader 检查的是 `peerDependencies`，豁免记录在 profile 的 `compatibility.json` 里。这些字段的存在，是让列表页能如实写清“哪些已被验证”，这里的结论也的确是实测而非期望：`0.2.0-rc.2` 是本仓库每次构建与测试所跑的版本，`0.2.0-rc.1` 虽在 peer 范围内但从未实际跑过，`0.1.7-rc.2` 则低于下限。该范围同样允许 `0.2.1-alpha.1` —— 当前 RC 之上发布的 alpha —— 它记为 `unknown`，理由与 `0.2.0-rc.1` 相同：semver 接受它，但本仓库从未跑过。
+**DSH 本体从不读它。**harness 里没有任何代码读 `dsh.compatibility`，`dshReleases` 映射也全无引用，所以这些字段改变不了插件的加载、注册与行为。DSH 自己的兼容机制是另一回事：loader 检查的是 `peerDependencies`，豁免记录在 profile 的 `compatibility.json` 里。这些字段的存在，是让列表页能如实写清“哪些已被验证”，这里的结论也的确是实测而非期望：`0.2.0-rc.2` 是本仓库每次构建与测试所跑的版本，`0.2.0-rc.1` 虽在 peer 范围内但从未实际跑过，`0.1.7-rc.2` 则低于下限。`0.2.0-rc.1` 以同样方式验证过（把五个 harness devDependencies 全部钉到该版本并跑门禁）；`0.2.1-alpha.1` 记为 `incompatible`，因为 peer 范围并不接受它 —— semver 只在范围本身带有同一 major.minor.patch 的预发布版本时才放行预发布版，因此 loader 在该 alpha 主机上会拒绝加载本插件。
 
 ### 过滤器与抓取选项写在补丁文件里
 
