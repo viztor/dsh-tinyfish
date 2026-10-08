@@ -728,6 +728,29 @@ test("toIsoDate: an unzoned human date does not land a day early", () => {
   assert.equal(toIsoDate("Apr 30, 2026"), "2026-04-30T00:00:00.000Z");
 });
 
+test("available() for the fetch provider ignores a fetchBase monid never dials", () => {
+  // The other half of the same fix. The audit found it twice — once for
+  // `searchBase` and once for `fetchBase` — and only the search side had a
+  // test, so the fetch branch this change added was the one path in it that
+  // nothing exercised.
+  const monid = new TinyfishFetchProvider(() => ({
+    ...OPTIONS,
+    channel: "monid",
+    fetchBase: "not a url",
+  }));
+  assert.equal(monid.available(), true);
+  const direct = new TinyfishFetchProvider(() => ({
+    ...OPTIONS,
+    channel: "direct",
+    fetchBase: "not a url",
+  }));
+  assert.equal(
+    direct.available(),
+    false,
+    "the base this channel dials still counts"
+  );
+});
+
 test("available() asks only about the base the active channel dials", () => {
   // A malformed `searchBase` on a monid config answered a question that
   // channel's request path never asks, and dsh-web turns a false from
