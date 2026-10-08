@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.11.7](https://github.com/viztor/dsh-tinyfish/compare/v0.11.6...v0.11.7) (2026-10-08)
+
+
+### Miscellaneous Chores
+
+* release 0.11.7 ([c871de5](https://github.com/viztor/dsh-tinyfish/commit/c871de52da74f9fe62f7f2b0a44011c538c70250))
+
 ## [0.11.6](https://github.com/viztor/dsh-tinyfish/compare/v0.11.5...v0.11.6) (2026-10-08)
 
 
