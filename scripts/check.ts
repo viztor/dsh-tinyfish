@@ -282,6 +282,8 @@ const REQUIRED: Record<string, [RegExp, string][] | undefined> = {
   ],
 };
 
+const surfacesBefore = failures.length;
+let surfacesChecked = 0;
 for (const name of SURFACES) {
   let dir;
   try {
@@ -318,6 +320,7 @@ for (const name of SURFACES) {
     fail(`${name} ships no readable type declarations — the contract moved`);
     continue;
   }
+  surfacesChecked += 1;
 
   const dts = files.map((f) => readFileSync(f, "utf8")).join("\n");
   const required = REQUIRED[name];
@@ -326,8 +329,21 @@ for (const name of SURFACES) {
     if (!pattern.test(dts)) fail(`${name} no longer exposes ${what}`);
   }
 }
-if (!failures.some((f) => f.includes("no longer exposes"))) {
-  ok("every harness surface this package depends on is present");
+// Gated on how many packages were actually read, not on the absence of one
+// particular message. The old form printed this line after every package had
+// been skipped — a green claim that nothing had been checked, which is the
+// failure mode this file exists to prevent — and printed it beside the "ships
+// no readable type declarations" failure too, because that message does not
+// contain the substring the filter tested for.
+if (surfacesChecked === SURFACES.length) {
+  okIfClean(
+    surfacesBefore,
+    "every harness surface this package depends on is present"
+  );
+} else {
+  notes.push(
+    `skip  only ${surfacesChecked} of ${SURFACES.length} harness packages were checked, so the surface contract is unproven`
+  );
 }
 
 /* --------------------------------- 5. the lint and format configs are actually loaded */
@@ -477,7 +493,6 @@ for (const [sample, shouldMatch] of CANARIES as [string, boolean][]) {
  * while the comment above claimed the tarball was the point.
  */
 const SKIP = new Set(["node_modules", ".git", "coverage"]);
-const BUILD_SCRATCH = ".build-check";
 /**
  * The complement of "text we might not have thought of".
  *
@@ -493,7 +508,7 @@ const BINARY =
 let scanned = 0;
 const walk = (dir: string): void => {
   for (const name of readdirSync(dir)) {
-    if (SKIP.has(name) || name.startsWith(BUILD_SCRATCH)) continue;
+    if (SKIP.has(name)) continue;
     const full = join(dir, name);
     if (statSync(full).isDirectory()) {
       walk(full);
@@ -592,6 +607,20 @@ try {
     );
   }
 
+  // The files the manifest names, asserted in the tarball rather than in the
+  // manifest. `npm pack` omits a `files` entry that does not exist, prints no
+  // warning and exits 0 — so a build that stopped emitting `index.d.mts` would
+  // publish a typeless package, and the types are the contract this package
+  // exists to keep. Checking the field only proves someone wrote it down.
+  for (const named of [pkg.main, pkg.types, "cordis.patch.yml"]) {
+    if (typeof named === "string" && !existsSync(join(installed, named))) {
+      fail(
+        `the packed tarball is missing ${named}, which the manifest names — ` +
+          "npm omits a missing `files` entry without failing"
+      );
+    }
+  }
+
   // Loaded from the installed copy, not this tree.
   const probe = `
     const m = await import(${JSON.stringify(join(installed, pkg.main))});
@@ -615,7 +644,7 @@ try {
   });
 
   ok(
-    `installed the packed tarball with plain npm (${packed.entryCount} entries) and loaded the host + client halves`
+    `installed the packed tarball with plain npm (${packed.entryCount} entries) and loaded the host half from it`
   );
 } catch (error: unknown) {
   const err = error as { stderr?: string; message?: string };
@@ -676,10 +705,21 @@ if (!/^\s*id-token:\s*write/m.test(release)) {
   ok("release.yml grants id-token: write for OIDC trusted publishing");
 }
 
-if (!/npm view .* version 2>\/dev\/null/.test(release)) {
+// The guard has to *wrap* the publish. Matching the command's presence was
+// satisfied by `npm view ... 2>/dev/null || true` followed by an unconditional
+// publish, which is exactly the edit that loses the idempotency: npm refuses to
+// republish, so a retried tag would fail the release with this check green.
+const publishGuard =
+  /if npm view [^\n]*version 2>\/dev\/null; then([\s\S]*?)\n\s*fi\b/.exec(
+    release
+  );
+if (
+  publishGuard === null ||
+  publishGuard[1]?.includes("npm publish") !== true
+) {
   fail(
-    "release.yml does not skip an already-published version, so re-running a " +
-      "tag fails on npm's refusal to republish"
+    "release.yml does not skip an already-published version around the " +
+      "publish, so re-running a tag fails on npm's refusal to republish"
   );
 } else {
   ok("release.yml skips a version that is already on the registry");
@@ -701,6 +741,9 @@ if (!/npm view .* version 2>\/dev\/null/.test(release)) {
  * is no API that answers "how long will this take".
  */
 const INDEX_BUDGET_SECONDS = 10 * 60;
+// The loop sleeps only while another attempt follows, so the wall clock it can
+// spend is (attempts - 1) intervals — one less than the product. Reporting the
+// product overstated the budget in the ok line and in both failure messages.
 const attempts = Number(/^\s*attempts=(\d+)/m.exec(release)?.[1]);
 const interval = Number(/^\s*interval=(\d+)/m.exec(release)?.[1]);
 if (!attempts || !interval) {
@@ -708,16 +751,16 @@ if (!attempts || !interval) {
     "release.yml's publish verification does not declare attempts and " +
       "interval, so its budget cannot be asserted here"
   );
-} else if (attempts * interval < INDEX_BUDGET_SECONDS) {
+} else if ((attempts - 1) * interval < INDEX_BUDGET_SECONDS) {
   fail(
-    `release.yml gives npm ${attempts * interval}s to make a published ` +
+    `release.yml gives npm ${(attempts - 1) * interval}s to make a published ` +
       `version readable, under the ${INDEX_BUDGET_SECONDS}s budget — the ` +
       "canonical name has taken longer than that and the run reported a " +
       "successful release as failed"
   );
 } else {
   ok(
-    `release.yml waits up to ${attempts * interval}s for npm to index a ` +
+    `release.yml waits up to ${(attempts - 1) * interval}s for npm to index a ` +
       "published version"
   );
 }
