@@ -60,11 +60,16 @@ jobs:
 
       # A tag that disagrees with the manifest publishes a version nobody can
       # match to a commit, so this is checked before anything is built.
+      # The ref arrives through the environment rather than being interpolated
+      # into the script text: a tag name may contain `;`, `"`, `$` or a
+      # backtick, and this job holds `id-token: write` and a packages token.
       - name: The tag matches the manifest version
+        env:
+          TAG: ${{ github.ref_name }}
         run: |
           expected="v$(node -p "require('./package.json').version")"
-          if [ "${{ github.ref_name }}" != "$expected" ]; then
-            echo "::error::${{ github.ref_name }} does not match package.json $expected"
+          if [ "$TAG" != "$expected" ]; then
+            echo "::error::$TAG does not match package.json $expected"
             exit 1
           fi
 

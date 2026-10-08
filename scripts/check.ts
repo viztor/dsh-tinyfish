@@ -887,6 +887,48 @@ if (
 }
 
 /**
+ * Both workflows enumerate the gates by hand rather than calling
+ * `pnpm run ci`, and that is deliberate: each step carries the reason it
+ * exists, and one `- run: pnpm run ci` would delete that reasoning from the
+ * file a reader opens. The cost is two lists, and the script is the one that
+ * drifts — a step added there would run locally and never in CI, which stays
+ * invisible until a release depends on it. So they are compared instead.
+ *
+ * By tail, because the script says `vp check` where the workflows say
+ * `pnpm exec vp check`: the same gate, spelled for the environment it runs in.
+ */
+const ciSteps = String(pkg.scripts?.ci ?? "")
+  .split("&&")
+  .map((step) => step.trim().replace(/^pnpm (?:exec|run) /, ""))
+  .filter((step) => step !== "");
+const missingCi: string[] = [];
+if (ciSteps.length === 0) {
+  fail("package.json has no `ci` script for the workflows to mirror");
+} else {
+  for (const [file, text] of [
+    ["ci.yml", ci],
+    ["release.yml", release],
+  ] as const) {
+    const runs = [...text.matchAll(/^\s*-?\s*run:\s*(.+)$/gm)].map((match) =>
+      (match[1] ?? "").trim().replace(/^pnpm (?:exec|run) /, "")
+    );
+    for (const step of ciSteps) {
+      if (!runs.some((run) => run.includes(step))) {
+        missingCi.push(`${step} (${file})`);
+      }
+    }
+  }
+  if (missingCi.length > 0) {
+    fail(
+      `these \`ci\` steps never run in CI: ${missingCi.join(", ")} — the ` +
+        "workflows list the gates by hand, so the script is the list that drifts"
+    );
+  } else {
+    ok(`both workflows run all ${ciSteps.length} \`ci\` steps`);
+  }
+}
+
+/**
  * The alias is only equivalent if its own patch points at the scoped name. A
  * scoped package whose patch still inserts `name: "dsh-tinyfish"` installs
  * cleanly and then mounts a plugin that is not there — the host resolves a row

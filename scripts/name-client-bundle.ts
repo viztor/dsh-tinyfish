@@ -17,7 +17,7 @@
  * build, and it keeps the extension requirement in one place with a test on it.
  */
 
-import { existsSync, renameSync } from "node:fs";
+import { existsSync, renameSync, rmSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -30,6 +30,9 @@ if (!existsSync(built)) {
   process.exit(0);
 }
 
-if (existsSync(served)) renameSync(served, join(ROOT, "lib/.client.js.stale"));
+// Removed rather than renamed aside. The rename kept a copy nothing read, and
+// npm-packlist ships dotfiles inside a directory listed in `files` — so a
+// `.client.js.stale` sibling would have ridden in every published tarball.
+if (existsSync(served)) rmSync(served, { force: true });
 renameSync(built, served);
 console.log("named the browser bundle lib/client.js");

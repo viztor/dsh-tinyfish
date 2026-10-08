@@ -8,9 +8,10 @@
  * script publishes the scoped copy from the same built tree, in the same job,
  * immediately after the unscoped publish — never separately, never by hand.
  *
- * It runs with `--ignore-scripts` because the unscoped publish already ran the
- * full gate (`prepublishOnly` → build, check, test, package checks). Running
- * it twice would double the release time for no new information.
+ * It runs with `--ignore-scripts`, like the unscoped publish in the workflow —
+ * so `prepublishOnly` never fires in a release, and this is not a second run of
+ * the gate. What actually stands behind both publishes is the workflow's
+ * `needs: verify` job: the gate runs once, before either name is written.
  *
  * Usage: node scripts/publish-scoped.ts
  * Environment: runs inside the release workflow, authenticated by OIDC.
@@ -131,9 +132,29 @@ try {
   // the pattern again when it packs. Naming a pattern here used to abort the
   // release with ENOENT on a literal `locale/*.json`.
   const copyRoot = (entry: string): string => {
-    if (!entry.includes("*")) return entry;
-    const slash = entry.indexOf("/");
-    return slash === -1 ? "." : entry.slice(0, slash);
+    if (entry.startsWith("!")) {
+      // A negation has no directory to copy, and silently ignoring it would
+      // ship a file the manifest excludes. npm re-applies `files` when it
+      // packs, so the honest answer is to refuse rather than guess.
+      throw new Error(
+        `files lists a negation (${entry}), which this copy cannot express`
+      );
+    }
+    const wildcard = entry.search(/[*?[]/);
+    if (wildcard === -1) return entry;
+    // The directory the pattern selects from. Derived from the first wildcard
+    // rather than the first slash: `*.md` has no slash, and resolving it to
+    // `.` copied the entire repository — node_modules, .git and all — into the
+    // scratch tree. A pattern with no literal directory has no correct answer
+    // here, so it is refused with the fix in the message.
+    const root = entry.slice(0, wildcard);
+    const slash = root.lastIndexOf("/");
+    if (slash === -1) {
+      throw new Error(
+        `files lists a root-level pattern (${entry}); name the directory it selects from instead`
+      );
+    }
+    return root.slice(0, slash);
   };
   for (const file of new Set([...pkg.files, "package.json"].map(copyRoot))) {
     cpSync(join(ROOT, file), join(scratch, file), { recursive: true });
