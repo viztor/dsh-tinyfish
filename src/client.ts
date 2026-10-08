@@ -244,12 +244,42 @@ const isFetchPage = (value: unknown): value is TinyfishFetchPage =>
 const isFetchFailure = (value: unknown): value is TinyfishFailureWire =>
   rowFits(value, FETCH_FAILURE_SHAPE);
 
+/**
+ * One row with its null-valued fields removed.
+ *
+ * Upstream answers `null` for a field it could not extract, and the fetch docs
+ * name them: title, description, language, author, published_date. `rowFits`
+ * skips a field that is *absent*, so "could not extract" has to arrive as
+ * absent — left as `null` it fails its own shape test and takes the whole row
+ * with it. For a fetched page that turns a successful fetch into a thrown
+ * `WEB_PROVIDER_ERROR`, which is invariant 2 inverted: a 404 is resource state
+ * the model needs, and so is a page whose date could not be read.
+ *
+ * Stripping here, before the shape test, is also what keeps the declared types
+ * true. Nothing downstream has to know a null was ever possible, so no
+ * consumer grows a second null check that only this wire shape would need.
+ *
+ * Takes and returns `unknown` so it stays a transform rather than a cast: the
+ * guard in `rows` is still the thing that narrows, and the compiler still
+ * polices the shape table.
+ */
+function withoutNulls(value: unknown): unknown {
+  if (!isRecord(value)) return value;
+  const clean: Record<string, unknown> = {};
+  for (const [key, field] of Object.entries(value)) {
+    if (field !== null) clean[key] = field;
+  }
+  return clean;
+}
+
 /** An array of rows, kept `undefined` when upstream sent no array at all. */
 function rows<T>(
   value: unknown,
   accept: (item: unknown) => item is T
 ): T[] | undefined {
-  return Array.isArray(value) ? value.filter(accept) : undefined;
+  return Array.isArray(value)
+    ? value.map(withoutNulls).filter(accept)
+    : undefined;
 }
 
 /** Decode a `/search` payload. */

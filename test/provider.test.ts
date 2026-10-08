@@ -542,6 +542,37 @@ test("a failure whose status is unreadable keeps the row and degrades the status
   assert.match(result.body.content, /gone/);
 });
 
+test("a page whose unextractable fields arrived as null is still a result", async () => {
+  // Upstream returns `null` for a field it could not extract — the fetch docs
+  // name title, description, language, author and published_date. `rowFits`
+  // only skipped `undefined`, so a present-but-null field failed the shape test
+  // and the whole row was dropped: a successful fetch of an ordinary page
+  // decoded to no results, and this provider then threw WEB_PROVIDER_ERROR
+  // "TinyFish returned no content". That is invariant 2 inverted — a fetch that
+  // worked, reported as a provider fault. Reproduced live against
+  // api.fetch.tinyfish.ai: results 0, errors 0, for a normal docs page.
+  const { result } = await withStubbedFetch(
+    [
+      {
+        respond: () => ({
+          body: fetchEnvelope([
+            {
+              url: "https://x",
+              title: null,
+              published_date: null,
+              text: "# Hi",
+            },
+          ]),
+        }),
+      },
+    ],
+    async () => fetchp().fetch({ url: "https://x" })
+  );
+  assert.equal(result.statusCode, 200);
+  assert.equal(result.body.content, "# Hi");
+  assert.equal(result.url, "https://x");
+});
+
 test("a fetch error for a different URL does not poison this one", async () => {
   const { result } = await withStubbedFetch(
     [
