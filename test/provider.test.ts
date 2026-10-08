@@ -708,3 +708,83 @@ test("a fetch also uses the stored credential", async () => {
     "Bearer stored-monid"
   );
 });
+
+/* ------------------------------------------------- unzoned dates, and the base */
+
+test("toIsoDate: an unzoned clock time is UTC, not the host's offset", () => {
+  // A clock time counted as "already zoned", so these were parsed as local and
+  // `.toISOString()` moved the instant by the host's offset — the same page
+  // reporting a different `publishedAt` depending on where it ran, which is
+  // exactly what the function's own doc says it prevents.
+  assert.equal(toIsoDate("2026-04-30T12:00:00"), "2026-04-30T12:00:00.000Z");
+  assert.equal(toIsoDate("2026-04-30 12:00"), "2026-04-30T12:00:00.000Z");
+  assert.equal(toIsoDate("Apr 30, 2026 12:00"), "2026-04-30T12:00:00.000Z");
+});
+
+test("toIsoDate: an unzoned human date does not land a day early", () => {
+  // `30 Apr 2026` matched neither special case, so it was read as local
+  // midnight and, east of Greenwich, reported as the previous day.
+  assert.equal(toIsoDate("30 Apr 2026"), "2026-04-30T00:00:00.000Z");
+  assert.equal(toIsoDate("Apr 30, 2026"), "2026-04-30T00:00:00.000Z");
+});
+
+test("available() asks only about the base the active channel dials", () => {
+  // A malformed `searchBase` on a monid config answered a question that
+  // channel's request path never asks, and dsh-web turns a false from
+  // `available()` into WEB_PROVIDER_CONFIGURED_UNAVAILABLE — a working setup
+  // reported as a broken install.
+  const monid = new TinyfishSearchProvider(() => ({
+    ...OPTIONS,
+    channel: "monid",
+    searchBase: "not a url",
+  }));
+  assert.equal(monid.available(), true);
+  const direct = new TinyfishSearchProvider(() => ({
+    ...OPTIONS,
+    channel: "direct",
+    searchBase: "not a url",
+  }));
+  assert.equal(
+    direct.available(),
+    false,
+    "the base this channel dials still counts"
+  );
+});
+
+test("an empty snippet falls back to the description alias", async () => {
+  const { result } = await withStubbedFetch(
+    [
+      {
+        respond: () => ({
+          body: searchEnvelope([
+            hit({ snippet: "", description: "the description" }),
+          ]),
+        }),
+      },
+    ],
+    async () => search().search({ query: "q" })
+  );
+  assert.equal(result.sources?.[0]?.snippet, "the description");
+});
+
+test("a result for another URL is not returned as this one's page", async () => {
+  // The failure branch tested `results.length`, so any result at all — even one
+  // for a different URL — suppressed it and the other page was returned as this
+  // request's content with statusCode 200, hiding the 404 reported for the URL
+  // actually asked for.
+  const { result } = await withStubbedFetch(
+    [
+      {
+        respond: () => ({
+          body: fetchEnvelope(
+            [{ url: "https://other", text: "WRONG PAGE" }],
+            [{ url: "https://wanted", error: "page_not_found", status: 404 }]
+          ),
+        }),
+      },
+    ],
+    async () => fetchp().fetch({ url: "https://wanted" })
+  );
+  assert.equal(result.statusCode, 404);
+  assert.match(result.body.content, /page_not_found/);
+});

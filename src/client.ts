@@ -959,19 +959,37 @@ function assertUsableRun(envelope: MonidEnvelope): void {
     );
   }
   // `output: null` alongside a provider error is Monid reporting an upstream
-  // failure (rate limiting, 5xx) as a COMPLETED run. That one is retryable.
+  // failure as a COMPLETED run. Which of those are worth retrying is a
+  // question about the status, not about whether an error object arrived:
+  // classifying on presence made every 4xx retryable, so a permanent and
+  // user-fixable 400/422 was retried `attempts` times and finally reported as
+  // "TinyFish is temporarily unavailable" — advice to wait for something only
+  // the request can fix. The direct channel treats that same status as
+  // terminal, and the two channels are advertised as interchangeable. The
+  // mirror of the same mistake: a bare `{ httpStatus: 429 }` with no error
+  // object was not retried at all.
   const provider = envelope.providerResponse;
   const noOutput = envelope.output === undefined || envelope.output === null;
-  const upstreamFault =
-    provider !== undefined &&
-    ((provider.error !== undefined && provider.error !== null) ||
-      (provider.httpStatus ?? 0) >= 500);
-  if (noOutput && upstreamFault) {
-    const message = extractProviderMessage(provider.error);
-    throw new TransientWebError(
-      `TinyFish is temporarily unavailable${message === "" ? "." : `: ${message}`}`,
-      WEB_PROVIDER_ERROR
-    );
+  if (noOutput && provider !== undefined) {
+    const status = provider.httpStatus;
+    const hasError = provider.error !== undefined && provider.error !== null;
+    // An absent status counts as retryable: Monid omits it on the envelopes it
+    // builds itself, and those were treated as faults before.
+    const retryable = status === undefined || status === 429 || status >= 500;
+    if (retryable && (hasError || status !== undefined)) {
+      const message = extractProviderMessage(provider.error);
+      throw new TransientWebError(
+        `TinyFish is temporarily unavailable${message === "" ? "." : `: ${message}`}`,
+        WEB_PROVIDER_ERROR
+      );
+    }
+    if (!retryable) {
+      const message = extractProviderMessage(provider.error);
+      throw new WebError(
+        `TinyFish rejected this request (HTTP ${status})${message === "" ? "." : `: ${message}`}`,
+        WEB_PROVIDER_ERROR
+      );
+    }
   }
 }
 

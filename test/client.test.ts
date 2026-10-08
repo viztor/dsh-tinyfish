@@ -992,3 +992,51 @@ test("the credential service is consulted on every search, never cached", async 
   assert.equal(await resolveApiKeyAsync("monid", options), "rotated-key");
   assert.equal(calls, 2, "one service call per resolution");
 });
+
+test("a COMPLETED run with null output and a 4xx is terminal, not transient", async () => {
+  // Monid reports an upstream 4xx as a COMPLETED run with `output: null` and
+  // `providerResponse.error` set. Classifying on "an error object arrived" made
+  // that retryable, so a permanent, user-fixable 400/422 was retried `attempts`
+  // times and finally reported as "TinyFish is temporarily unavailable" —
+  // advice to wait for something only the request can fix. The direct channel
+  // treats the same status as terminal.
+  let responses = 0;
+  await assert.rejects(
+    withStubbedFetch(
+      [
+        {
+          respond: () => {
+            responses += 1;
+            return {
+              body: {
+                status: "COMPLETED",
+                output: null,
+                providerResponse: {
+                  httpStatus: 422,
+                  error: {
+                    error: { code: "INVALID_INPUT", message: "bad selector" },
+                  },
+                },
+              },
+            };
+          },
+        },
+      ],
+      async () =>
+        tinyfishSearch({
+          channel: "monid",
+          apiKey: "k",
+          query: "q",
+          attempts: 3,
+        })
+    ),
+    (error: unknown) => {
+      const message = (error as Error).message;
+      assert.doesNotMatch(message, /temporarily unavailable/);
+      assert.match(message, /rejected this request/);
+      assert.match(message, /bad selector/);
+      return true;
+    }
+  );
+  assert.equal(responses, 1, "a 4xx is not retried");
+});

@@ -110,15 +110,22 @@ export function toIsoDate(value: string | undefined): string | undefined {
   if (typeof value !== "string" || !value.trim()) return undefined;
   const text = value.trim();
 
-  // Already zoned, or carries a clock time: parse as given.
-  const zoned =
-    /(?:Z|[+-]\d{2}:?\d{2})$/i.test(text) || /\d{1,2}:\d{2}/.test(text);
+  // Already zoned: parse as given. Everything else is read as UTC, which is
+  // what this function promises and what the two special cases used to be the
+  // only cover for. A clock time was the gap: `\d{1,2}:\d{2}` counted as
+  // "zoned", so `2026-04-30T12:00:00` and `Apr 30, 2026 12:00` were parsed as
+  // *local* and `.toISOString()` moved the instant by the host's offset —
+  // `30 Apr 2026` landed a day early. The suffix differs by shape because `Z`
+  // appended to a human date parses as nothing at all.
+  const zoned = /(?:Z|[+-]\d{2}:?\d{2})$/i.test(text);
 
   let candidate = text;
   if (!zoned) {
     if (/^\d{4}-\d{2}-\d{2}$/.test(text)) {
       candidate = `${text}T00:00:00Z`;
-    } else if (/^[A-Za-z]{3,9}\s+\d{1,2},\s*\d{4}$/.test(text)) {
+    } else if (/^\d{4}-\d{2}-\d{2}[T ]/.test(text)) {
+      candidate = `${text.replace(" ", "T")}Z`;
+    } else {
       candidate = `${text} UTC`;
     }
   }
@@ -192,8 +199,14 @@ export class TinyfishSearchProvider implements WebSearchProvider {
     return Boolean(
       options.search &&
       hasCredential(options) &&
-      URL.canParse(options.searchBase) &&
-      (options.channel === "direct" || URL.canParse(options.monidBase))
+      // Only the base this channel dials. Requiring the direct base for a
+      // monid config refused a provider whose request path never reads it —
+      // dsh-web turns that into WEB_PROVIDER_CONFIGURED_UNAVAILABLE, so a
+      // working setup read as a broken install. Same reasoning as the fetch
+      // side, where a bad `searchBase` once disabled a good fetch.
+      (options.channel === "monid"
+        ? URL.canParse(options.monidBase)
+        : URL.canParse(options.searchBase))
     );
   }
 
@@ -239,7 +252,13 @@ export class TinyfishSearchProvider implements WebSearchProvider {
         }
         // Monid names the snippet `snippet`; the direct API documents it
         // the same way, but accept `description` in case that ever shifts.
-        const snippet = row.snippet ?? row.description;
+        // An empty `snippet` is upstream saying it has none, so the alias is
+        // the better answer. `??` accepted the empty string and dropped the
+        // description with it.
+        const snippet =
+          row.snippet === undefined || row.snippet === ""
+            ? row.description
+            : row.snippet;
         if (snippet !== "" && snippet !== undefined) {
           source.snippet = snippet;
         }
@@ -289,8 +308,10 @@ export class TinyfishFetchProvider implements WebFetchProvider {
     return Boolean(
       options.fetch &&
       hasCredential(options) &&
-      URL.canParse(options.fetchBase) &&
-      (options.channel === "direct" || URL.canParse(options.monidBase))
+      // As above: the base this channel dials, and no other.
+      (options.channel === "monid"
+        ? URL.canParse(options.monidBase)
+        : URL.canParse(options.fetchBase))
     );
   }
 
@@ -323,8 +344,20 @@ export class TinyfishFetchProvider implements WebFetchProvider {
     // A per-URL failure is a result, not a WebError: the seam's contract says
     // a non-2xx response is part of the fetched resource state, and the model
     // needs the status to reason about it (a 404 is information, not a fault).
-    const failure = errors.find((row) => sameUrl(row?.url, request.url));
-    if (!results.length && failure) {
+    // Match the page to *this* request rather than trusting position. Testing
+    // `results.length` meant a results[] entry for some other URL was returned
+    // as this one's content with statusCode 200, hiding the 4xx that had been
+    // reported for the URL actually asked for. `url` is the requested URL and
+    // `final_url` the post-redirect one, so `url` matches first and the
+    // fallback only covers a row that omitted it. A failure row with no `url`
+    // counts as this request's: the transport sends exactly one URL.
+    const failure = errors.find(
+      (row) => row.url === undefined || sameUrl(row.url, request.url)
+    );
+    const page = results.find((row) =>
+      sameUrl(row.url ?? row.final_url, request.url)
+    );
+    if (!page && failure) {
       const status = Number(failure.status);
       return {
         url: request.url,
@@ -339,7 +372,6 @@ export class TinyfishFetchProvider implements WebFetchProvider {
       };
     }
 
-    const page = results[0];
     if (!page) {
       // Neither a result nor an error entry: the upstream answered, but with
       // nothing usable. That is a provider fault, not a resource state.
