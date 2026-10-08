@@ -177,7 +177,7 @@ Turning one off reports _unavailable_ rather than _missing_ — the harness tell
 
 The manifest also carries `dsh.compatibility`: the Node and DSH ranges stated explicitly, plus a per-release verdict — `compatible`, `incompatible`, or `unknown` — for the DSH versions a catalog checks.
 
-**DSH itself never reads it.** No harness code reads `dsh.compatibility`, and the `dshReleases` map appears nowhere in the harness, so these fields cannot change how the plugin loads, registers, or behaves. DSH's own compatibility machinery is a separate thing: the loader checks `peerDependencies`, and exemptions live in the profile's `compatibility.json`. These fields exist so a listing can state what has actually been verified, and the verdicts here are honest rather than aspirational: `0.2.0-rc.2` is what every build and test in this repository runs against, `0.2.0-rc.1` is admitted by the peer range but never exercised, and `0.1.7-rc.2` sits below that floor.
+**DSH itself never reads it.** No harness code reads `dsh.compatibility`, and the `dshReleases` map appears nowhere in the harness, so these fields cannot change how the plugin loads, registers, or behaves. DSH's own compatibility machinery is a separate thing: the loader checks `peerDependencies`, and exemptions live in the profile's `compatibility.json`. These fields exist so a listing can state what has actually been verified, and the verdicts here are honest rather than aspirational: `0.2.0-rc.2` is what every build and test in this repository runs against, `0.2.0-rc.1` is admitted by the peer range but never exercised, and `0.1.7-rc.2` sits below that floor. The range also admits `0.2.1-alpha.1`, the alpha published above the current RC, listed as `unknown` for the same reason as `0.2.0-rc.1`: semver accepts it, nothing here has run against it.
 
 ### Filters and fetch options live in the patch file
 
@@ -259,7 +259,7 @@ pnpm run release:gate   # build, then the full gate incl. the package checks
 pnpm run test:live      # the real APIs, still $0, needs credentials
 ```
 
-Requires **DSH `^0.2.0-rc.1`** (0.2.0-rc.1 and later, below 0.3.0) and **Node 24+**. Full process and invariants: [`AGENTS.md`](./AGENTS.md). Contributing: [`CONTRIBUTING.md`](./CONTRIBUTING.md).
+Requires **DSH `^0.2.0-rc.1`** (0.2.0-rc.1 and later, below 0.3.0) and **Node 24+**. Every build and test in this repository runs against **`0.2.0-rc.2`** — the current DSH RC — so that is the version supported today; the range admits later releases, including the published `0.2.1-alpha.1`, which is untested and not claimed. Full process and invariants: [`AGENTS.md`](./AGENTS.md). Contributing: [`CONTRIBUTING.md`](./CONTRIBUTING.md).
 
 </details>
 
