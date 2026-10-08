@@ -180,9 +180,12 @@ export class TinyfishSearchProvider implements WebSearchProvider {
    * this to decide between providers, and a network call here would turn
    * selection into a latency spike on every search.
    *
-   * Checks the same things the shipped providers do: a credential is
-   * resolvable *and* both endpoints parse as URLs. A misconfigured base is a
-   * setup mistake worth surfacing at selection time rather than as a 404 later.
+   * Checks the same things the shipped providers do, and only those: a
+   * credential is resolvable *and* the endpoint *this channel dials* parses
+   * as a URL. A misconfigured base is a setup mistake worth surfacing at
+   * selection time rather than as a 404 later. The other channel's base is
+   * deliberately not required — no request reads it, so demanding it refused
+   * a working provider over a setting nothing uses.
    */
   available(): boolean {
     const options = this.resolveOptions();
@@ -294,9 +297,12 @@ export class TinyfishFetchProvider implements WebFetchProvider {
    * this to decide between providers, and a network call here would turn
    * selection into a latency spike on every search.
    *
-   * Checks the same things the shipped providers do: a credential is
-   * resolvable *and* both endpoints parse as URLs. A misconfigured base is a
-   * setup mistake worth surfacing at selection time rather than as a 404 later.
+   * Checks the same things the shipped providers do, and only those: a
+   * credential is resolvable *and* the endpoint *this channel dials* parses
+   * as a URL. A misconfigured base is a setup mistake worth surfacing at
+   * selection time rather than as a 404 later. The other channel's base is
+   * deliberately not required — no request reads it, so demanding it refused
+   * a working provider over a setting nothing uses.
    */
   available(): boolean {
     const options = this.resolveOptions();
