@@ -31,22 +31,32 @@ jobs:
       - run: pnpm exec vp check
       - run: pnpm exec vp test --coverage
       - run: node scripts/check.ts
-      # The real APIs, and the one place this blocks. `ci.yml` runs the same
-      # command as informational, because a pull request should not wait on a
-      # third party's uptime; here it is different. Publishing a web provider
-      # that cannot reach the API it wraps is the failure this whole package
-      # exists to avoid, and `publish` needs this job, so a red stops the
-      # release while someone is still watching to read it.
+      # The real APIs. Non-blocking here too, which is a change of mind from the
+      # version that put it in `verify` on the reasoning that publishing a
+      # provider that cannot reach its API is the worst outcome. That reasoning
+      # was right about the failure and wrong about who should pay for it: a red
+      # here is at least as often TinyFish or Monid being unavailable or
+      # rate-limiting, and a release that cannot be cut because someone else's
+      # API had a bad afternoon gets worked around — which is how the gate ends
+      # up disabled, and then it is worse than never having had it.
       #
-      # A red can still mean upstream is down rather than this package being
-      # wrong. That is the right trade at this point: cutting a release blind
-      # because the check felt optional is how a version ships that answers
-      # `WEB_PROVIDER_CREDENTIAL_MISSING` to every user.
+      # So it reports and never blocks. The information is not lost: a red on
+      # this step is visible on the run, and a release cut while it was red is a
+      # decision somebody makes on purpose rather than one the pipeline made for
+      # them.
       #
-      # Skips, rather than fails, when the secrets are absent — so a fork or an
-      # unconfigured repository keeps releasing, and this becomes a real gate
-      # the moment both keys exist.
-      - name: Live suite against both real APIs
+      # Note what this does *not* do: it does not convert a live failure into a
+      # skip inside the suite. That would hide the defect class that most needs
+      # this suite — a transport or decode fault that no stub can see. The
+      # `null`-field bug that made `web_fetch` throw `WEB_PROVIDER_ERROR` on
+      # ordinary pages arrived as a failed request, and a test that skipped on
+      # failed requests would have reported it green. Advisory about the
+      # pipeline, strict about the assertions.
+      #
+      # Skips, rather than runs, when the secrets are absent — the flag resolves
+      # to `0` — so a fork or an unconfigured repository still releases.
+      - name: Live suite against both real APIs (advisory)
+        continue-on-error: true
         env:
           DSH_TINYFISH_LIVE: ${{ secrets.TINYFISH_API_KEY != '' && secrets.MONID_API_KEY != '' && '1' || '0' }}
           TINYFISH_API_KEY: ${{ secrets.TINYFISH_API_KEY }}
