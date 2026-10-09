@@ -790,6 +790,37 @@ test("an empty snippet falls back to the description alias", async () => {
   assert.equal(result.sources?.[0]?.snippet, "the description");
 });
 
+test("a failure for another URL is not reported as this one's status", async () => {
+  // The page half of this pair was already guarded; the failure half was not,
+  // and mutation testing is what found it: reverting the selection to
+  // `errors[0]` left the whole suite green. Every other failure test sends a
+  // single error row whose url matches, where `[0]` and `find` are the same
+  // element, so nothing could tell them apart.
+  //
+  // What it would cost: a failure belonging to some other URL reported as this
+  // request's status turns "upstream never answered about this page" into "this
+  // page is gone", which is a resource state the model acts on. `results[0]`'s
+  // sibling bug is the mirror image, and one direction being tested does not
+  // test the other.
+  await assert.rejects(
+    withStubbedFetch(
+      [
+        {
+          respond: () => ({
+            body: fetchEnvelope(
+              [],
+              [{ url: "https://other", error: "page_not_found", status: 410 }]
+            ),
+          }),
+        },
+      ],
+      async () => fetchp().fetch({ url: "https://wanted" })
+    ).then((r) => r.result),
+    (error: unknown) =>
+      error instanceof Error && error.message.includes("returned no content")
+  );
+});
+
 test("a result for another URL is not returned as this one's page", async () => {
   // The failure branch tested `results.length`, so any result at all — even one
   // for a different URL — suppressed it and the other page was returned as this
