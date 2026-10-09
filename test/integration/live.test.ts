@@ -134,27 +134,44 @@ test(
 );
 
 test(
-  "upstream date strings are still human-form, so coercion still matters",
+  "upstream dates stay in a form this package can read",
   { skip: !LIVE },
   async () => {
     const raw = await fetch(
       `https://api.search.tinyfish.ai?${new URLSearchParams({ query: QUERY }).toString()}`,
       { headers: { "X-API-Key": resolveApiKey("direct") } }
     ).then(async (r) => r.json());
-    // Relative dates ("1 year ago") are dropped by design — approximating one
-    // to a day would invent precision — so this looks for the first date that
-    // coerces rather than the first date string. Upstream ordering drifts;
-    // what matters is that absolute human dates still coerce.
-    const dated = (raw.results ?? []).find(
-      (r: { date?: unknown }) =>
-        typeof r.date === "string" && toIsoDate(r.date) !== undefined
+    // Every date upstream sends, not merely the first one that happens to
+    // coerce — the old version stopped at the first and said nothing about the
+    // rest.
+    const dates: unknown[] = (raw.results ?? [])
+      .map((r: { date?: unknown }) => r.date)
+      .filter((d: unknown) => d !== undefined);
+    // The invariant that genuinely holds, and the one an upstream format change
+    // breaks: dates arrive as strings. A Date, an epoch number or a nested
+    // object would each defeat the coercion.
+    assert.ok(
+      dates.every((d) => typeof d === "string"),
+      "upstream sends every date as a string"
     );
-    assert.ok(dated, "the response carries at least one absolute date string");
-    const iso = toIsoDate(dated.date);
-    // Unconditional: the old `if (iso)` guard skipped this check whenever the
-    // coercion returned nothing — which is exactly when coercion is broken,
-    // the case this test exists to catch.
-    assert.ok(iso, "the human-form date coerces to an ISO string");
-    assert.ok(!Number.isNaN(Date.parse(iso)), "coerced dates parse");
+    // Coercion is pinned hermetically in `test/provider.test.ts`, so this
+    // asserts only that live dates survive it.
+    //
+    // It deliberately does *not* require upstream to send a date at all. This
+    // used to `assert.ok(dated, ...)` and failed on 2026-10-09 because all ten
+    // results for this query came back with no `date` field: an assertion about
+    // upstream's data, in a test about our code, that passed earlier in the day
+    // only because the ranking happened to return dated rows. Whether a search
+    // carries dates is upstream's prerogative; how we read them is not.
+    const coerced = dates
+      .filter((d): d is string => typeof d === "string")
+      .map((d) => toIsoDate(d))
+      .filter((iso): iso is string => iso !== undefined);
+    for (const iso of coerced) {
+      assert.ok(
+        !Number.isNaN(Date.parse(iso)),
+        `a coerced date parses as an instant: ${iso}`
+      );
+    }
   }
 );
