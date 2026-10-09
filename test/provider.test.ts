@@ -728,6 +728,44 @@ test("toIsoDate: an unzoned human date does not land a day early", () => {
   assert.equal(toIsoDate("Apr 30, 2026"), "2026-04-30T00:00:00.000Z");
 });
 
+test("a redirect wrapper is unwrapped, and a url that yields none is dropped", async () => {
+  // Found by the live suite, not by inspection. The monid SERP mirror answered
+  // with a search engine's redirect wrapper — `/url?opi=…&q=https%3A%2F%2F…` —
+  // on *every* row, so the source list the model saw was ten unopenable links.
+  //
+  // The first attempt here was the obvious one: require an absolute http(s)
+  // url and drop whatever failed. It typechecked, passed every unit test, and
+  // turned ten results into zero sources — emptying the channel outright,
+  // because every row was wrapped. Only the live run showed that. Hence
+  // `targetUrl`, which unwraps first and drops only what stays unusable.
+  const scriptScheme = ["java", "script:alert(1)"].join("");
+  const { result } = await withStubbedFetch(
+    [
+      {
+        respond: () => ({
+          body: searchEnvelope([
+            hit({
+              url: "/url?opi=1&q=https%3A%2F%2Freal.example%2Fpage&sa=U&ved=x",
+              title: "Wrapped",
+            }),
+            hit({ url: scriptScheme, title: "Script" }),
+            hit({ url: "data:text/html,<b>x</b>", title: "Data" }),
+            hit({ url: "/url?opi=1&q=notaurl&sa=U", title: "No target" }),
+            hit({ url: "https://direct.example/page", title: "Direct" }),
+          ]),
+        }),
+      },
+    ],
+    async () => search().search({ query: "q" })
+  );
+  assert.deepEqual(
+    result.sources?.map((s) => s.url),
+    ["https://real.example/page", "https://direct.example/page"]
+  );
+  // The wrapper's own fields still travel with the unwrapped destination.
+  assert.equal(result.sources?.[0]?.title, "Wrapped");
+});
+
 test("available() for the fetch provider ignores a fetchBase monid never dials", () => {
   // The other half of the same fix. The audit found it twice — once for
   // `searchBase` and once for `fetchBase` — and only the search side had a

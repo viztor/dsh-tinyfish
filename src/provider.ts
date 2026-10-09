@@ -136,18 +136,85 @@ export function toIsoDate(value: string | undefined): string | undefined {
 }
 
 /**
+ * An absolute http(s) URL — the only shape the seam can actually use.
+ *
+ * `URL.canParse` alone is not enough: it happily accepts `javascript:` and
+ * `ftp:`, neither of which `web_fetch` can resolve, and it accepts anything
+ * with a scheme, including one that names no host. The protocol check is the
+ * part that matters.
+ */
+const isHttpUrl = (value: string): boolean => {
+  if (!URL.canParse(value)) return false;
+  const { protocol } = new URL(value);
+  return protocol === "http:" || protocol === "https:";
+};
+
+/**
+ * A placeholder origin for parsing a relative redirect reference.
+ *
+ * RFC 3986 reserves `.invalid` precisely for this: it can never resolve, so a
+ * wrapper parsed against it can never be mistaken for a real destination.
+ */
+const REDIRECT_PARSE_BASE = "https://redirect-parse.invalid";
+
+/**
+ * The destination a hit's `url` actually points at, or `undefined`.
+ *
+ * The live suite is what forced this shape. The monid SERP mirror can answer
+ * with a search engine's redirect wrapper instead of the destination:
+ *
+ *     /url?opi=89978449&q=https%3A%2F%2Fexample.com%2Fpage&sa=U&ved=…
+ *
+ * Every row comes back that way, so the first attempt — requiring an absolute
+ * http(s) URL and dropping whatever failed — turned ten results into zero
+ * sources and emptied the channel outright. Worse than the original bug, and
+ * only visible by running the live suite.
+ *
+ * The destination is in a query parameter, so it is unwrapped. `web_fetch`
+ * cannot resolve a relative path, the model cannot cite one, and clicking one
+ * goes nowhere; reporting the wrapper makes all three worse. Only a row that
+ * yields no usable destination is dropped.
+ *
+ * The parameter names are the ones search engines use for this. Taking the
+ * first that is itself an absolute http(s) URL means an unrelated `q` cannot
+ * win: the value is checked, not the key.
+ */
+const targetUrl = (value: string): string | undefined => {
+  if (isHttpUrl(value)) return value;
+  // The base is load-bearing, and omitting it was this function's own first
+  // bug: `URL.canParse("/url?q=…")` answers false for a relative reference, so
+  // the wrapper bailed out before its query string was ever read and the whole
+  // channel stayed empty. Resolved against a placeholder origin that is never
+  // dialled — it exists only to give a relative reference something to parse
+  // against.
+  const parsed = URL.parse(value, REDIRECT_PARSE_BASE);
+  if (parsed === null) return undefined;
+  for (const key of ["q", "url", "u", "target"]) {
+    const candidate = parsed.searchParams.get(key);
+    if (candidate !== null && isHttpUrl(candidate)) return candidate;
+  }
+  return undefined;
+};
+
+/** A row reduced to what the seam needs: the destination, and its own fields. */
+interface CiteableRow {
+  readonly url: string;
+  readonly row: TinyfishSearchHit;
+}
+
+/**
  * A result row the seam can report.
  *
  * A row with no URL has nowhere to link, so it is dropped before the mapping
- * rather than reported with a placeholder. Written as a *type predicate* and
- * not a boolean: the same `typeof row.url === "string"` test inline gives TS
- * nothing to narrow, which is precisely what used to force an
- * `as string` on the very next line.
+ * rather than reported with a placeholder. Written as a projection rather than a
+ * boolean test, because the usable URL is not always `row.url`: a redirect
+ * wrapper has to be unwrapped first, and a type predicate cannot carry that.
  */
-const hasUrl = (
-  row: TinyfishSearchHit
-): row is TinyfishSearchHit & { readonly url: string } =>
-  typeof row.url === "string" && row.url !== "";
+const citable = (row: TinyfishSearchHit): CiteableRow | undefined => {
+  if (typeof row.url !== "string") return undefined;
+  const url = targetUrl(row.url);
+  return url === undefined ? undefined : { url, row };
+};
 
 /**
  * TinyFish search through the `ctx.web` search seam.
@@ -243,32 +310,35 @@ export class TinyfishSearchProvider implements WebSearchProvider {
     return {
       // TinyFish returns ranked results, not a generated answer. `content`
       // stays unset rather than being filled with the query echo.
-      sources: results.filter(hasUrl).map((row) => {
-        const source: {
-          url: string;
-          title?: string;
-          snippet?: string;
-          publishedAt?: string;
-        } = { url: row.url };
-        if (row.title !== "" && row.title !== undefined) {
-          source.title = row.title;
-        }
-        // Monid names the snippet `snippet`; the direct API documents it
-        // the same way, but accept `description` in case that ever shifts.
-        // An empty `snippet` is upstream saying it has none, so the alias is
-        // the better answer. `??` accepted the empty string and dropped the
-        // description with it.
-        const snippet =
-          row.snippet === undefined || row.snippet === ""
-            ? row.description
-            : row.snippet;
-        if (snippet !== "" && snippet !== undefined) {
-          source.snippet = snippet;
-        }
-        const publishedAt = toIsoDate(row.date);
-        if (publishedAt !== undefined) source.publishedAt = publishedAt;
-        return source;
-      }),
+      sources: results
+        .map(citable)
+        .filter((entry): entry is CiteableRow => entry !== undefined)
+        .map(({ row, url }) => {
+          const source: {
+            url: string;
+            title?: string;
+            snippet?: string;
+            publishedAt?: string;
+          } = { url };
+          if (row.title !== "" && row.title !== undefined) {
+            source.title = row.title;
+          }
+          // Monid names the snippet `snippet`; the direct API documents it
+          // the same way, but accept `description` in case that ever shifts.
+          // An empty `snippet` is upstream saying it has none, so the alias is
+          // the better answer. `??` accepted the empty string and dropped the
+          // description with it.
+          const snippet =
+            row.snippet === undefined || row.snippet === ""
+              ? row.description
+              : row.snippet;
+          if (snippet !== "" && snippet !== undefined) {
+            source.snippet = snippet;
+          }
+          const publishedAt = toIsoDate(row.date);
+          if (publishedAt !== undefined) source.publishedAt = publishedAt;
+          return source;
+        }),
       // The seam truncates to `maxResults` and owns this flag.
       truncated: false,
     };
