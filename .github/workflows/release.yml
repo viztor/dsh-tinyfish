@@ -31,6 +31,27 @@ jobs:
       - run: pnpm exec vp check
       - run: pnpm exec vp test --coverage
       - run: node scripts/check.ts
+      # The real APIs, and the one place this blocks. `ci.yml` runs the same
+      # command as informational, because a pull request should not wait on a
+      # third party's uptime; here it is different. Publishing a web provider
+      # that cannot reach the API it wraps is the failure this whole package
+      # exists to avoid, and `publish` needs this job, so a red stops the
+      # release while someone is still watching to read it.
+      #
+      # A red can still mean upstream is down rather than this package being
+      # wrong. That is the right trade at this point: cutting a release blind
+      # because the check felt optional is how a version ships that answers
+      # `WEB_PROVIDER_CREDENTIAL_MISSING` to every user.
+      #
+      # Skips, rather than fails, when the secrets are absent — so a fork or an
+      # unconfigured repository keeps releasing, and this becomes a real gate
+      # the moment both keys exist.
+      - name: Live suite against both real APIs
+        env:
+          DSH_TINYFISH_LIVE: ${{ secrets.TINYFISH_API_KEY != '' && secrets.MONID_API_KEY != '' && '1' || '0' }}
+          TINYFISH_API_KEY: ${{ secrets.TINYFISH_API_KEY }}
+          MONID_API_KEY: ${{ secrets.MONID_API_KEY }}
+        run: pnpm exec vp test --config vite.live.config.ts --run
 
   publish:
     needs: verify

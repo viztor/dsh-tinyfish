@@ -259,6 +259,8 @@ pnpm run release:gate   # build, then the full gate incl. the package checks
 pnpm run test:live      # the real APIs, still $0, needs credentials
 ```
 
+`test:live` also runs in CI, and blocks there only in the release workflow. Set the `TINYFISH_API_KEY` and `MONID_API_KEY` repository secrets to switch it on; without them it skips. It is non-blocking on pull requests on purpose, because a red there can be a third party being unavailable rather than this package being wrong — but it is blocking before a publish, since shipping a provider that cannot reach the API it wraps is the failure worth stopping for.
+
 Requires **DSH `^0.2.0-rc.1`** (0.2.0-rc.1 and later, below 0.3.0) and **Node 24+**. Every build and test in this repository runs against **`0.2.0-rc.2`** — the current DSH RC — so that is the version supported today; `0.2.0-rc.1` was verified the same way, and the range admits the eventual stable `0.2.1`. It does **not** admit `0.2.1-alpha.1`: semver lets a prerelease through only when the range carries a prerelease on the same major.minor.patch, so the loader refuses the plugin on an alpha host. Full process and invariants: [`AGENTS.md`](./AGENTS.md). Contributing: [`CONTRIBUTING.md`](./CONTRIBUTING.md).
 
 </details>

@@ -81,3 +81,31 @@ jobs:
       # that sees what a consumer receives.
       - name: Package checks
         run: node scripts/check.ts
+
+      # The real APIs. Not part of the gate, on purpose: a red here can be
+      # TinyFish or Monid being unavailable rather than this package being
+      # wrong, and a pull request should not be held hostage to someone else's
+      # uptime. It still runs on every push and every pull request, so the log
+      # always answers "do the real endpoints still agree with us?" — which the
+      # hermetic suite structurally cannot. It has twice earned its place: a
+      # redirect-wrapper URL reaching the model as a source, and a fix that
+      # emptied the channel while every stub test stayed green.
+      #
+      # `continue-on-error` rather than an `if:` on the secrets, deliberately.
+      # The flag is a value, not a condition, so the step always reports: a
+      # check that skips itself when its credentials are missing is exactly the
+      # kind that looks green while proving nothing.
+      #
+      # The flag comes from the secrets rather than from `test:live`, which
+      # hard-codes `DSH_TINYFISH_LIVE=1` for humans and would run regardless of
+      # what CI set. Invoked directly so the flag actually decides.
+      #
+      # Set both repository secrets to switch it on: TINYFISH_API_KEY and
+      # MONID_API_KEY. Without them this skips, and says so.
+      - name: Live suite against both real APIs (informational)
+        continue-on-error: true
+        env:
+          DSH_TINYFISH_LIVE: ${{ secrets.TINYFISH_API_KEY != '' && secrets.MONID_API_KEY != '' && '1' || '0' }}
+          TINYFISH_API_KEY: ${{ secrets.TINYFISH_API_KEY }}
+          MONID_API_KEY: ${{ secrets.MONID_API_KEY }}
+        run: pnpm exec vp test --config vite.live.config.ts --run

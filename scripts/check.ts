@@ -934,6 +934,48 @@ if (ciSteps.length === 0) {
 }
 
 /**
+ * The live suite runs in both workflows, but not through `pnpm run test:live`:
+ * that script hard-codes `DSH_TINYFISH_LIVE=1` for a human at a terminal, which
+ * would override whatever CI resolved the flag to, and the workflow has to be
+ * able to *not* run the suite when the credentials are absent. So both workflows
+ * name the runner directly.
+ *
+ * Which means the command is written out three times — the script and two
+ * workflows — and renaming the live config would leave CI running nothing while
+ * reporting green. The comparison is by tail, for the same reason as `ciSteps`
+ * above: the script spells the flag as an inline assignment the workflows carry
+ * in `env:`, so the runner invocation after it is the part that must agree.
+ */
+const liveRunner = (script: string): string =>
+  script
+    .replace(/^DSH_TINYFISH_LIVE=\S+\s*/, "")
+    .replace(/^pnpm (?:exec|run)\s+/, "");
+const expectedLive = liveRunner(String(pkg.scripts?.["test:live"] ?? ""));
+const liveWorkflows: string[] = [];
+for (const [file, text] of [
+  ["ci.yml", ci],
+  ["release.yml", release],
+] as const) {
+  if (expectedLive.length === 0) continue;
+  const runsLive = [...text.matchAll(/^\s*-?\s*run:\s*(.+)$/gm)].some((match) =>
+    (match[1] ?? "").trim().includes(expectedLive)
+  );
+  if (!runsLive) liveWorkflows.push(file);
+}
+if (expectedLive.length === 0) {
+  fail("package.json has no `test:live` script for the workflows to mirror");
+} else if (liveWorkflows.length > 0) {
+  fail(
+    `the live suite does not run in: ${liveWorkflows.join(", ")} — ` +
+      `neither workflow invokes \`${expectedLive}\`, so they would report green ` +
+      "while never touching a real API. The flag is passed through `env:` rather " +
+      "than inline, which is why this is not covered by the `ci` step comparison above"
+  );
+} else {
+  ok(`both workflows run the live suite (\`${expectedLive}\`)`);
+}
+
+/**
  * The alias is only equivalent if its own patch points at the scoped name. A
  * scoped package whose patch still inserts `name: "dsh-tinyfish"` installs
  * cleanly and then mounts a plugin that is not there — the host resolves a row
