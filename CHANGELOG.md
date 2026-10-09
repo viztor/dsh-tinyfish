@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.12.0](https://github.com/viztor/dsh-tinyfish/compare/v0.11.9...v0.12.0) (2026-10-09)
+
+
+### Features
+
+* widen the peer ranges so 0.2.1's prereleases are actually admitted ([f628b33](https://github.com/viztor/dsh-tinyfish/commit/f628b33a9c4e5134610a0b8a0b6be794de279a68))
+
 ## [0.11.9](https://github.com/viztor/dsh-tinyfish/compare/v0.11.8...v0.11.9) (2026-10-09)
 
 
