@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.11.9](https://github.com/viztor/dsh-tinyfish/compare/v0.11.8...v0.11.9) (2026-10-09)
+
+
+### Bug Fixes
+
+* unwrap a SERP redirect instead of reporting it as a source URL ([71341ff](https://github.com/viztor/dsh-tinyfish/commit/71341ff64ec42f7a837328a841719d5ff289bb6f))
+
 ## [0.11.8](https://github.com/viztor/dsh-tinyfish/compare/v0.11.7...v0.11.8) (2026-10-09)
 
 
