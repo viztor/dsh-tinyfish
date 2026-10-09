@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.11.8](https://github.com/viztor/dsh-tinyfish/compare/v0.11.7...v0.11.8) (2026-10-09)
+
+
+### Bug Fixes
+
+* stop the live date test asserting that upstream sends dates ([4e5ad98](https://github.com/viztor/dsh-tinyfish/commit/4e5ad980b1957b80fca2100980ffc9fa684ccf9e))
+
 ## [0.11.7](https://github.com/viztor/dsh-tinyfish/compare/v0.11.6...v0.11.7) (2026-10-08)
 
 
