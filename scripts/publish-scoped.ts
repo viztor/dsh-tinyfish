@@ -194,6 +194,19 @@ try {
       `cordis.patch.yml has no \`${unscoped}\` line to rewrite; the scoped alias would publish a patch still naming "dsh-tinyfish"`
     );
   }
+  // The check above only proves *something* matched. A patch with two rows
+  // naming the bare package would satisfy it while the second kept pointing at
+  // `dsh-tinyfish` — and the dry run below prints only the first `name:` line,
+  // so `scripts/check.ts` would see a correct one and pass. Switching this to
+  // `.replace` instead of `.replaceAll` is the smallest change that produces
+  // exactly that, and nothing caught it.
+  if (scopedPatch.includes(unscoped)) {
+    throw new Error(
+      `cordis.patch.yml still names "dsh-tinyfish" after the rewrite; every ` +
+        `${unscoped} line must become \`name: "${SCOPED}\` for the scoped alias to ` +
+        "point at itself"
+    );
+  }
   writeFileSync(patchPath, scopedPatch);
 
   // `PUBLISH_DRY_RUN=1` builds the scratch tree, prints what this alias would
