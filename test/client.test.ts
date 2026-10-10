@@ -289,6 +289,67 @@ test("a ref that names an environment variable is read from that variable", () =
   );
 });
 
+/**
+ * Each channel reads its *own* ref, and the two never cross.
+ *
+ * Found by mutation testing: replacing the channel-selecting line with a flat
+ * `options.apiKeyEnv` left every test green. The existing credential tests each
+ * exercise one ref at a time, so either choice finds a key and the mistake is
+ * invisible — which is the point. A single shared reference sends a TinyFish key
+ * to Monid as its bearer token, and that surfaces upstream as a 401, which is
+ * indistinguishable from "your Monid key is wrong".
+ *
+ * Asserted on the wire rather than on the resolver's return, because the wire
+ * is where the two channels actually diverge.
+ */
+test("each channel sends the key from its own ref, never the other channel's", async () => {
+  const env = {
+    MY_TINYFISH_REF: "tinyfish-key-by-design",
+    MY_MONID_REF: "monid-key-by-design",
+  };
+  const shared = {
+    apiKeyEnv: "MY_TINYFISH_REF",
+    monidKeyEnv: "MY_MONID_REF",
+    env,
+    attempts: 1,
+  };
+
+  const direct = await withStubbedFetch(
+    [{ respond: () => ({ body: searchEnvelope([hit()]) }) }],
+    async () => tinyfishSearch({ channel: "direct", query: "q", ...shared })
+  );
+  assert.equal(
+    direct.calls[0]?.headers["X-API-Key"],
+    "tinyfish-key-by-design",
+    "the direct channel must send the key from `apiKeyEnv`"
+  );
+
+  const monid = await withStubbedFetch(
+    [{ respond: () => ({ body: searchEnvelope([hit()]) }) }],
+    async () => tinyfishSearch({ channel: "monid", query: "q", ...shared })
+  );
+  assert.match(
+    monid.calls[0]?.headers.Authorization ?? "",
+    /monid-key-by-design/,
+    "the monid channel must send the key from `monidKeyEnv` as its bearer"
+  );
+  assert.doesNotMatch(
+    monid.calls[0]?.headers.Authorization ?? "",
+    /tinyfish-key-by-design/,
+    "a TinyFish key on the monid channel fails upstream as a 401"
+  );
+
+  // And the resolver agrees with the wire, for both channels.
+  assert.equal(
+    resolveApiKey("direct", { ...shared, tinyfishConfigPath: "/nope/absent" }),
+    "tinyfish-key-by-design"
+  );
+  assert.equal(
+    resolveApiKey("monid", { ...shared, credentialsPath: "/nope/absent" }),
+    "monid-key-by-design"
+  );
+});
+
 test("a named ref does not hide the channel's own conventional names", () => {
   assert.equal(
     resolveApiKey("monid", {
