@@ -22,12 +22,14 @@ import {
   cpSync,
   existsSync,
   mkdtempSync,
+  readdirSync,
   readFileSync,
   rmSync,
+  statSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { dirname, join, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -221,6 +223,19 @@ try {
           .map((line) => line.trim())
           .find((line) => line.startsWith("name:")) ?? "none"
       }`
+    );
+    // Every file the transform actually staged, so `scripts/check.ts` can hold
+    // the staged tree against the manifest's `files` list rather than against
+    // two hand-picked paths. Those two held until `files` gained an entry this
+    // transform copied wrongly: the scoped alias would publish without it, the
+    // unscoped package would ship it, and the two would quietly differ — with
+    // both dry-run assertions still green, because neither named it.
+    console.log(
+      `staged files: ${readdirSync(scratch, { recursive: true })
+        .filter((entry) => statSync(join(scratch, String(entry))).isFile())
+        .map((entry) => String(entry).split(sep).join("/"))
+        .toSorted()
+        .join(" ")}`
     );
     // Explicit, because `process.exit` below never runs the `finally`.
     removeScratch();

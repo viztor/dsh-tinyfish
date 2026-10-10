@@ -1067,6 +1067,58 @@ try {
   } else {
     ok("the scoped alias repacks under its own name in manifest and patch");
   }
+
+  /**
+   * Everything `files` names must be in the tree the transform staged.
+   *
+   * The three assertions above are hand-picked paths, and they were enough for
+   * exactly as long as `files` was only those paths. A later entry — a new
+   * locale, an extra doc — would be copied by `copyRoot` or missed by it, and
+   * the scoped alias would publish without it while the unscoped package still
+   * shipped it. Both would look right: same version, same green gate, different
+   * tarballs. The only place that difference is visible before a tag is here.
+   *
+   * A glob entry is satisfied by any staged file under the directory it selects
+   * from, because npm re-applies `files` when it packs — the transform copies
+   * that directory whole and npm narrows it afterwards.
+   */
+  const staged = /staged files: (.+)/
+    .exec(dryRun)?.[1]
+    ?.split(/\s+/)
+    .filter(Boolean);
+  if (staged === undefined) {
+    fail(
+      "the scoped alias dry run did not report which files it staged, so the " +
+        "staged tree cannot be held against `files`"
+    );
+  } else {
+    const unstaged: string[] = [];
+    for (const entry of pkg.files ?? []) {
+      const wildcard = entry.search(/[*?[]/);
+      // `package.json` is implied by npm rather than listed, and the transform
+      // stages it explicitly.
+      if (wildcard === -1) {
+        if (entry !== "package.json" && !staged.includes(entry)) {
+          unstaged.push(entry);
+        }
+        continue;
+      }
+      const directory = entry.slice(0, wildcard).replace(/\/+$/, "");
+      if (!staged.some((file) => file.startsWith(`${directory}/`))) {
+        unstaged.push(entry);
+      }
+    }
+    if (unstaged.length > 0) {
+      fail(
+        `the scoped alias stages nothing for ${unstaged.join(", ")} — it would ` +
+          "publish a different file set from the unscoped package"
+      );
+    } else {
+      ok(
+        `the scoped alias stages all ${(pkg.files ?? []).length} \`files\` entries`
+      );
+    }
+  }
 } catch (error: unknown) {
   const err = error as { stderr?: string; message?: string };
   const detail = [err.stderr, err.message]
