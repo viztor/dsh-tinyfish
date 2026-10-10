@@ -561,6 +561,16 @@ export function resolveOptions(
  * Selection stays the profile's call: this plugin only offers `tinyfish`, and
  * `dsh-web`'s `searchProvider` / `fetchProvider` decide whether it is used.
  * Reverting is two words in the patch, with this plugin still mounted.
+ *
+ * `ctx.web` is used unguarded, which is the opposite of the credential
+ * services above, and deliberate rather than an oversight. Those two are
+ * genuinely optional: a host without them still serves searches, just not
+ * through a stored key. This one is not optional for anything that loaded the
+ * bundle — a plugin whose whole purpose is offering web providers cannot
+ * register without the seam — and a host that lacks it should hear about that
+ * rather than load the plugin, render its settings page, and register nothing.
+ * That silence is the failure mode this package is written against: something
+ * that appears installed and is never dispatched to.
  */
 export function apply(ctx: Context, config?: unknown): void {
   // A thunk, not a value: the settings section can change between searches,
