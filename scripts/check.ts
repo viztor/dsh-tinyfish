@@ -44,6 +44,8 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import semver from "semver";
+
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const failures: string[] = [];
 const notes: string[] = [];
@@ -145,6 +147,62 @@ for (const [name, range] of Object.entries(
 okIfClean(
   peersBefore,
   `${Object.keys(pkg.peerDependencies ?? {}).length} peer ranges npm can resolve`
+);
+
+/**
+ * `dsh.compatibility.dshReleases` is documentation, so nothing downstream acts
+ * on a wrong entry — which is exactly why one can rot. It claimed
+ * `0.2.1-alpha.1` was `incompatible` because the peer range excluded it, and
+ * widening that range made the claim false while leaving it in place. Two
+ * documents disagreeing is the defect this closes.
+ *
+ * So the map is checked against the range it describes, in both directions:
+ * a release called `compatible` must actually satisfy the range, and one
+ * called `incompatible` must not. `unknown` asserts nothing — that is what it
+ * means, and it is the honest label for a release the range admits and nothing
+ * has run against.
+ *
+ * `semver` is declared rather than borrowed. It resolves as a transitive
+ * dependency today, and every use of it here would have been one prune away
+ * from vanishing — the same "works today for the wrong reason" shape as the
+ * nested Oxlint config this repository spent a migration removing.
+ */
+const statedDshRange = String(pkg.dsh?.compatibility?.dsh ?? "");
+const releases = (pkg.dsh?.compatibility?.dshReleases ?? {}) as Record<
+  string,
+  unknown
+>;
+const verdictsBefore = failures.length;
+if (statedDshRange === "") {
+  fail(
+    "package.json states no `dsh.compatibility.dsh` range for the map to describe"
+  );
+} else if (Object.keys(releases).length === 0) {
+  fail("package.json has no `dshReleases` verdicts to check against the range");
+} else {
+  for (const [version, verdict] of Object.entries(releases)) {
+    if (verdict === "unknown") continue;
+    const admitted = semver.satisfies(version, statedDshRange, {
+      // A malformed key is a failure in its own right, and `satisfies` would
+      // throw rather than answer — so it is caught here and named.
+      loose: false,
+    });
+    if (verdict === "compatible" && !admitted) {
+      fail(
+        `dshReleases calls ${version} compatible, but \`${statedDshRange}\` does ` +
+          "not admit it — the loader would refuse the plugin on that host"
+      );
+    } else if (verdict === "incompatible" && admitted) {
+      fail(
+        `dshReleases calls ${version} incompatible, but \`${statedDshRange}\` ` +
+          "admits it — the map contradicts the range it documents"
+      );
+    }
+  }
+}
+okIfClean(
+  verdictsBefore,
+  `${Object.keys(releases).length} \`dshReleases\` verdicts agree with \`${statedDshRange}\``
 );
 
 /* ------------------------------------------- 3. it is a bundle, and it loads */
