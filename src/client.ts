@@ -1094,9 +1094,22 @@ async function withRetry<T>(
     } catch (error) {
       // A cancelled attempt is not a failed attempt: retrying it would spend
       // another call on work the caller has already given up on.
+      //
+      // The two checks cover the two ways a cancellation arrives: the caller's
+      // signal fired, or the transport reported an `AbortError` the signal
+      // never saw (a timeout racing an in-flight fetch). Only the first is
+      // reachable today, and both are asserted by the suite — but only on the
+      // final attempt, because with more attempts the sleep between them watches
+      // the same signal and ends the sequence before this decides anything.
       if (signal !== undefined && signal.aborted) {
         throw aborted(signal, error);
       }
+      // Belt and braces. `request` converts an `AbortError` into the same
+      // cancellation error before anything escapes here, so no fetch-originated
+      // abort can reach this line — which is also why no test can cover it.
+      // Kept because the loop should not depend on a caller three frames away
+      // getting this right; if that line is ever deleted, this becomes live and
+      // untested, which is the case worth noticing.
       if (isAbortError(error)) throw aborted(signal, error);
       if (!isTransient(error)) throw error;
       if (attempt === attempts) throw error;

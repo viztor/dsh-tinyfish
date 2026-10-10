@@ -728,6 +728,144 @@ test("retries are bounded, and a genuinely empty result still resolves", async (
   assert.deepEqual(result.results, []);
 });
 
+/**
+ * The three below were found by mutation testing the retry loop: removing
+ * either abort guard, or the last-attempt rethrow, left every test green.
+ */
+
+/**
+ * Every failing attempt but the last reports exactly one retry.
+ *
+ * The existing `onRetry` test covers the success path, where the callback used
+ * to fire on attempts that had not failed. The mirror of that was unguarded:
+ * dropping the last-attempt rethrow made the loop fall through to `throw
+ * lastError` — the same error, but after one more sleep and one more callback
+ * claiming a retry that was never taken. A caller counting retries, or
+ * alerting on them, would be told about a retry that did not happen.
+ */
+test("onRetry reports every failed attempt but the last, and no more", async () => {
+  const seen: [number, number][] = [];
+  await assert.rejects(
+    withStubbedFetch(
+      [
+        { respond: () => ({ status: 503, text: "upstream" }) },
+        { respond: () => ({ status: 503, text: "upstream" }) },
+        { respond: () => ({ status: 503, text: "upstream" }) },
+      ],
+      async () =>
+        tinyfishSearch({
+          channel: "direct",
+          apiKey: "k",
+          query: "q",
+          attempts: 3,
+          delayMs: 1,
+          onRetry: (attempt, total) => {
+            seen.push([attempt, total]);
+          },
+        })
+    ),
+    /upstream|Transient|unavailable/i
+  );
+  assert.deepEqual(seen, [
+    [1, 3],
+    [2, 3],
+  ]);
+});
+
+/**
+ * A cancellation arriving mid-sequence ends it at once.
+ *
+ * `signal.aborted` and `isAbortError` are two independent guards for one
+ * outcome: the caller may have aborted while the attempt was in flight, or the
+ * transport may report an abort the signal never knew about. Dropping either
+ * one alone left the suite green, so neither was pinned. Retrying either would
+ * spend another call on work the caller has already given up on.
+ */
+test("a cancellation mid-sequence stops retrying at once", async () => {
+  for (const mode of ["signal", "transport"] as const) {
+    const controller = new AbortController();
+    const { calls } = await withStubbedFetch(
+      [
+        {
+          respond: () => {
+            if (mode === "signal") {
+              controller.abort("caller cancelled");
+              return { status: 503, text: "upstream" };
+            }
+            // The transport-level shape: a timeout racing an in-flight fetch,
+            // where the signal never fired and the rejection arrives as an
+            // `AbortError`. `isAbortError` is what catches it.
+            const abortError = new Error("The operation was aborted");
+            abortError.name = "AbortError";
+            throw abortError;
+          },
+        },
+        { respond: () => ({ body: searchEnvelope([hit()]) }) },
+      ],
+      async () =>
+        assert.rejects(
+          tinyfishSearch({
+            channel: "direct",
+            apiKey: "k",
+            query: "q",
+            // `attempts: 1` on purpose. With more, the sleep between attempts is
+            // what ends the sequence — it watches the same signal — so the catch
+            // guard never decides the outcome and dropping it changes nothing
+            // observable. On the final attempt there is no sleep, so the guard
+            // is the only thing standing between a cancellation and whatever the
+            // transport happened to throw.
+            attempts: 1,
+            delayMs: 1,
+            signal: controller.signal,
+          }),
+          (error: unknown) =>
+            error instanceof WebError && error.code === "WEB_ABORTED",
+          `a cancellation via the ${mode} must surface as WEB_ABORTED`
+        )
+    );
+    assert.equal(
+      calls.length,
+      1,
+      `a cancellation via the ${mode} must not spend a second attempt`
+    );
+  }
+});
+
+/**
+ * The backoff grows with the attempt number.
+ *
+ * Asserted as a lower bound, which is the direction that cannot flake: a
+ * loaded machine is slower, never faster. Constant backoff would finish in
+ * 2x; the growth under test needs 3x, so the bound separates them.
+ */
+test("the backoff between attempts grows with the attempt number", async () => {
+  const delayMs = 40;
+  const started = Date.now();
+  await assert.rejects(
+    withStubbedFetch(
+      [
+        { respond: () => ({ status: 503, text: "upstream" }) },
+        { respond: () => ({ status: 503, text: "upstream" }) },
+      ],
+      async () =>
+        tinyfishSearch({
+          channel: "direct",
+          apiKey: "k",
+          query: "q",
+          attempts: 3,
+          delayMs,
+        })
+    ),
+    /upstream|Transient|unavailable/i
+  );
+  const elapsed = Date.now() - started;
+  // Two sleeps before the third attempt: delayMs * 1 then delayMs * 2.
+  assert.ok(
+    elapsed >= delayMs * 3,
+    `expected at least ${delayMs * 3}ms of backoff across two sleeps, took ${elapsed}ms`
+  );
+});
+
 test("onRetry fires once per retry taken, never on the attempt that succeeds", async () => {
   // `withRetry` had three call sites for one loop. Besides the retry decision
   // and the error path, it fired on *every* attempt above the first — before
