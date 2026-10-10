@@ -17,7 +17,7 @@ import assert from "node:assert/strict";
 import { test } from "vitest";
 
 import { resolveOptions } from "../src/index.ts";
-import { apply } from "../src/settings-page.tsx";
+import { apply, settingsBooleanField } from "../src/settings-page.tsx";
 import { nth } from "./helpers.ts";
 
 /** An element node, as React's `jsx()` and the stub kit produce it. */
@@ -381,13 +381,25 @@ function state(
     keyWritable = true,
   }: { writable?: boolean; configured?: boolean; keyWritable?: boolean } = {}
 ): TestState {
-  const field = (value: unknown): TestField => {
-    const text =
+  // The boolean fields' text comes from the page's own spec, not from a copy
+  // of its rule. Restating it here is what let that rule change unnoticed.
+  const booleanSpecs = new Map(
+    ["search", "fetch"].map((name) => [name, settingsBooleanField(name)])
+  );
+  const field = (name: string, value: unknown): TestField => {
+    const own = booleanSpecs.get(name);
+    let text: string;
+    if (own !== undefined) {
+      text = own.format(value);
+    } else if (
       typeof value === "string" ||
       typeof value === "number" ||
       typeof value === "boolean"
-        ? String(value)
-        : "";
+    ) {
+      text = String(value);
+    } else {
+      text = "";
+    }
     return {
       text,
       overridden: value !== undefined,
@@ -397,7 +409,7 @@ function state(
   const fields: Record<string, TestField> = {};
   for (const [name, value] of Object.entries(section)) {
     if (name !== "apiKeyEnv" && name !== "monidKeyEnv")
-      fields[name] = field(value);
+      fields[name] = field(name, value);
   }
   return {
     shell: {
@@ -504,8 +516,52 @@ test("a switch stages the literal the schema parses", () => {
   assert.deepEqual(edits, [{ name: "search", value: "false" }]);
 });
 
+test("a switch value the schema could not produce renders blank, not stringified", () => {
+  // Mutation testing reported this branch as unguarded. It is pinned here
+  // anyway, with the honest note of why it survived a sweep: the mutation is
+  // *equivalent*, not merely untested.
+  //
+  // `search` is declared `z.boolean()`, so a validated section never carries
+  // anything else — but the page runs on a Host it does not control, and a raw or
+  // older manifest can land here as anything at all. Stringifying it would put
+  // "[object Object]" where a value belongs.
+  //
+  // It changes nothing observable, because a switch's text is never displayed
+  // and feeds exactly two things, which treat every non-"false" string the same
+  // as blank: `switchValue` (anything not the exact "false" is ON, the
+  // documented fallback to the schema default) and `parse` (any unrecognised
+  // draft blocks the save). So a sweep could not kill it, and this test exists
+  // to say that plainly rather than leave the guard looking covered.
+  const spec = settingsBooleanField("search");
+  for (const value of [{ a: 1 }, [1, 2], null, undefined, () => 0, "yes"]) {
+    assert.equal(
+      spec.format(value),
+      "",
+      `${JSON.stringify(value) ?? "undefined"} must render blank, never stringified`
+    );
+  }
+  // The values it does accept still render as their literal.
+  assert.equal(spec.format(true), "true");
+  assert.equal(spec.format(false), "false");
+  assert.equal(spec.format(1), "1");
+
+  // An unusable section value leaves the switch on the schema's default rather
+  // than guessing, which is the behaviour `switchValue` documents.
+  const switches = findAll(
+    render({ search: { enabled: true } }).tree,
+    "Switch"
+  );
+  const search = switches[0];
+  assert.ok(search, "one switch rendered");
+  assert.equal(
+    sw(search).checked,
+    true,
+    "an unusable value falls back to the documented default, on"
+  );
+});
+
 test("switching a channel back off stages the same", () => {
-  const { tree, edits } = render({ search: "false" });
+  const { tree, edits } = render({ search: false });
   const [search] = findAll(tree, "Switch");
   assert.ok(search, "one switch rendered");
   assert.equal(sw(search).checked, false, "reads the drafted value");
@@ -632,19 +688,19 @@ test("purpose is a shared field and hides only when both providers are off", () 
     "both on: purpose shows"
   );
   assert.ok(
-    idsOf(render({ search: "false" }).tree).includes(
+    idsOf(render({ search: false }).tree).includes(
       "plugin-config-tinyfish-purpose"
     ),
     "search off, fetch on: purpose still shows"
   );
   assert.ok(
-    idsOf(render({ fetch: "false" }).tree).includes(
+    idsOf(render({ fetch: false }).tree).includes(
       "plugin-config-tinyfish-purpose"
     ),
     "fetch off, search on: purpose still shows"
   );
   assert.ok(
-    !idsOf(render({ search: "false", fetch: "false" }).tree).includes(
+    !idsOf(render({ search: false, fetch: false }).tree).includes(
       "plugin-config-tinyfish-purpose"
     ),
     "both off: purpose hides with the rest of the shared config"
@@ -665,22 +721,22 @@ test("the shared config hides only when both providers are off", () => {
     "both on: channel and both keys show"
   );
   assert.deepEqual(
-    configOf(render({ search: "false" }).tree),
+    configOf(render({ search: false }).tree),
     { channel: 1, keys: 2 },
     "search off, fetch on: shared config stays"
   );
   assert.deepEqual(
-    configOf(render({ fetch: "false" }).tree),
+    configOf(render({ fetch: false }).tree),
     { channel: 1, keys: 2 },
     "fetch off, search on: shared config stays"
   );
   assert.deepEqual(
-    configOf(render({ search: "false", fetch: "false" }).tree),
+    configOf(render({ search: false, fetch: false }).tree),
     { channel: 0, keys: 0 },
     "both off: channel and keys hide"
   );
   assert.equal(
-    findAll(render({ search: "false", fetch: "false" }).tree, "Switch").length,
+    findAll(render({ search: false, fetch: false }).tree, "Switch").length,
     2,
     "both off: the two switches stay visible"
   );
@@ -693,7 +749,7 @@ test("attempts show whenever either provider is on", () => {
   // duplicate, while zero — the control hiding — is the regression this test
   // exists to name.
   const attempts = "plugin-config-tinyfish-attempts";
-  for (const section of [{}, { search: "false" }, { fetch: "false" }]) {
+  for (const section of [{}, { search: false }, { fetch: false }]) {
     const shown = idsOf(render(section).tree).filter(
       (id) => id === attempts
     ).length;
@@ -704,7 +760,7 @@ test("attempts show whenever either provider is on", () => {
     );
   }
   assert.equal(
-    idsOf(render({ search: "false", fetch: "false" }).tree).filter(
+    idsOf(render({ search: false, fetch: false }).tree).filter(
       (id) => id === attempts
     ).length,
     0,
@@ -716,8 +772,8 @@ test("the both-off warning appears only when both are off", () => {
   const has = (section: Record<string, unknown>): boolean =>
     texts(render(section).tree).includes("bothOff");
   assert.equal(has({}), false, "not on by default");
-  assert.equal(has({ search: "false" }), false, "not with one off");
-  assert.equal(has({ search: "false", fetch: "false" }), true, "with both off");
+  assert.equal(has({ search: false }), false, "not with one off");
+  assert.equal(has({ search: false, fetch: false }), true, "with both off");
 });
 
 test("every control is disabled when the section is not writable", () => {
@@ -764,13 +820,13 @@ test("an overridden switch resets itself, not its neighbour", () => {
   // The two switches share one row now, so their reset controls sit two
   // elements apart. Each must still reset the field it belongs to, or an
   // operator clearing one override silently clears the other one's.
-  const only = render({ fetch: "false" });
+  const only = render({ fetch: false });
   const [one] = findAll(only.tree, "button");
   assert.ok(one, "just the overridden switch offers a reset");
   btn(one).onClick();
   assert.deepEqual(only.edits, [{ name: "fetch", value: undefined }]);
 
-  const both = render({ search: "true", fetch: "false" });
+  const both = render({ search: true, fetch: false });
   const buttons = findAll(both.tree, "button");
   assert.equal(buttons.length, 2, "one reset per overridden switch");
   const [searchReset, fetchReset] = buttons;

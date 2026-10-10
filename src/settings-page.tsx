@@ -316,7 +316,19 @@ const BOOLEAN_DRAFTS: Record<
  * @param field - field name inside the namespace section.
  * @returns the field's conversion spec.
  */
-function settingsBooleanField(field: string): SettingsFieldSpec {
+/**
+ * Exported so the tests can drive the real formatter rather than restating it.
+ *
+ * The page's own harness used to rebuild a field's text with the same
+ * three-type rule, which is a copy that can agree with the code until the code
+ * changes — at which point the tests keep passing and stop saying anything
+ * about what a malformed value renders. That is how this branch went unguarded:
+ * deleting the guard entirely left the suite green.
+ *
+ * @param field - the section field this spec describes.
+ * @returns the spec the primitives build the control from.
+ */
+export function settingsBooleanField(field: string): SettingsFieldSpec {
   return {
     field,
     format: (value) =>
