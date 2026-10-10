@@ -1236,6 +1236,98 @@ for (const name of ["README.zh.md", "README.ja.md"]) {
 
 /* ------------------------------------------------------------------- report */
 
+/* ------------------------------------------ 13. the settings page's own locales */
+
+/**
+ * The page registers its dictionaries inline, so nothing but reading the source
+ * can tell whether they still agree.
+ *
+ * `locale/en.json` and `locale/zh.json` are the *plugin card* metadata — title
+ * and description for the Plugins list — not this page's strings. The strings
+ * live in `src/settings-page.tsx` as two object literals, which is why nothing
+ * checked them.
+ *
+ * A key added to one and not the other is invisible to every other gate: the
+ * suite renders through a stub that substitutes its own strings, and the shipped
+ * bundle would show a Chinese user an untranslated key, or fall back to English
+ * depending on the host. Both are the kind of defect that is noticed by a user
+ * rather than by a build.
+ *
+ * Read as source text rather than exported, because exporting the dictionaries
+ * to test them would widen this package's public surface to serve a check that
+ * belongs here. The extraction is deliberately narrow — the two named literals
+ * and the literal-argument calls of `t("…")`.
+ */
+const pageSource = readFileSync(join(ROOT, "src", "settings-page.tsx"), "utf8");
+
+/** Top-level keys of one `const <name> = { … };` literal. */
+const localeKeys = (name: string): string[] | undefined => {
+  const start = pageSource.search(new RegExp(`const ${name} = \\{`));
+  if (start === -1) return undefined;
+  const open = pageSource.indexOf("{", start);
+  let depth = 0;
+  let close = open;
+  for (let i = open; i < pageSource.length; i += 1) {
+    if (pageSource[i] === "{") depth += 1;
+    else if (pageSource[i] === "}") {
+      depth -= 1;
+      if (depth === 0) {
+        close = i;
+        break;
+      }
+    }
+  }
+  const body = pageSource.slice(open + 1, close);
+  return [
+    ...new Set(
+      [...body.matchAll(/^\s{2}([A-Za-z][A-Za-z0-9]*):/gm)].map(
+        (m) => m[1] ?? ""
+      )
+    ),
+  ].toSorted();
+};
+
+const enKeys = localeKeys("en");
+const zhKeys = localeKeys("zh");
+const localeProblems: string[] = [];
+if (enKeys === undefined || zhKeys === undefined) {
+  localeProblems.push(
+    "could not read both locale literals out of src/settings-page.tsx — the " +
+      "dictionaries moved and this check no longer finds them"
+  );
+} else {
+  const onlyEn = enKeys.filter((key) => !zhKeys.includes(key));
+  const onlyZh = zhKeys.filter((key) => !enKeys.includes(key));
+  if (onlyEn.length > 0)
+    localeProblems.push(`missing from zh: ${onlyEn.join(", ")}`);
+  if (onlyZh.length > 0)
+    localeProblems.push(`missing from en: ${onlyZh.join(", ")}`);
+
+  // A dictionary can be internally consistent and still not cover the page: a
+  // `t()` call for a key nobody defined renders whatever the host's fallback
+  // is, which is not this package's to choose.
+  const used = [
+    ...new Set(
+      [...pageSource.matchAll(/\bt\("([A-Za-z][A-Za-z0-9]*)"\)/g)].map(
+        (m) => m[1] ?? ""
+      )
+    ),
+  ];
+  const undefinedKeys = used.filter((key) => !enKeys.includes(key));
+  if (undefinedKeys.length > 0) {
+    localeProblems.push(
+      `used by t() but defined in neither: ${undefinedKeys.join(", ")}`
+    );
+  }
+  if (localeProblems.length === 0) {
+    ok(
+      `the settings page defines all ${used.length} strings it uses in both locales`
+    );
+  }
+}
+for (const problem of localeProblems)
+  fail(`settings page locales — ${problem}`);
+
 for (const note of notes) console.log(`  ok   ${note}`);
 for (const message of failures) console.error(`  FAIL ${message}`);
 
