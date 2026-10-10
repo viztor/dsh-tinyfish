@@ -772,6 +772,50 @@ test("a redirect wrapper is unwrapped, and a url that yields none is dropped", a
   assert.equal(result.sources?.[0]?.title, "Wrapped");
 });
 
+test("fetch returns the markdown as text, never as html", async () => {
+  // Found by mutation testing: `kind: "html"` left the whole suite green.
+  //
+  // TinyFish already extracts clean Markdown, so the content is Markdown. The
+  // seam branches on `kind`: `dsh-tool-web` passes `text` straight through and
+  // runs `html` through turndown. Labelling Markdown as html therefore hands
+  // it to a converter that would mangle it — the exact cost the decision was
+  // made to avoid — and nothing in the suite noticed.
+  const markdown = "# Heading\n\nA [link](https://example.com).\n";
+  const { result } = await withStubbedFetch(
+    [
+      {
+        respond: () => ({
+          body: fetchEnvelope([{ url: "https://x/page", text: markdown }]),
+        }),
+      },
+    ],
+    async () => fetchp().fetch({ url: "https://x/page" })
+  );
+  assert.equal(result.body.kind, "text");
+  // And it arrives untouched: no turndown, no re-wrapping, no entity escaping.
+  assert.equal(result.body.content, markdown);
+
+  // The failure branch declares its own `kind`, and it was the one that had no
+  // test: the mutation landed there first and the suite stayed green, because
+  // every assertion about a 404 checked `statusCode` and `content` and never
+  // the kind. A 404 is still text the model reads.
+  const failed = await withStubbedFetch(
+    [
+      {
+        respond: () => ({
+          body: fetchEnvelope(
+            [],
+            [{ url: "https://x/page", error: "page_not_found", status: 404 }]
+          ),
+        }),
+      },
+    ],
+    async () => fetchp().fetch({ url: "https://x/page" })
+  );
+  assert.equal(failed.result.statusCode, 404);
+  assert.equal(failed.result.body.kind, "text");
+});
+
 test("a source url is reported in the normalized form that was validated", async () => {
   // Found by probing the unwrap against input it had never seen. `URL` strips
   // surrounding whitespace and lowercases the scheme, so all four of these

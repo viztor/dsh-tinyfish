@@ -34,6 +34,48 @@ import {
   withStubbedFetch,
 } from "./helpers.ts";
 
+/**
+ * Every request this transport makes refuses to follow a redirect, on both
+ * channels. Found by mutation testing: replacing `redirect: "error"` with
+ * `"follow"` left the whole suite green.
+ *
+ * It is the setting adopted from the harness's own providers, and the reason
+ * is the point — a provider configured for one endpoint must not silently
+ * answer from another. Following a redirect would hand back a body from
+ * wherever the chain led, attributed to the endpoint that was asked, which
+ * is a far more confusing failure than a refused request.
+ */
+test("no request follows a redirect, on either channel", async () => {
+  for (const channel of ["direct", "monid"] as const) {
+    const search = await withStubbedFetch(
+      [{ respond: () => ({ body: searchEnvelope([hit()]) }) }],
+      async () =>
+        tinyfishSearch({ channel, apiKey: "k", query: "q", attempts: 1 })
+    );
+    assert.equal(
+      search.calls[0]?.init.redirect,
+      "error",
+      `${channel} search must not follow a redirect`
+    );
+
+    const fetched = await withStubbedFetch(
+      [{ respond: () => ({ body: fetchEnvelope([{ url: "https://x" }]) }) }],
+      async () =>
+        tinyfishFetch({
+          channel,
+          apiKey: "k",
+          urls: ["https://x"],
+          attempts: 1,
+        })
+    );
+    assert.equal(
+      fetched.calls[0]?.init.redirect,
+      "error",
+      `${channel} fetch must not follow a redirect`
+    );
+  }
+});
+
 const NO_ENV = {};
 
 /* ----------------------------------------------------------- credentials */
