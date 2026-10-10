@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.12.2](https://github.com/viztor/dsh-tinyfish/compare/v0.12.1...v0.12.2) (2026-10-10)
+
+
+### Bug Fixes
+
+* refuse a scoped patch that still names the bare package ([7c1720d](https://github.com/viztor/dsh-tinyfish/commit/7c1720d265d33e4aa9365c84f7b5745ee3db9ead))
+
 ## [0.12.1](https://github.com/viztor/dsh-tinyfish/compare/v0.12.0...v0.12.1) (2026-10-10)
 
 
