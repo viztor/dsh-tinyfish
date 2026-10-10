@@ -409,6 +409,67 @@ if (surfacesChecked === SURFACES.length) {
   );
 }
 
+/**
+ * The patch's selection override must still name a row that exists.
+ *
+ * `cordis.patch.yml` points the web seam at this provider with
+ * `searchProvider: tinyfish` / `fetchProvider: tinyfish`, and that override is
+ * the *only* thing that selects it — registering a provider is not selecting
+ * one. If DSH ever renames the service, the override stops matching and the
+ * failure is entirely silent: the bundle installs, `available()` answers
+ * truthfully, the settings page renders, and no search is ever routed here.
+ * Nothing throws, so nothing would report it.
+ *
+ * Both halves are read from the installed package, not from this repository's
+ * own expectations: the service id from the bundle that registers it, and the
+ * two config keys from the types. Reading the types rather than the bundle text
+ * for the keys is deliberate — a bundle can be minified past recognition, while
+ * a `.d.ts` is the surface the rest of this check already trusts.
+ */
+const webPackage = (() => {
+  for (const entry of readdirSync(join(ROOT, "node_modules", "@deepseek-ai"), {
+    withFileTypes: true,
+  })) {
+    if (entry.isSymbolicLink() && entry.name === "dsh-web") {
+      return join(ROOT, "node_modules", "@deepseek-ai", "dsh-web");
+    }
+  }
+  return undefined;
+})();
+const patchBefore = failures.length;
+if (webPackage === undefined) {
+  notes.push(
+    "skip  @deepseek-ai/dsh-web is not installed, so the patch's override target is unproven"
+  );
+} else {
+  const bundle = readFileSync(join(webPackage, "lib", "index.js"), "utf8");
+  const types = readFileSync(
+    join(webPackage, "lib", "types", "index.d.ts"),
+    "utf8"
+  );
+  // `super(ctx, "web")` is how the service takes the id the loader matches a
+  // patch override against.
+  if (!/super\(ctx,\s*"web"\)/.test(bundle)) {
+    fail(
+      "dsh-web no longer registers a service with the id `web`, so " +
+        "`cordis.patch.yml`'s `- id: web` override silently matches nothing — " +
+        "the bundle would install and no search would reach this provider"
+    );
+  }
+  for (const key of ["searchProvider", "fetchProvider"]) {
+    if (!new RegExp(`readonly ${key}\\??: string`).test(types)) {
+      fail(
+        `dsh-web's Config no longer declares \`${key}\`, so the patch sets a ` +
+          "field the seam does not read"
+      );
+    }
+  }
+  okIfClean(
+    patchBefore,
+    "the patch's web override still names a real row and config"
+  );
+}
+
 /* --------------------------------- 5. the lint and format configs are actually loaded */
 
 /**
