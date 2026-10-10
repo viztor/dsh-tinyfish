@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.12.1](https://github.com/viztor/dsh-tinyfish/compare/v0.12.0...v0.12.1) (2026-10-10)
+
+
+### Bug Fixes
+
+* report the source url that was validated, not the string that was checked ([114db75](https://github.com/viztor/dsh-tinyfish/commit/114db75bf906184291873feb8f1469d7a9274557))
+
 ## [0.12.0](https://github.com/viztor/dsh-tinyfish/compare/v0.11.9...v0.12.0) (2026-10-09)
 
 
