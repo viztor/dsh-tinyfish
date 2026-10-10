@@ -136,17 +136,27 @@ export function toIsoDate(value: string | undefined): string | undefined {
 }
 
 /**
- * An absolute http(s) URL — the only shape the seam can actually use.
+ * The absolute http(s) form of `value`, normalized — or `undefined`.
  *
- * `URL.canParse` alone is not enough: it happily accepts `javascript:` and
- * `ftp:`, neither of which `web_fetch` can resolve, and it accepts anything
- * with a scheme, including one that names no host. The protocol check is the
- * part that matters.
+ * Returns `href` rather than a boolean, and that is the point of the function
+ * rather than a detail: the caller used to validate the *parsed* URL and then
+ * report the *raw* string, so the model could be handed
+ * `"  https://a.example/p  "` or `"HTTPS://a.example/p"` — both of which parse,
+ * both of which are the same URL the check approved, and neither of which is
+ * what got checked. Reporting `href` means the string that ships is the one
+ * this function read.
+ *
+ * A scheme check is still required on top of parseability: `URL` happily
+ * parses `javascript:` and `ftp:`, neither of which `web_fetch` can resolve,
+ * and it parses `mailto:` about as readily as anything else.
  */
-const isHttpUrl = (value: string): boolean => {
-  if (!URL.canParse(value)) return false;
-  const { protocol } = new URL(value);
-  return protocol === "http:" || protocol === "https:";
+const absoluteHttpUrl = (value: string): string | undefined => {
+  const parsed = URL.parse(value);
+  if (parsed === null) return undefined;
+  const { protocol } = parsed;
+  return protocol === "http:" || protocol === "https:"
+    ? parsed.href
+    : undefined;
 };
 
 /**
@@ -180,7 +190,8 @@ const REDIRECT_PARSE_BASE = "https://redirect-parse.invalid";
  * win: the value is checked, not the key.
  */
 const targetUrl = (value: string): string | undefined => {
-  if (isHttpUrl(value)) return value;
+  const direct = absoluteHttpUrl(value);
+  if (direct !== undefined) return direct;
   // The base is load-bearing, and omitting it was this function's own first
   // bug: `URL.canParse("/url?q=…")` answers false for a relative reference, so
   // the wrapper bailed out before its query string was ever read and the whole
@@ -191,7 +202,12 @@ const targetUrl = (value: string): string | undefined => {
   if (parsed === null) return undefined;
   for (const key of ["q", "url", "u", "target"]) {
     const candidate = parsed.searchParams.get(key);
-    if (candidate !== null && isHttpUrl(candidate)) return candidate;
+    if (candidate === null) continue;
+    // Normalized here too, for the same reason as the direct branch: a `q`
+    // carrying padded or mixed-case text produced a destination that parsed and
+    // was not what shipped.
+    const unwrapped = absoluteHttpUrl(candidate);
+    if (unwrapped !== undefined) return unwrapped;
   }
   return undefined;
 };

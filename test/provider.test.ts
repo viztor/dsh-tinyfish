@@ -119,14 +119,20 @@ test("search omits fields the payload did not supply", async () => {
         respond: () => ({
           body: searchEnvelope([
             // Deliberately partial: the point is that absent fields are omitted.
-            { url: "https://x", title: "T", date: "1 year ago" } as StubHit,
+            // A real path, not a bare host: source urls are reported normalized,
+            // and `https://x` would arrive as `https://x/` and assert the wrong thing.
+            {
+              url: "https://x/page",
+              title: "T",
+              date: "1 year ago",
+            } as StubHit,
           ]),
         }),
       },
     ],
     async () => search().search({ query: "q" })
   );
-  assert.deepEqual(result.sources[0], { url: "https://x", title: "T" });
+  assert.deepEqual(result.sources[0], { url: "https://x/page", title: "T" });
 });
 
 test("search drops hits with no url rather than emitting an uncitable source", async () => {
@@ -138,7 +144,7 @@ test("search drops hits with no url rather than emitting an uncitable source", a
             hit(),
             // A hit with no url: dropped, never emitted as a source.
             { title: "orphan" } as StubHit,
-            hit({ url: "https://b" }),
+            hit({ url: "https://b/page" }),
           ]),
         }),
       },
@@ -147,7 +153,7 @@ test("search drops hits with no url rather than emitting an uncitable source", a
   );
   assert.deepEqual(
     result.sources.map((s) => s.url),
-    ["https://example.com/page", "https://b"]
+    ["https://example.com/page", "https://b/page"]
   );
 });
 
@@ -161,7 +167,7 @@ test("search accepts `description` as an alias for `snippet`", async () => {
             // `unknown`: `description` is not a `StubHit` field, so a direct
             // assertion does not overlap enough to satisfy the checker.
             {
-              url: "https://x",
+              url: "https://x/page",
               title: "T",
               description: "D",
             } as unknown as StubHit,
@@ -764,6 +770,40 @@ test("a redirect wrapper is unwrapped, and a url that yields none is dropped", a
   );
   // The wrapper's own fields still travel with the unwrapped destination.
   assert.equal(result.sources?.[0]?.title, "Wrapped");
+});
+
+test("a source url is reported in the normalized form that was validated", async () => {
+  // Found by probing the unwrap against input it had never seen. `URL` strips
+  // surrounding whitespace and lowercases the scheme, so all four of these
+  // *parse* as the same https URL — and all four used to be reported as the raw
+  // string anyway. The check approved a normalized URL and shipped something
+  // else: `"  https://a.example/p  "` and `"HTTPS://a.example/p"`.
+  //
+  // The wrapper's `q` had the same defect, which is why it is tested too.
+  const { result } = await withStubbedFetch(
+    [
+      {
+        respond: () => ({
+          body: searchEnvelope([
+            hit({ url: "  https://padded.example/page  " }),
+            hit({ url: "HTTPS://Mixed.Example/Page" }),
+            hit({ url: "/url?q=  https%3A%2F%2Fwrapped.example%2Fpage%20" }),
+            hit({ url: "https://plain.example/page" }),
+          ]),
+        }),
+      },
+    ],
+    async () => search().search({ query: "q" })
+  );
+  assert.deepEqual(
+    result.sources?.map((s) => s.url),
+    [
+      "https://padded.example/page",
+      "https://mixed.example/Page",
+      "https://wrapped.example/page",
+      "https://plain.example/page",
+    ]
+  );
 });
 
 test("available() for the fetch provider ignores a fetchBase monid never dials", () => {
