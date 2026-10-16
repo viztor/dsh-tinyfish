@@ -895,9 +895,12 @@ test("a cancellation mid-sequence stops retrying at once", async () => {
 /**
  * The backoff grows with the attempt number.
  *
- * Asserted as a lower bound, which is the direction that cannot flake: a
- * loaded machine is slower, never faster. Constant backoff would finish in
- * 2x; the growth under test needs 3x, so the bound separates them.
+ * Asserted as a lower bound, which is the direction load cannot flake: a busy
+ * machine is slower, never faster. The timer is the other edge - it may fire a
+ * millisecond early, and CI has read 119ms for this 120ms nominal span - so
+ * the bound sits midway between the two outcomes rather than on the growth:
+ * constant backoff finishes in 2x, growth needs 3x, and the midpoint leaves
+ * the same margin to either side.
  */
 test("the backoff between attempts grows with the attempt number", async () => {
   const delayMs = 40;
@@ -922,8 +925,8 @@ test("the backoff between attempts grows with the attempt number", async () => {
   const elapsed = Date.now() - started;
   // Two sleeps before the third attempt: delayMs * 1 then delayMs * 2.
   assert.ok(
-    elapsed >= delayMs * 3,
-    `expected at least ${delayMs * 3}ms of backoff across two sleeps, took ${elapsed}ms`
+    elapsed >= delayMs * 2.5,
+    `expected at least ${delayMs * 2.5}ms of backoff across two sleeps, took ${elapsed}ms`
   );
 });
 
