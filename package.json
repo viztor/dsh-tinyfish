@@ -73,16 +73,16 @@
     "@deepseek-ai/dsh-credentials": "0.2.0-rc.2",
     "@deepseek-ai/dsh-launch-environment": "0.2.0-rc.2",
     "@deepseek-ai/dsh-web": "0.2.0-rc.2",
-    "@types/node": "^26.6.4",
+    "@types/node": "^26.6.5",
     "@types/react": "^18.3.31",
     "@types/semver": "^7.8.0",
-    "@vitest/coverage-v8": "5.0.3",
+    "@vitest/coverage-v8": "5.0.4",
     "react": "^18.3.1",
     "semver": "^7.8.5",
     "typescript": "^7.0.2",
-    "ultracite": "^7.12.4",
+    "ultracite": "^8.0.1",
     "vite-plus": "catalog:",
-    "vitest": "5.0.3"
+    "vitest": "5.0.4"
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "~4.0.4 || >=4.0.5-0 <4.1.0",
