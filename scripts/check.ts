@@ -457,7 +457,11 @@ if (webPackage === undefined) {
     );
   }
   for (const key of ["searchProvider", "fetchProvider"]) {
-    if (!new RegExp(`readonly ${key}\\??: string`).test(types)) {
+    // Matched on the member, not its type: 0.2.0-rc.2 declared
+    // `readonly searchProvider?: string` and 0.2.1-rc.2 declares
+    // `readonly searchProvider: Volatile<string | undefined>`. The patch cares
+    // that the field exists for the seam to read, not what the accessor returns.
+    if (!new RegExp(`readonly ${key}\\b`).test(types)) {
       fail(
         `dsh-web's Config no longer declares \`${key}\`, so the patch sets a ` +
           "field the seam does not read"
@@ -684,7 +688,7 @@ const CHILD_ENV = Object.fromEntries(
 );
 
 try {
-  const packed = JSON.parse(
+  const packOut = JSON.parse(
     execFileSync(
       "npm",
       // `--ignore-scripts`: `prepare` runs `vp pack`, whose progress output
@@ -692,7 +696,15 @@ try {
       ["pack", "--json", "--ignore-scripts", "--pack-destination", scratch],
       { cwd: ROOT, encoding: "utf8", env: CHILD_ENV }
     )
-  )[0];
+  );
+  // npm changed the shape under us: older npm answered an array, newer npm
+  // answers an object keyed by package name. Reading positionally on the array
+  // form made `packed` undefined and the next line threw a TypeError whose
+  // message the detail filter below dropped, so the gate failed while naming
+  // nothing. Taking the first value whichever shape arrives is the whole fix.
+  const packed = Array.isArray(packOut)
+    ? packOut[0]
+    : Object.values(packOut)[0];
 
   const project = join(scratch, "consumer");
   // `mkdirSync`, not a `mkdir -p` child process: this is a directory inside
@@ -779,7 +791,12 @@ try {
     // ENOENT and the npm `code` line are the two this check has actually
     // produced. The old filter matched neither, so a failure reported an empty
     // detail and named neither the cause nor the command that failed.
-    .filter((l) => /Error|Cannot find|ENOENT|EEXIST|npm error|code /.test(l))
+    // `Cannot read` is here because a TypeError on a parsed-shape mismatch was
+    // the third shape this handler met, after ENOENT and the npm `code` line —
+    // and it printed as an empty detail, naming nothing. A filter that has now
+    // needed three extensions is not a filter; the first line of `message` is
+    // always the most specific thing available, so it leads and stderr follows.
+    .filter((l) => l !== "")
     .slice(0, 3)
     .join(" | ");
   fail(`a consumer install or load failed: ${detail}`);
