@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.13.0](https://github.com/viztor/dsh-tinyfish/compare/v0.12.1...v0.13.0) (2026-10-17)
+
+
+### Features
+
+* verify and pin DSH 0.2.1-rc.2, and align the toolchain that tests it ([004fba7](https://github.com/viztor/dsh-tinyfish/commit/004fba7f527193c49e365306bb7756f3a8d3fa53))
+
+
+### Bug Fixes
+
+* refuse a scoped patch that still names the bare package ([7c1720d](https://github.com/viztor/dsh-tinyfish/commit/7c1720d265d33e4aa9365c84f7b5745ee3db9ead))
+* repair the release gate after the vite-plus 1.3.0 toolchain upgrade ([958cf06](https://github.com/viztor/dsh-tinyfish/commit/958cf06e732d20e493deff25a41d362e74021dec))
+
 ## [0.12.1](https://github.com/viztor/dsh-tinyfish/compare/v0.12.0...v0.12.1) (2026-10-10)
 
 
