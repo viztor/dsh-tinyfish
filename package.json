@@ -52,16 +52,19 @@
   "scripts": {
     "build": "vp pack && node scripts/name-client-bundle.ts",
     "check": "vp check",
-    "ci": "pnpm run typecheck && vp check && vp test --coverage && node scripts/check.ts",
+    "ci": "vp run typecheck && vp check && vp test --coverage && node scripts/check.ts",
     "fix": "vp check --fix",
     "format": "vp fmt --check",
     "lint": "vp lint",
-    "prepare": "pnpm run build",
-    "prepublishOnly": "pnpm run release:gate",
-    "release:gate": "pnpm run build && pnpm run ci",
+    "prepare": "vp run build",
+    "prepublishOnly": "vp run release:gate",
+    "release:gate": "vp run build && vp run ci",
     "test": "vp test",
     "test:live": "DSH_TINYFISH_LIVE=1 vp test --config vite.live.config.ts --run",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "version:patch": "vp pm version patch --no-git-checks",
+    "version:minor": "vp pm version minor --no-git-checks",
+    "version:major": "vp pm version major --no-git-checks"
   },
   "dependencies": {
     "@deepseek-ai/schemastery": "3.18.4"
