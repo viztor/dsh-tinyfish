@@ -56,7 +56,7 @@ jobs:
       # speaks for the compiler, and it is the one that fails on a decision
       # Oxlint has not learned to make.
       - name: Type-check (src, test, scripts)
-        run: pnpm run typecheck
+        run: vp run typecheck
 
       # `vp check` is format, lint and type-check in one pass — Oxlint and Oxfmt
       # under the Vite+ entry point, reading the `lint` / `fmt` blocks of

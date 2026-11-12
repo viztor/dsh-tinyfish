@@ -177,7 +177,7 @@ npm install dsh-tinyfish   # or: npm install @viztor/dsh-tinyfish — same thing
 
 マニフェストには `dsh.compatibility` も含まれています。Node と DSH の対応範囲を明示し、カタログが確認する DSH バージョンごとに `compatible`、`incompatible`、`unknown` のいずれかの判定を付けます。
 
-**DSH 自身はこれを読みません。**ハーネス内のどのコードも `dsh.compatibility` を読まず、`dshReleases` マップもハーネス内のどこにも登場しないため、これらのフィールドがプラグインの読み込み・登録・動作を変えることはありません。DSH 自身の互換性の仕組みは別物で、loader が確認するのは `peerDependencies`、例外はプロファイルの `compatibility.json` に記録されます。これらのフィールドの存在理由は、一覧表示で実際に検証済みの内容を述べられるようにすることです。ここの判定は願望ではなく実測に基づきます。`0.2.0-rc.2` はこのリポジトリのすべてのビルドとテストが対象とするバージョン、`0.2.0-rc.1` はピア範囲内だが実際には検証していないもの、`0.1.7-rc.2` は下限を下回るものです。`0.2.0-rc.1` も同じ方法で検証済みです（5 つの harness devDependencies をすべてそのバージョンに固定してゲートを実行）。`0.2.1-alpha.1` は `incompatible` です。peer 範囲がこれを受け付けないためです — semver が prerelease を通すのは、範囲側に同じ major.minor.patch の prerelease がある場合だけであり、その alpha ホストでは loader がこのプラグインを拒否します。
+**DSH 自身はこれを読みません。**ハーネス内のどのコードも `dsh.compatibility` を読まず、`dshReleases` マップもハーネス内のどこにも登場しないため、これらのフィールドがプラグインの読み込み・登録・動作を変えることはありません。DSH 自身の互換性の仕組みは別物で、loader が確認するのは `peerDependencies`、例外はプロファイルの `compatibility.json` に記録されます。これらのフィールドの存在理由は、一覧表示で実際に検証済みの内容を述べられるようにすることです。ここの判定は願望ではなく実測に基づきます。ピンはホストに従います — `0.2.2-alpha.2` がこのリポジトリのすべてのビルドとテストが対象とするバージョンで、インストールできるのは 1 つだけです。一方、下の peer 範囲は**サポートする各ラインの両チャネル**（`rc` と `alpha` を区別なく）を対象にします。ホストはどちらでも動きうるからです。`0.2.1-rc.2`、`0.2.1-alpha.5`、`0.2.1-alpha.2` も同じ方法で検証済みです（5 つの harness devDependencies をすべてそのバージョンに固定してゲートを実行）。`0.2.1-rc.5` と `0.2.1-alpha.1` は `unknown` です。範囲は受け付けますが、ここでは一度も実行していません。`0.1.7-rc.2` は下限を下回るものです。
 
 ### フィルターとフェッチオプションはパッチファイルに書きます
 
@@ -259,7 +259,7 @@ pnpm run release:gate   # build, then the full gate incl. the package checks
 pnpm run test:live      # the real APIs, still $0, needs credentials
 ```
 
-**DSH `^0.2.0-rc.1`**（0.2.0-rc.1 以降、0.3.0 未満）と **Node 24+** が必要です。プロセスと不変条件の全体は [`AGENTS.md`](./AGENTS.md)、コントリビュートは [`CONTRIBUTING.md`](./CONTRIBUTING.md) を参照してください。
+**DSH `^0.2.0-rc.1 || >=0.2.1-0 <0.3.0 || >=0.2.2-0 <0.3.0`** と **Node 24+** が必要です。このリポジトリのすべてのビルドとテストは **`0.2.2-alpha.2`**（ホストが動かしているバージョン）に対して実行されています。`0.2.1-rc.2`、`0.2.1-alpha.5`、`0.2.1-alpha.2` も同じ方法で検証済みです。範囲は**サポートする各ラインの両チャネル**（最新の `rc` と最新の `alpha` を区別なく）を対象とし、patch 行ごとに節を持ちます。semver が同じ major.minor.patch の prerelease を範囲側に持つ場合しか prerelease を通さないためです。`^0.2.0-rc.1` は 0.2.0 の prerelease を、`>=0.2.1-0` は 0.2.1 ラインの両チャネルとその安定版を、`>=0.2.2-0` は 0.2.2 について同じことを担当します。各節は `0.3.0` で止まります。0.2.3 の prerelease にはさらに節が要ります — 範囲の拡張は規則で考えるのではなく `semver.satisfies` で確認してください。プロセスと不変条件の全体は [`AGENTS.md`](./AGENTS.md)、コントリビュートは [`CONTRIBUTING.md`](./CONTRIBUTING.md) を参照してください。
 
 </details>
 

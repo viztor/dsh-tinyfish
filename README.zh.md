@@ -177,7 +177,7 @@ npm install dsh-tinyfish   # or: npm install @viztor/dsh-tinyfish — same thing
 
 manifest 里还带着 `dsh.compatibility`：显式声明的 Node 与 DSH 范围，外加每个发版的实测结论——`compatible`、`incompatible` 或 `unknown`——供目录核验各 DSH 版本。
 
-**DSH 本体从不读它。**harness 里没有任何代码读 `dsh.compatibility`，`dshReleases` 映射也全无引用，所以这些字段改变不了插件的加载、注册与行为。DSH 自己的兼容机制是另一回事：loader 检查的是 `peerDependencies`，豁免记录在 profile 的 `compatibility.json` 里。这些字段的存在，是让列表页能如实写清“哪些已被验证”，这里的结论也的确是实测而非期望：`0.2.0-rc.2` 是本仓库每次构建与测试所跑的版本，`0.2.0-rc.1` 虽在 peer 范围内但从未实际跑过，`0.1.7-rc.2` 则低于下限。`0.2.0-rc.1` 以同样方式验证过（把五个 harness devDependencies 全部钉到该版本并跑门禁）；`0.2.1-alpha.1` 记为 `incompatible`，因为 peer 范围并不接受它 —— semver 只在范围本身带有同一 major.minor.patch 的预发布版本时才放行预发布版，因此 loader 在该 alpha 主机上会拒绝加载本插件。
+**DSH 本体从不读它。**harness 里没有任何代码读 `dsh.compatibility`，`dshReleases` 映射也全无引用，所以这些字段改变不了插件的加载、注册与行为。DSH 自己的兼容机制是另一回事：loader 检查的是 `peerDependencies`，豁免记录在 profile 的 `compatibility.json` 里。这些字段的存在，是让列表页能如实写清“哪些已被验证”，这里的结论也的确是实测而非期望：版本钉选跟随宿主 —— `0.2.2-alpha.2` 是本仓库每次构建与测试所跑的版本，而只能装一个版本；下文的 peer 范围则针对**每条支持线的两个通道**（`rc` 与 `alpha` 一视同仁），因为宿主可能跑在任一通道上。`0.2.1-rc.2`、`0.2.1-alpha.5`、`0.2.1-alpha.2` 以同样方式验证过（把五个 harness devDependencies 全部钉到该版本并跑门禁）；`0.2.1-rc.5` 与 `0.2.1-alpha.1` 记为 `unknown`，范围接受它们但从未实际跑过；`0.1.7-rc.2` 则低于下限。
 
 ### 过滤器与抓取选项写在补丁文件里
 
@@ -259,7 +259,7 @@ pnpm run release:gate   # build, then the full gate incl. the package checks
 pnpm run test:live      # the real APIs, still $0, needs credentials
 ```
 
-需要 **DSH `^0.2.0-rc.1`**（0.2.0-rc.1 及之后、0.3.0 之前）与 **Node 24+**。完整流程与不变量：[`AGENTS.md`](./AGENTS.md)。参与贡献：[`CONTRIBUTING.md`](./CONTRIBUTING.md)。
+需要 **DSH `^0.2.0-rc.1 || >=0.2.1-0 <0.3.0 || >=0.2.2-0 <0.3.0`** 与 **Node 24+**。本仓库的每次构建与测试都跑在 **`0.2.2-alpha.2`** 上（即宿主运行的版本）；`0.2.1-rc.2`、`0.2.1-alpha.5`、`0.2.1-alpha.2` 以同样方式验证过。范围针对**每条支持线的两个通道** —— 最新的 `rc` 与最新的 `alpha` 一视同仁 —— 并按 patch 行各留一段，因为 semver 只在范围本身带有同一 major.minor.patch 的预发布版本时才放行预发布版：`^0.2.0-rc.1` 覆盖 0.2.0 的预发布，`>=0.2.1-0` 覆盖 0.2.1 线的两个通道及其稳定版，`>=0.2.2-0` 对 0.2.2 同理。每一段都止于 `0.3.0`；0.2.3 的预发布还要再加一段 —— 放宽容差请用 `semver.satisfies` 实测，不要凭规则推理。完整流程与不变量：[`AGENTS.md`](./AGENTS.md)。参与贡献：[`CONTRIBUTING.md`](./CONTRIBUTING.md)。
 
 </details>
 

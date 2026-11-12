@@ -27,7 +27,7 @@ jobs:
       # below type-checks too, through Oxlint's type checker, which only
       # applies the tsconfig to files its `include` covers — `tsconfig.json`
       # covers all three, so the two agree, and this is the step that says so.
-      - run: pnpm run typecheck
+      - run: vp run typecheck
       - run: pnpm exec vp check
       - run: pnpm exec vp test --coverage
       - run: node scripts/check.ts
