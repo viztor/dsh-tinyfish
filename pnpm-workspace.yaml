@@ -31,6 +31,10 @@ minimumReleaseAgeExclude:
   - ultracite@8.1.0
 overrides:
   vite@*: "catalog:"
+  # Advisory floors for transitive copies the @deepseek-ai host packages carry:
+  # zod memory exhaustion (fix >= 4.6.6); source-map-js event-loop DoS.
+  zod: ">=4.6.6"
+  source-map-js: ">=1.2.2"
 peerDependencyRules:
   allowAny:
     - vite
